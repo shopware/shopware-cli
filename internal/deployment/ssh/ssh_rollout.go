@@ -135,6 +135,9 @@ func (s *SSH) rolloutArchive(ctx context.Context, deployment Deployment, archive
 	if !info.Mode().IsRegular() {
 		return result, errors.New("deployment archive must be a regular file")
 	}
+	if err := s.requireInitialized(ctx); err != nil {
+		return result, err
+	}
 	hash := sha256.New()
 	if _, err := io.Copy(hash, archiver.ContextReader(ctx, file)); err != nil {
 		return result, fmt.Errorf("read deployment archive: %w", err)

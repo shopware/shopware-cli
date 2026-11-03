@@ -111,3 +111,34 @@ func (s sshInitializationStore) run(ctx context.Context, input sshDeploymentInit
 	}
 	return stdout.Bytes(), nil
 }
+
+// requireInitialized checks readiness before any release is uploaded or activated.
+func (s *SSH) requireInitialized(ctx context.Context) error {
+	state, err := s.initStore.Inspect(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot check deployment initialization on host %q: %w", s.initializationHostName(), err)
+	}
+	if !state.Initialized {
+		return fmt.Errorf("cannot roll out deployment: host %q is not initialized; run \"shopware-cli project deploy init --env <environment>\"", s.initializationHostName())
+	}
+	return nil
+}
+
+func (g *sshGroup) requireInitialized(ctx context.Context) error {
+	for _, host := range g.hosts {
+		if err := host.backend.requireInitialized(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SSH) initializationHostName() string {
+	if s.name != "" {
+		return s.name
+	}
+	if s.env != nil && s.env.SSH != nil && s.env.SSH.Host != "" {
+		return s.env.SSH.Host
+	}
+	return "SSH target"
+}
