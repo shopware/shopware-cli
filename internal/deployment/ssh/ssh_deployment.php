@@ -361,6 +361,8 @@ $archive = null;
 $temporaryLink = null;
 $metadataFile = null;
 $activated = false;
+$hooksStarted = false;
+$postHooksAttempted = false;
 $lock = null;
 $exitCode = 0;
 $cachetool = null;
@@ -658,6 +660,10 @@ try {
     if (rtrim((string) fgets(STDIN), "\r\n") !== "ACTIVATE $id") {
         throw new RuntimeException("Client did not authorize activation");
     }
+    $hooksStarted = true;
+    foreach ($input['hooks']['pre'] ?? [] as $script) {
+        deploymentRun(['sh', '-eu', '-c', $script], $root);
+    }
     // Persist intent before the switch so a finalization failure cannot make a
     // later no-op report an older activation as the current successful rollout.
     $releaseMetadata['created_at'] ??= deploymentReleaseCreatedAt($root, $name, $releaseMetadata) ?? $metadata['created_at'];
@@ -695,6 +701,10 @@ try {
         // The switch has committed; a reset failure must not undo readiness.
         deploymentReportReset("Deployment activated, but OPcache reset failed: {$error->getMessage()}");
     }
+    $postHooksAttempted = true;
+    foreach ($input['hooks']['post'] ?? [] as $script) {
+        deploymentRun(['sh', '-eu', '-c', $script], $root);
+    }
     echo "ACTIVE $id\n";
     deploymentActivationResult($input, $metadata, false);
     fflush(STDOUT);
@@ -713,6 +723,16 @@ try {
     }
     $exitCode = 1;
 } finally {
+    if ($hooksStarted && !$postHooksAttempted) {
+        foreach ($input['hooks']['post'] ?? [] as $script) {
+            try {
+                deploymentRun(['sh', '-eu', '-c', $script], $root);
+            } catch (Throwable $error) {
+                deploymentReportReset("Cannot run post hook: {$error->getMessage()}");
+                $exitCode = 1;
+            }
+        }
+    }
     deploymentCachetoolCleanup($cachetool);
     if ($upload !== null && file_exists($upload)) {
         unlink($upload);

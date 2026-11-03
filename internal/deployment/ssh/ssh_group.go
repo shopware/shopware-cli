@@ -482,6 +482,7 @@ func (g *sshGroup) stageSessions(
 			config = host.backend.env.SSH
 		}
 		if config != nil {
+			input.Hooks = config.Hooks
 			input.PHP = config.PHPBinary
 			input.PHPArgs = config.PHPArgs
 		}
