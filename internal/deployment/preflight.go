@@ -11,6 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
+
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 

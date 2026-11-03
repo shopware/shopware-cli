@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-
-	"charm.land/lipgloss/v2"
-	"github.com/mattn/go-isatty"
-	"github.com/shopware/shopware-cli/internal/tui"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+	"github.com/mattn/go-isatty"
+
 	"github.com/shopware/shopware-cli/internal/deployment"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var _ deployment.InitializationGuide = (*SSH)(nil)
