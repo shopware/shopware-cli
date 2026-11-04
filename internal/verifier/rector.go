@@ -134,25 +134,21 @@ func (r Rector) fixSources(
 	reportsComplete := true
 
 	for _, sourceDirectory := range config.SourceDirectories {
-		report, canVerify := r.process(ctx, config, execution, configFile, sourceDirectory, dryRun)
-		if !dryRun {
-			if report.Totals == nil {
-				reportsComplete = false
-			}
+		report := r.process(ctx, config, execution, configFile, sourceDirectory, dryRun)
+		if dryRun {
 			for _, file := range report.FileDiffs {
-				changed[filepath.Clean(file.File)] = struct{}{}
+				execution.AddFindings(file.pendingFindings(config.RootDir)...)
 			}
-			if !canVerify {
-				continue
-			}
-
-			// Applied edits are not findings. Verify without cached results to
-			// report only the changes that remain after the write pass.
-			report, _ = r.process(ctx, config, execution, configFile, sourceDirectory, true)
+			continue
 		}
 
+		if report.Totals == nil {
+			reportsComplete = false
+		}
+		// A write report lists applied edits. Remaining source errors have
+		// already been reported by process and are the only normal findings.
 		for _, file := range report.FileDiffs {
-			execution.AddFindings(file.pendingFindings(config.RootDir, dryRun)...)
+			changed[filepath.Clean(file.File)] = struct{}{}
 		}
 	}
 
@@ -172,7 +168,7 @@ func (r Rector) process(
 	execution *ToolExecution,
 	configFile, directory string,
 	dryRun bool,
-) (rectorOutput, bool) {
+) rectorOutput {
 	args := []string{
 		"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "rector"),
 		"process", "--config", configFile, "--autoload-file", path.Join("vendor", "autoload.php"),
@@ -181,8 +177,8 @@ func (r Rector) process(
 
 	operation := OperationFix
 	if dryRun {
-		// The write pass caches processed files. Verification must analyze them
-		// again rather than accepting that cached state as evidence of success.
+		// A preview must analyze the current sources rather than relying on
+		// cached results from a previous invocation.
 		args = append(args, "--dry-run", "--clear-cache")
 		operation = OperationCheck
 	}
@@ -196,13 +192,13 @@ func (r Rector) process(
 		execution.Fail(subprocess.ToolError(fmt.Errorf(
 			"cannot run rector in %s: %w", directory, subprocess.Err,
 		)))
-		return rectorOutput{}, false
+		return rectorOutput{}
 	}
 
 	report, err := parseRectorOutput(subprocess.Stdout)
 	if err != nil {
 		execution.Fail(subprocess.ToolError(fmt.Errorf("cannot parse rector output: %w", err)))
-		return rectorOutput{}, false
+		return rectorOutput{}
 	}
 
 	for _, issue := range report.Errors {
@@ -219,10 +215,10 @@ func (r Rector) process(
 		execution.Fail(subprocess.ToolError(fmt.Errorf(
 			"cannot complete rector analysis: unsuccessful exit without diagnostics: %w", subprocess.Err,
 		)))
-		return report, false
+		return rectorOutput{}
 	}
 
-	return report, len(report.Errors) == 0
+	return report
 }
 
 // parseRectorOutput validates totals so incomplete output cannot be mistaken
@@ -272,8 +268,8 @@ func parseRectorOutput(output string) (rectorOutput, error) {
 	return report, nil
 }
 
-// pendingFindings describes changes proposed by preview or verification.
-func (f rectorFileDiff) pendingFindings(root string, dryRun bool) []validation.CheckResult {
+// pendingFindings describes changes proposed by a dry run.
+func (f rectorFileDiff) pendingFindings(root string) []validation.CheckResult {
 	rules := f.AppliedRectors
 	if len(rules) == 0 {
 		rules = []string{"change"}
@@ -285,16 +281,11 @@ func (f rectorFileDiff) pendingFindings(root string, dryRun bool) []validation.C
 	}
 	filePath = validation.NormalizeSourcePath(filePath, root)
 
-	message := "Rector changes remain after fixing. Review the file and rerun fix."
-	if dryRun {
-		message = "Rector changes are required. Run fix without dry-run to apply them."
-	}
-
 	findings := make([]validation.CheckResult, 0, len(rules))
 	for _, rule := range rules {
 		findings = append(findings, validation.CheckResult{
 			Path:       filePath,
-			Message:    message,
+			Message:    "Rector changes are required. Run fix without dry-run to apply them.",
 			Severity:   validation.SeverityError,
 			Identifier: "rector/" + rule,
 		})
