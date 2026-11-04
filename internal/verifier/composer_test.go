@@ -17,22 +17,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-func TestValidationComposerJSONDropsAutoload(t *testing.T) {
-	result, err := validationComposerJSON([]byte(`{
-		"name": "acme/plugin",
-		"autoload": {"psr-4": {"Acme\\": "src/"}, "files": ["src/functions.php"]},
-		"autoload-dev": {"classmap": ["tests/"]},
-		"require": {"shopware/core": "~6.6.0"},
-		"config": {"platform": {"php": "8.2"}}
-	}`), t.TempDir(), "")
-	require.NoError(t, err)
-
-	var data map[string]any
-	require.NoError(t, json.Unmarshal(result, &data))
-
-	assert.ElementsMatch(t, []string{"name", "require", "config"}, slices.Collect(maps.Keys(data)))
-}
-
 func TestValidationComposerJSONRequiresSuggestedPackages(t *testing.T) {
 	result, err := validationComposerJSON([]byte(`{
 		"require": {"shopware/core": "~6.6.0", "psr/log": "^3.0"},
@@ -50,6 +34,31 @@ func TestValidationComposerJSONRequiresSuggestedPackages(t *testing.T) {
 		"psr/log":       "^3.0",
 		"psr/container": "*",
 	}, data.Require)
+}
+
+func TestValidationComposerJSONPreservesExtensionAutoload(t *testing.T) {
+	root := t.TempDir()
+	result, err := validationComposerJSON([]byte(`{
+		"autoload": {
+			"psr-4": {"Acme\\": ["src/", "/opt/shared/"]},
+			"psr-0": {"Legacy_": "legacy/"},
+			"files": ["src/functions.php"],
+			"classmap": ["classes/"],
+			"exclude-from-classmap": ["/classes/excluded/"]
+		},
+		"autoload-dev": {"psr-4": {"Acme\\Tests\\": "tests/"}}
+	}`), root, "lowest")
+	require.NoError(t, err)
+	var data map[string]map[string]any
+	require.NoError(t, json.Unmarshal(result, &data))
+	assert.Equal(t, map[string]any{
+		"psr-4":                 map[string]any{"Acme\\": []any{filepath.Join(root, "src"), "/opt/shared/"}},
+		"psr-0":                 map[string]any{"Legacy_": filepath.Join(root, "legacy")},
+		"files":                 []any{filepath.Join(root, "src/functions.php")},
+		"classmap":              []any{filepath.Join(root, "classes")},
+		"exclude-from-classmap": []any{"../../../../classes/excluded/"},
+	}, data["autoload"])
+	assert.Equal(t, map[string]any{"psr-4": map[string]any{"Acme\\Tests\\": filepath.Join(root, "tests")}}, data["autoload-dev"])
 }
 
 func TestValidationComposerJSONAdvisoryBlocking(t *testing.T) {

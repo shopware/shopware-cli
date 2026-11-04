@@ -272,17 +272,20 @@ not whether files were applicable, findings were produced, or fixes were made.
 
 `shopware-cli extension fix path --only rector` always resolves the lowest
 compatible dependencies in `var/cache/shopware-cli/composer-lowest`, shared with
-PHPStan's lowest validation baseline. Advisory blocking is disabled for these
-historical dependencies. The extension's `vendor/`, `composer.json`, and
+PHPStan's lowest validation baseline. Both tools preserve Composer autoload
+mappings with paths pointing to the extension, so custom configurations can
+load extension classes and bootstrap files using the cached dependencies.
+Advisory blocking is disabled for these historical dependencies.
+The extension's `vendor/`, `composer.json`, and
 `composer.lock` are preserved; no `--check-against` option is needed.
 
 Rector reports the loaded Shopware version and the selected rules. A local
 `rector.php` takes precedence; otherwise the bundled rules target the minimum
-supported Shopware minor version. Rector runs from the dependency cache, so
-custom configs should use `__DIR__` for extension-relative paths rather than
-`getcwd()`. Custom configs that explicitly load local dependencies can override
-this isolation. Project fixes use the project's existing `vendor/` and require
-`composer install` first if it is missing.
+supported Shopware minor version. Both tools run from the dependency cache.
+Custom Rector configs should use `__DIR__` for extension-relative paths rather
+than `getcwd()`. Custom configs that explicitly load local dependencies can
+override this isolation. Project fixes use the project's existing `vendor/` and
+require `composer install` first if it is missing.
 
 ### Fresh results beat saved reports
 

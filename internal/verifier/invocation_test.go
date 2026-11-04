@@ -276,6 +276,51 @@ func TestRectorPreservesComposerFilesOnPreparationFailure(t *testing.T) {
 	assert.Equal(t, lock, actualLock)
 }
 
+func TestPHPToolsShareLowestDependenciesWithCustomConfigs(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("TOOL_ROOT", root)
+	fakeTools(t, map[string]string{
+		"composer": "/bin/mkdir -p vendor\n: > vendor/autoload.php\n",
+		"php": `printf '%s\n' "$@" > "$TOOL_ROOT/tool-args"
+printf '%s' "$PWD" > "$TOOL_ROOT/tool-cwd"
+printf '{"files":{}}'
+`,
+	})
+	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{"autoload":{"psr-4":{"Acme\\":"src/"}}}`), 0o644))
+	for _, name := range []string{"rector.php", "phpstan.neon"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), nil, 0o644))
+	}
+	cfg := ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: "lowest"}
+	workDir := filepath.Join(root, "var/cache/shopware-cli/composer-lowest")
+	var previousManifest []byte
+	for _, name := range []string{"phpstan", "rector"} {
+		t.Run(name, func(t *testing.T) {
+			if name == "phpstan" {
+				require.Empty(t, runCheckTool(t, PhpStan{}, cfg).Errors)
+			} else {
+				require.Empty(t, runFixTool(t, Rector{}, cfg).Errors)
+			}
+			args, err := os.ReadFile(filepath.Join(root, "tool-args"))
+			require.NoError(t, err)
+			assert.Contains(t, string(args), "--autoload-file\n"+filepath.Join(workDir, "vendor/autoload.php")+"\n")
+			cwd, err := os.ReadFile(filepath.Join(root, "tool-cwd"))
+			require.NoError(t, err)
+			resolvedDir, err := filepath.EvalSymlinks(workDir)
+			require.NoError(t, err)
+			actualDir, err := filepath.EvalSymlinks(string(cwd))
+			require.NoError(t, err)
+			assert.Equal(t, resolvedDir, actualDir)
+			manifest, err := os.ReadFile(filepath.Join(workDir, "composer.json"))
+			require.NoError(t, err)
+			assert.Contains(t, string(manifest), filepath.Join(root, "src"))
+			if previousManifest != nil {
+				assert.JSONEq(t, string(previousManifest), string(manifest))
+			}
+			previousManifest = manifest
+		})
+	}
+}
+
 func TestRectorDependenciesAndReporting(t *testing.T) {
 	for _, scenario := range []struct {
 		name                                     string

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -150,16 +151,22 @@ func ensureValidationCacheDir(rootDir string) (string, error) {
 
 // validationComposerJSON returns the composer.json for the validation cache
 // of the extension in rootDir. Autoload paths are relative to the extension
-// folder and would point nowhere from the cache, so they are dropped: PHPStan
-// discovers the extension's own classes in the analysed paths.
+// folder, so they are rewritten for both PHPStan and Rector.
 func validationComposerJSON(composerJSON []byte, rootDir string, checkAgainst string) ([]byte, error) {
 	var data map[string]any
 	if err := json.Unmarshal(composerJSON, &data); err != nil {
 		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
 	}
 
-	delete(data, "autoload")
-	delete(data, "autoload-dev")
+	// Keep extension classes and bootstrap files available to custom configs
+	// without loading the extension's locally installed dependencies.
+	for _, key := range []string{"autoload", "autoload-dev"} {
+		if autoload, ok := data[key].(map[string]any); ok {
+			for kind, paths := range autoload {
+				autoload[kind] = resolveAutoloadPaths(paths, rootDir, kind == "exclude-from-classmap")
+			}
+		}
+	}
 
 	if checkAgainst == "lowest" {
 		// Composer 2.9 uses this setting; newer versions are also covered by
@@ -205,6 +212,31 @@ func validationComposerJSON(composerJSON []byte, rootDir string, checkAgainst st
 	}
 
 	return json.Marshal(data)
+}
+
+// resolveAutoloadPaths preserves namespace keys and rewrites their path values.
+func resolveAutoloadPaths(value any, rootDir string, exclude bool) any {
+	switch value := value.(type) {
+	case string:
+		if exclude {
+			// Composer anchors exclusions at the manifest, even with a leading slash.
+			// The cached manifest is four directories below the extension root.
+			return "../../../../" + strings.TrimPrefix(value, "/")
+		}
+		if path.IsAbs(value) {
+			return value
+		}
+		return path.Join(rootDir, value)
+	case []any:
+		for i, entry := range value {
+			value[i] = resolveAutoloadPaths(entry, rootDir, exclude)
+		}
+	case map[string]any:
+		for key, entry := range value {
+			value[key] = resolveAutoloadPaths(entry, rootDir, exclude)
+		}
+	}
+	return value
 }
 
 // resolvePathRepository makes the url of a relative path repository absolute.
