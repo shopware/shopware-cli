@@ -128,8 +128,9 @@ export SHOPWARE_CLI_NO_UPDATE_NOTIFICATION=true
 
 To make the setting **persistent**, set `no_update_hint: true` in the user
 config file (see below), or add the export command to your shell profile, such
-as `~/.bashrc` or `~/.zshrc`. Pass `--no-update-hint` (`-n`) to skip the check
-for a single command.
+as `~/.bashrc` or `~/.zshrc`. Pass `--no-update-hint` to skip the check for a
+single command. `--no-interaction` (`-n`) also skips it, but additionally
+disables prompts, so commands use defaults or fail where input is needed.
 
 ### User config file
 
@@ -150,7 +151,7 @@ no_update_hint: true # disable update notifications
 ```
 
 Command-line flags and environment variables take precedence over the file:
-`--no-update-hint` / `-n` > `SHOPWARE_CLI_NO_UPDATE_NOTIFICATION` >
+`--no-update-hint` (or `-n`) > `SHOPWARE_CLI_NO_UPDATE_NOTIFICATION` >
 `no_update_hint`, and `DO_NOT_TRACK` > `telemetry`. See
 [docs/TELEMETRY.md](docs/TELEMETRY.md) for what telemetry collects.
 

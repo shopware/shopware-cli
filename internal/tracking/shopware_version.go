@@ -26,7 +26,7 @@ func StartShopwareVersion(commandName string) ShopwareVersionLookup {
 }
 
 func startShopwareVersion(commandName string, lookup func() string) ShopwareVersionLookup {
-	if !enabled() || !strings.HasPrefix(commandName, "project.") || commandName == "project.create" {
+	if !strings.HasPrefix(commandName, "project.") || commandName == "project.create" || !enabled() {
 		return nil
 	}
 	result := make(chan string, 1)
