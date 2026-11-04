@@ -84,8 +84,8 @@ func GenerateChecksumJSON(ctx context.Context, baseFolder string, ext Extension)
 
 		// Skip directories and hidden files
 		if info.IsDir() {
-			// Skip vendor and node_modules directories
-			if info.Name() == "vendor" || info.Name() == "node_modules" {
+			// Skip vendor, vendor-bin and node_modules directories
+			if info.Name() == "vendor" || info.Name() == "vendor-bin" || info.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -111,8 +111,8 @@ func GenerateChecksumJSON(ctx context.Context, baseFolder string, ext Extension)
 			return nil
 		}
 
-		// Skip vendor and node_modules files
-		if strings.Contains(relPath, "vendor/") || strings.Contains(relPath, "node_modules/") {
+		// Skip vendor, vendor-bin and node_modules files
+		if strings.Contains(relPath, "vendor/") || strings.Contains(relPath, "vendor-bin/") || strings.Contains(relPath, "node_modules/") {
 			return nil
 		}
 
