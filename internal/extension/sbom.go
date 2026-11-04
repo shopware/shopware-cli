@@ -14,9 +14,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/shyim/go-composer"
 	"github.com/shyim/go-composer/sbom"
+	spdx "github.com/shyim/go-spdx"
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/logging"
@@ -218,16 +220,21 @@ func sbomRootIdentity(ext Extension, composerJSON *composer.Json) (string, strin
 }
 
 func enrichRootComponent(component *ExtensionComponent, composerJSON *composer.Json) {
-	group, name := splitComposerPackageName(composerJSON.Name)
-	component.Group = group
-	component.Name = name
 	component.Description = composerJSON.Description
 
-	purl := "pkg:composer/" + composerJSON.Name
-	if component.Version != "" {
-		purl += "@" + url.PathEscape(component.Version)
+	// Without a composer name (an app may ship a composer.json) the identity
+	// from the extension itself is kept.
+	if composerJSON.Name != "" {
+		group, name := splitComposerPackageName(composerJSON.Name)
+		component.Group = group
+		component.Name = name
+
+		purl := "pkg:composer/" + composerJSON.Name
+		if component.Version != "" {
+			purl += "@" + url.PathEscape(component.Version)
+		}
+		component.PURL = purl
 	}
-	component.PURL = purl
 
 	if composerJSON.License != nil {
 		for _, license := range composerJSON.License.Strings() {
@@ -383,10 +390,17 @@ func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, err
 		}
 
 		var lock struct {
-			Packages map[string]npmLockPackage `json:"packages"`
+			LockfileVersion int                       `json:"lockfileVersion"`
+			Packages        map[string]npmLockPackage `json:"packages"`
 		}
 		if err := json.Unmarshal(content, &lock); err != nil {
 			return nil, fmt.Errorf("cannot parse %s: %w", lockPath, err)
+		}
+
+		// lockfileVersion 1 (npm 6 and older) has no "packages" map, so its
+		// packages would silently be missing from the SBOM.
+		if lock.LockfileVersion < 2 {
+			return nil, fmt.Errorf("cannot read npm packages from %s: lockfileVersion %d is not supported, regenerate it with npm 7 or newer", lockPath, lock.LockfileVersion)
 		}
 
 		keys := make([]string, 0, len(lock.Packages))
@@ -532,14 +546,40 @@ func linkRootDependencies(bom *ExtensionBOM, rootRef string) {
 	bom.Dependencies = append([]sbom.Dependency{{Ref: rootRef, DependsOn: refs}}, bom.Dependencies...)
 }
 
-var spdxLikeLicense = regexp.MustCompile(`^[A-Za-z0-9.+-]+$`)
+var (
+	spdxLicensesOnce sync.Once
+	spdxLicenses     *spdx.SpdxLicenses
+)
 
+// sbomLicense uses the CycloneDX license id only for a single SPDX identifier.
+// Expressions (MIT OR Apache-2.0), LicenseRef-* and values such as
+// proprietary or UNLICENSED go into the name, because license.id is an
+// enumeration of SPDX identifiers.
 func sbomLicense(license string) sbom.LicenseChoice {
-	if spdxLikeLicense.MatchString(license) && !strings.EqualFold(license, "proprietary") {
+	if isSPDXLicenseIdentifier(license) {
 		return sbom.LicenseChoice{License: sbom.License{ID: license}}
 	}
 
 	return sbom.LicenseChoice{License: sbom.License{Name: license}}
+}
+
+func isSPDXLicenseIdentifier(license string) bool {
+	if license == "" || strings.ContainsAny(license, " ()") || strings.HasPrefix(license, "LicenseRef-") || strings.HasPrefix(license, "DocumentRef-") {
+		return false
+	}
+
+	spdxLicensesOnce.Do(func() {
+		if licenses, err := spdx.NewSpdxLicenses(); err == nil {
+			spdxLicenses = licenses
+		}
+	})
+	if spdxLicenses == nil {
+		return false
+	}
+
+	valid, _ := spdxLicenses.Validate(license)
+
+	return valid
 }
 
 func splitComposerPackageName(name string) (string, string) {

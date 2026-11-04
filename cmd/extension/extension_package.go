@@ -225,7 +225,14 @@ var extensionPackageCmd = &cobra.Command{
 				sbomPaths = append(sbomPaths, strings.TrimSuffix(fileName, ".zip")+".cdx.json")
 			}
 
-			if err := extension.WriteSBOM(cmd.Context(), tempExt, extDir, extension.SBOMOptions{ToolVersion: cliversion.Version}, sbomPaths...); err != nil {
+			// Reload, because BuildModifier may have written a new version to
+			// manifest.xml after tempExt was read.
+			sbomExt, err := extension.GetExtensionByFolder(cmd.Context(), extDir)
+			if err != nil {
+				return fmt.Errorf("cannot generate SBOM: %w", err)
+			}
+
+			if err := extension.WriteSBOM(cmd.Context(), sbomExt, extDir, extension.SBOMOptions{ToolVersion: cliversion.Version}, sbomPaths...); err != nil {
 				return fmt.Errorf("cannot generate SBOM: %w", err)
 			}
 		}
