@@ -214,6 +214,7 @@ func TestRectorUnexplainedExitDoesNotClaimNoChanges(t *testing.T) {
 
 func TestRectorFixReportsSourceErrors(t *testing.T) {
 	root, directories := setupRector(t, rectorResponder(), "src")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "src", "broken.php"), []byte("<?php :"), 0o644))
 	argsPath := filepath.Join(t.TempDir(), "arguments")
 	t.Setenv("TOOL_ARGS", argsPath)
 	t.Setenv("RECTOR_WRITE_OUTPUT", `{"totals":{"changed_files":0,"errors":1},"errors":[{"file":"src/broken.php","line":8,"message":"Syntax error, unexpected ':'"}]}`)
@@ -421,6 +422,7 @@ func TestRectorFixDryRunOutcomes(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			root, directories := setupRector(t, rectorResponder(), "src")
+			require.NoError(t, os.WriteFile(filepath.Join(root, "src", "broken.php"), []byte("<?php :"), 0o644))
 			args := filepath.Join(t.TempDir(), "arguments")
 			t.Setenv("TOOL_ARGS", args)
 			t.Setenv("RECTOR_WRITE_OUTPUT", "Write pass must not run")
