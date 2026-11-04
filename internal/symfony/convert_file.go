@@ -1,6 +1,8 @@
 package symfony
 
 import (
+	"encoding/xml"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -131,7 +133,12 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 
 	config, err := parse(content)
 	if err != nil {
-		return fmt.Errorf("%s: %w", path, err)
+		kind := XMLConversionUnsupported
+		var syntaxError *xml.SyntaxError
+		if errors.As(err, &syntaxError) {
+			kind = XMLConversionInvalidXML
+		}
+		return &XMLConversionError{Path: path, Kind: kind, Err: err}
 	}
 
 	withoutExtension := strings.TrimSuffix(path, filepath.Ext(path))
@@ -139,7 +146,9 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 
 	for _, existing := range []string{target, withoutExtension + ".yml"} {
 		if _, err := os.Stat(existing); err == nil {
-			return fmt.Errorf("cannot convert %s: %s exists already", path, existing)
+			return &XMLConversionError{Path: path, Kind: XMLConversionTargetExists, Err: fmt.Errorf("%s exists already", existing)}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
 
@@ -156,6 +165,9 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 
 		importPath := filepath.Join(filepath.Dir(path), filepath.FromSlash(resource))
 		if _, err := os.Stat(importPath); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
 			continue
 		}
 
@@ -172,7 +184,7 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 
 	converted, err := config.toYAML()
 	if err != nil {
-		return fmt.Errorf("%s: %w", path, err)
+		return &XMLConversionError{Path: path, Kind: XMLConversionUnsupported, Err: err}
 	}
 
 	contents[path] = converted
