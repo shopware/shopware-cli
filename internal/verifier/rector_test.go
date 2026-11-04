@@ -212,6 +212,57 @@ func TestRectorFixReportsSourceErrors(t *testing.T) {
 	assert.NotContains(t, string(arguments), "--dry-run")
 }
 
+func TestRectorSourceErrorsThroughSymlinkedRoot(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		mode := "fix"
+		if dryRun {
+			mode = "dry run"
+		}
+		for _, location := range []string{"relative", "root alias", "resolved", "outside sources"} {
+			t.Run(mode+"/"+location, func(t *testing.T) {
+				root, _ := setupRector(t, rectorResponder(), "src", "other")
+				require.NoError(t, os.WriteFile(filepath.Join(root, "src", "broken.php"), []byte("<?php invalid"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "other", "broken.php"), []byte("<?php invalid"), 0o644))
+				resolved, err := filepath.EvalSymlinks(root)
+				require.NoError(t, err)
+				alias := filepath.Join(t.TempDir(), "project")
+				require.NoError(t, os.Symlink(resolved, alias))
+
+				file := "src/broken.php"
+				switch location {
+				case "root alias":
+					file = filepath.Join(alias, "src", "broken.php")
+				case "resolved":
+					file = filepath.Join(resolved, "src", "broken.php")
+				case "outside sources":
+					file = filepath.Join(alias, "other", "broken.php")
+				}
+				report := `{"totals":{"changed_files":0,"errors":1},"errors":[{"file":"` + file + `","line":8,"message":"Syntax error"}]}`
+				t.Setenv("TOOL_ARGS", filepath.Join(t.TempDir(), "arguments"))
+				t.Setenv("RECTOR_WRITE_OUTPUT", report)
+				t.Setenv("RECTOR_WRITE_EXIT", "1")
+				t.Setenv("RECTOR_VERIFY_OUTPUT", report)
+				t.Setenv("RECTOR_VERIFY_EXIT", "1")
+				result := runFixToolWithDryRun(t, Rector{}, ToolConfig{
+					RootDir: alias, SourceDirectories: []string{filepath.Join(resolved, "src")},
+				}, dryRun)
+
+				if location == "outside sources" {
+					require.Len(t, result.Errors, 1)
+					assert.Equal(t, report, result.Errors[0].Stdout)
+					assert.Empty(t, result.Findings)
+					return
+				}
+				assert.Empty(t, result.Errors)
+				assert.ElementsMatch(t, []validation.CheckResult{{
+					Path: "src/broken.php", Line: 8, Message: "Syntax error",
+					Severity: validation.SeverityError, Identifier: "rector/error",
+				}}, result.Findings)
+			})
+		}
+	}
+}
+
 func TestRectorFixWithoutDiffs(t *testing.T) {
 	root, directories := setupRector(t, rectorResponder(), "src")
 	argsPath := filepath.Join(t.TempDir(), "arguments")
@@ -298,4 +349,77 @@ func TestRectorVerificationPreservesOutsideRootPaths(t *testing.T) {
 		Message:  "Rector changes remain after fixing. Review the file and rerun fix.",
 		Severity: validation.SeverityError, Identifier: "rector/change",
 	}}, result.Findings)
+}
+
+func TestRectorFixDryRunDoesNotWrite(t *testing.T) {
+	root, directories := setupRector(t, `dry=false
+clear=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) dry=true ;;
+        --clear-cache) clear=true ;;
+    esac
+done
+if [ "$dry" = false ]; then printf 'changed' > src/file.php; exit 3; fi
+if [ "$clear" = false ]; then printf '{"totals":{"changed_files":0,"errors":0}}'; exit 0; fi
+printf '{"totals":{"changed_files":1,"errors":0},"file_diffs":[{"file":"src/file.php","diff":"proposed diff","applied_rectors":["ExampleRector"]}]}'
+exit 2`, "src")
+	file := filepath.Join(root, "src", "file.php")
+	require.NoError(t, os.WriteFile(file, []byte("<?php // unchanged\n"), 0o600))
+	config := ToolConfig{RootDir: root, SourceDirectories: directories}
+	for range 2 {
+		result := runFixToolWithDryRun(t, Rector{}, config, true)
+		assert.Empty(t, result.Errors)
+		assert.Empty(t, result.Note)
+		assert.ElementsMatch(t, []validation.CheckResult{{
+			Path: "src/file.php", Line: 1,
+			Message:  "Rector changes are required. Run fix without dry-run to apply them.",
+			Severity: validation.SeverityError, Identifier: "rector/ExampleRector",
+		}}, result.Findings)
+		contents, err := os.ReadFile(file)
+		require.NoError(t, err)
+		assert.Equal(t, "<?php // unchanged\n", string(contents))
+	}
+}
+
+func TestRectorFixDryRunOutcomes(t *testing.T) {
+	for _, scenario := range []struct {
+		name, output, exit string
+		failed             bool
+		findings           []validation.CheckResult
+	}{
+		{name: "clean", output: `{"totals":{"changed_files":0,"errors":0}}`, exit: "0"},
+		{
+			name: "pending changes alongside syntax error", exit: "1",
+			output: `{"totals":{"changed_files":1,"errors":1},"changed_files":["src/file.php"],"errors":[{"file":"src/broken.php","line":8,"message":"Syntax error"}]}`,
+			findings: []validation.CheckResult{
+				{Path: "src/file.php", Line: 1, Severity: validation.SeverityError, Identifier: "rector/change", Message: "Rector changes are required. Run fix without dry-run to apply them."},
+				{Path: "src/broken.php", Line: 8, Severity: validation.SeverityError, Identifier: "rector/error", Message: "Syntax error"},
+			},
+		},
+		{name: "fatal report", output: "broken", exit: "1", failed: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			root, directories := setupRector(t, rectorResponder(), "src")
+			args := filepath.Join(t.TempDir(), "arguments")
+			t.Setenv("TOOL_ARGS", args)
+			t.Setenv("RECTOR_WRITE_OUTPUT", "Write pass must not run")
+			t.Setenv("RECTOR_WRITE_EXIT", "3")
+			t.Setenv("RECTOR_VERIFY_OUTPUT", scenario.output)
+			t.Setenv("RECTOR_VERIFY_EXIT", scenario.exit)
+			t.Setenv("RECTOR_STDERR", "diagnostic")
+			result := runFixToolWithDryRun(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories}, true)
+			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
+			assert.ElementsMatch(t, scenario.findings, result.Findings)
+			assert.Empty(t, result.Note)
+			if scenario.failed {
+				require.Len(t, result.Errors, 1)
+				assert.Equal(t, scenario.output, result.Errors[0].Stdout)
+				assert.Equal(t, "diagnostic", result.Errors[0].Stderr)
+			}
+			invocations, err := os.ReadFile(args)
+			require.NoError(t, err)
+			assert.Equal(t, 1, strings.Count(string(invocations), "--dry-run"))
+		})
+	}
 }

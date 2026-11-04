@@ -287,6 +287,68 @@ exit 2`)
 	}}, result.Findings)
 }
 
+func TestStylelintFixDryRunReportsFindingsWithoutWriting(t *testing.T) {
+	fakeTool(t, "node", `for arg in "$@"; do
+    if [ "$arg" = "--fix" ]; then exit 1; fi
+done
+printf '[{"source":"%s/file.scss","warnings":[{"line":1,"rule":"color-named","severity":"error","text":"Unexpected named color"},{"line":2,"rule":"no-unknown-animations","severity":"error","text":"Unexpected animation"}]}]' "$PWD" >&2
+exit 2`)
+	root := t.TempDir()
+	file := filepath.Join(root, "file.scss")
+	require.NoError(t, os.WriteFile(file, []byte("a { color: red; }\n"), 0o600))
+	result := runFixToolWithDryRun(t, StyleLint{}, ToolConfig{RootDir: root, AdminDirectories: []string{root}}, true)
+	assert.Empty(t, result.Errors)
+	assert.Empty(t, result.Note)
+	assert.True(t, result.HasFindings)
+	assert.ElementsMatch(t, []validation.CheckResult{{
+		Path: "file.scss", Line: 1, Message: "Unexpected named color",
+		Severity: validation.SeverityError, Identifier: "stylelint/color-named",
+	}, {
+		Path: "file.scss", Line: 2, Message: "Unexpected animation",
+		Severity: validation.SeverityError, Identifier: "stylelint/no-unknown-animations",
+	}}, result.Findings)
+	contents, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, "a { color: red; }\n", string(contents))
+}
+
+func TestStylelintFixDryRunCleanAndFatalResults(t *testing.T) {
+	for _, scenario := range []struct {
+		name, output, code string
+		failed             bool
+	}{
+		{name: "clean", output: `[{"source":"%s/file.scss","warnings":[]}]`, code: "0"},
+		{name: "fatal", output: "invalid report", code: "0", failed: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			fakeTool(t, "node", `for arg in "$@"; do
+    if [ "$arg" = "--fix" ]; then exit 1; fi
+done
+printf '%s' "$TOOL_STDOUT" >&2
+exit "$TOOL_EXIT"`)
+			root := t.TempDir()
+			file := filepath.Join(root, "file.scss")
+			require.NoError(t, os.WriteFile(file, []byte("unchanged\n"), 0o600))
+			t.Setenv("TOOL_STDOUT", strings.ReplaceAll(scenario.output, "%s", root))
+			t.Setenv("TOOL_EXIT", scenario.code)
+			result := runFixToolWithDryRun(t, StyleLint{}, ToolConfig{RootDir: root, AdminDirectories: []string{root}}, true)
+			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
+			assert.Empty(t, result.Findings)
+			assert.Empty(t, result.Note)
+			if scenario.failed {
+				require.Len(t, result.Errors, 1)
+				assert.Empty(t, result.Errors[0].Stdout)
+				assert.Equal(t, scenario.output, result.Errors[0].Stderr)
+				assert.Equal(t, root, result.Errors[0].Dir)
+				assert.NotEmpty(t, result.Errors[0].Command)
+			}
+			contents, err := os.ReadFile(file)
+			require.NoError(t, err)
+			assert.Equal(t, "unchanged\n", string(contents))
+		})
+	}
+}
+
 func TestStylelintFixCountsOverlappingDirectoriesOnce(t *testing.T) {
 	fakeTool(t, "node", `printf '[{"source":"%s/file.scss","warnings":[],"autofixed":true}]' "$PWD"`)
 	root := t.TempDir()

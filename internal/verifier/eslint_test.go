@@ -222,6 +222,68 @@ exit 1`)
 	}}, result.Findings)
 }
 
+func TestESLintFixDryRunReportsFindingsWithoutWriting(t *testing.T) {
+	fakeTool(t, "node", `for arg in "$@"; do
+    if [ "$arg" = "--fix" ]; then exit 2; fi
+done
+printf '[{"filePath":"%s/file.js","messages":[{"ruleId":"no-var","severity":2,"message":"Unexpected var","line":1},{"ruleId":"no-undef","severity":2,"message":"Unknown variable","line":2}]}]' "$PWD"
+exit 1`)
+	root := t.TempDir()
+	file := filepath.Join(root, "file.js")
+	require.NoError(t, os.WriteFile(file, []byte("const value = 1;\n"), 0o600))
+	result := runFixToolWithDryRun(t, Eslint{}, ToolConfig{RootDir: root, AdminDirectories: []string{root}}, true)
+	assert.Empty(t, result.Errors)
+	assert.Empty(t, result.Note)
+	assert.True(t, result.HasFindings)
+	assert.ElementsMatch(t, []validation.CheckResult{{
+		Path: "file.js", Line: 1, Message: "Unexpected var",
+		Severity: validation.SeverityError, Identifier: "eslint/no-var",
+	}, {
+		Path: "file.js", Line: 2, Message: "Unknown variable",
+		Severity: validation.SeverityError, Identifier: "eslint/no-undef",
+	}}, result.Findings)
+	contents, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, "const value = 1;\n", string(contents))
+}
+
+func TestESLintFixDryRunCleanAndFatalResults(t *testing.T) {
+	for _, scenario := range []struct {
+		name, output, code string
+		failed             bool
+	}{
+		{name: "clean", output: `[{"filePath":"%s/file.js","messages":[]}]`, code: "0"},
+		{name: "fatal", output: "invalid report", code: "0", failed: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			fakeTool(t, "node", `for arg in "$@"; do
+    if [ "$arg" = "--fix" ]; then exit 2; fi
+done
+printf '%s' "$TOOL_STDOUT"
+exit "$TOOL_EXIT"`)
+			root := t.TempDir()
+			file := filepath.Join(root, "file.js")
+			require.NoError(t, os.WriteFile(file, []byte("unchanged\n"), 0o600))
+			t.Setenv("TOOL_STDOUT", strings.ReplaceAll(scenario.output, "%s", root))
+			t.Setenv("TOOL_EXIT", scenario.code)
+			result := runFixToolWithDryRun(t, Eslint{}, ToolConfig{RootDir: root, AdminDirectories: []string{root}}, true)
+			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
+			assert.Empty(t, result.Findings)
+			assert.Empty(t, result.Note)
+			if scenario.failed {
+				require.Len(t, result.Errors, 1)
+				assert.Equal(t, scenario.output, result.Errors[0].Stdout)
+				assert.Empty(t, result.Errors[0].Stderr)
+				assert.Equal(t, root, result.Errors[0].Dir)
+				assert.NotEmpty(t, result.Errors[0].Command)
+			}
+			contents, err := os.ReadFile(file)
+			require.NoError(t, err)
+			assert.Equal(t, "unchanged\n", string(contents))
+		})
+	}
+}
+
 func TestESLintFixCountsOverlappingDirectoriesOnce(t *testing.T) {
 	fakeTool(t, "node", `printf '[{"filePath":"%s/file.js","messages":[],"output":"changed"}]' "$PWD"`)
 	root := t.TempDir()

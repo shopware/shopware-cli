@@ -53,7 +53,11 @@ func (e Eslint) Fix(
 	ctx context.Context,
 	config ToolConfig,
 	execution *ToolExecution,
+	dryRun bool,
 ) ToolSummary {
+	if dryRun {
+		return e.Check(ctx, config, execution)
+	}
 	return e.run(ctx, config, execution, true)
 }
 

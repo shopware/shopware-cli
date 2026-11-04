@@ -26,16 +26,19 @@ func (s SymfonyXMLConverter) Fix(
 	_ context.Context,
 	config ToolConfig,
 	execution *ToolExecution,
+	dryRun bool,
 ) ToolSummary {
 	found := false
 	changed := 0
 	failed := false
+	pendingFiles := make(map[string]struct{})
 	conversions := []struct {
 		fileName string
 		convert  func(string) (map[string]string, error)
+		plan     func(string) (map[string]string, error)
 	}{
-		{"services.xml", symfony.ConvertServicesXMLFile},
-		{"routes.xml", symfony.ConvertRoutesXMLFile},
+		{"services.xml", symfony.ConvertServicesXMLFile, symfony.PlanServicesXMLFile},
+		{"routes.xml", symfony.ConvertRoutesXMLFile, symfony.PlanRoutesXMLFile},
 	}
 
 	for _, configDir := range s.collectConfigDirs(config) {
@@ -51,7 +54,12 @@ func (s SymfonyXMLConverter) Fix(
 			}
 			found = true
 
-			converted, err := conversion.convert(xmlPath)
+			convert := conversion.convert
+			if dryRun {
+				convert = conversion.plan
+			}
+
+			converted, err := convert(xmlPath)
 			if err != nil {
 				if finding, ok := symfonyXMLFinding(err, config.RootDir); ok {
 					execution.AddFindings(finding)
@@ -62,12 +70,32 @@ func (s SymfonyXMLConverter) Fix(
 				continue
 			}
 
-			changed += len(converted)
+			if !dryRun {
+				changed += len(converted)
+				continue
+			}
+
+			for source := range converted {
+				filePath := validation.NormalizeSourcePath(source, config.RootDir)
+				if _, exists := pendingFiles[filePath]; exists {
+					continue
+				}
+				pendingFiles[filePath] = struct{}{}
+				execution.AddFindings(validation.CheckResult{
+					Path:       filePath,
+					Severity:   validation.SeverityError,
+					Identifier: "symfony-xml/conversion",
+					Message:    "XML configuration can be converted to YAML. Run fix without dry-run to apply it.",
+				})
+			}
 		}
 	}
 
 	if !found && !failed {
 		return ToolSummary{SkipReason: "no XML configuration files"}
+	}
+	if dryRun {
+		return ToolSummary{}
 	}
 
 	// I/O failures can leave partial writes. Avoid claiming no changes when
@@ -93,12 +121,17 @@ func symfonyXMLFinding(err error, root string) (validation.CheckResult, bool) {
 		line = syntaxErr.Line
 	}
 
+	// Retain the original root alias while normalizing embedded source paths.
+	message := validation.StripRootFromText(
+		fmt.Sprintf("Cannot convert XML to YAML; keeping the XML file: %v", err), root,
+	)
+
 	return validation.CheckResult{
 		Path:       validation.NormalizeSourcePath(conversionErr.Path, root),
 		Line:       line,
 		Severity:   validation.SeverityError,
 		Identifier: "symfony-xml/" + string(conversionErr.Kind),
-		Message:    fmt.Sprintf("Cannot convert XML to YAML; keeping the XML file: %v", err),
+		Message:    message,
 		Tip:        "Resolve the XML issue or convert the configuration manually, then rerun fix.",
 	}, true
 }

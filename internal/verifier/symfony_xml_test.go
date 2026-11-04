@@ -75,6 +75,26 @@ func TestSymfonyXMLConverterFixesPlugin(t *testing.T) {
 	assertConvertedConfigDir(t, filepath.Join(tmpDir, "src", "Resources", "config"))
 }
 
+func TestSymfonyXMLConverterFindingMessagesThroughSymlinkedRoot(t *testing.T) {
+	root := copySymfonyXMLFixture(t, "unconvertible")
+	alias := filepath.Join(t.TempDir(), "plugin")
+	require.NoError(t, os.Symlink(root, alias))
+	ext, err := extension.GetExtensionByFolder(t.Context(), alias)
+	require.NoError(t, err)
+	for _, dryRun := range []bool{false, true} {
+		result := runFixToolWithDryRun(t, SymfonyXMLConverter{}, ToolConfig{
+			RootDir: alias, Extensions: []extension.Extension{ext},
+		}, dryRun)
+		require.Empty(t, result.Errors)
+		require.NotEmpty(t, result.Findings)
+		for _, finding := range result.Findings {
+			assert.Contains(t, finding.Message, "cannot convert src/Resources/config/")
+			assert.NotContains(t, finding.Message, alias)
+			assert.NotContains(t, finding.Message, root)
+		}
+	}
+}
+
 func TestSymfonyXMLConverterFixesExtraBundles(t *testing.T) {
 	tmpDir := copySymfonyXMLFixture(t, "plugin-extra-bundle")
 	bundleConfigDir := filepath.Join(tmpDir, "src", "Foo", "Resources", "config")
@@ -273,6 +293,108 @@ func TestSymfonyXMLConverterFailureDoesNotClaimNoChanges(t *testing.T) {
 			assert.Empty(t, result.SkipReason)
 			assert.Empty(t, result.Note)
 			assert.NoFileExists(t, filepath.Join(directory, "services.yaml"))
+		})
+	}
+}
+
+func TestSymfonyXMLConverterDryRunPlansWithoutWriting(t *testing.T) {
+	root := copySymfonyXMLFixture(t, "plugin")
+	directory := filepath.Join(root, "src", "Resources", "config")
+	servicesPath := filepath.Join(directory, "services.xml")
+	require.NoError(t, os.WriteFile(servicesPath, []byte(`<container><imports><import resource="child.xml"/></imports></container>`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "child.xml"), []byte(`<container/>`), 0o644))
+	originals := make(map[string][]byte)
+	for _, name := range []string{"services", "routes", "child"} {
+		data, err := os.ReadFile(filepath.Join(directory, name+".xml"))
+		require.NoError(t, err)
+		originals[name] = data
+	}
+	ext, err := extension.GetExtensionByFolder(t.Context(), root)
+	require.NoError(t, err)
+	// Repeated discovery and imported-file traversal must not duplicate proposals.
+	config := ToolConfig{RootDir: root, Extensions: []extension.Extension{ext, ext}}
+	var expected []validation.CheckResult
+	for name := range originals {
+		expected = append(expected, validation.CheckResult{
+			Path: "src/Resources/config/" + name + ".xml", Line: 1,
+			Severity: validation.SeverityError, Identifier: "symfony-xml/conversion",
+			Message: "XML configuration can be converted to YAML. Run fix without dry-run to apply it.",
+		})
+	}
+	for range 2 {
+		result := runFixToolWithDryRun(t, SymfonyXMLConverter{}, config, true)
+		assert.Empty(t, result.Errors)
+		assert.Empty(t, result.Note)
+		assert.ElementsMatch(t, expected, result.Findings)
+		for name, original := range originals {
+			data, err := os.ReadFile(filepath.Join(directory, name+".xml"))
+			require.NoError(t, err)
+			assert.Equal(t, original, data)
+			assert.NoFileExists(t, filepath.Join(directory, name+".yaml"))
+		}
+	}
+}
+
+func TestSymfonyXMLConverterDryRunPreservesBlockedAndSiblingFiles(t *testing.T) {
+	root := copySymfonyXMLFixture(t, "plugin")
+	directory := filepath.Join(root, "src", "Resources", "config")
+	source := filepath.Join(directory, "services.xml")
+	original := []byte("<container>\n<services>\n<service></services>\n</container>")
+	require.NoError(t, os.WriteFile(source, original, 0o644))
+	ext, err := extension.GetExtensionByFolder(t.Context(), root)
+	require.NoError(t, err)
+	result := runFixToolWithDryRun(t, SymfonyXMLConverter{}, ToolConfig{RootDir: root, Extensions: []extension.Extension{ext}}, true)
+	assert.Empty(t, result.Errors)
+	assert.Empty(t, result.Note)
+	require.Len(t, result.Findings, 2)
+	assert.ElementsMatch(t, []string{"symfony-xml/invalid-xml", "symfony-xml/conversion"}, []string{result.Findings[0].Identifier, result.Findings[1].Identifier})
+	for _, finding := range result.Findings {
+		assert.Equal(t, validation.SeverityError, finding.Severity)
+		if finding.Identifier == "symfony-xml/invalid-xml" {
+			assert.Equal(t, "src/Resources/config/services.xml", finding.Path)
+			assert.Equal(t, 3, finding.Line)
+		}
+	}
+	data, err := os.ReadFile(source)
+	require.NoError(t, err)
+	assert.Equal(t, original, data)
+	assert.FileExists(t, filepath.Join(directory, "routes.xml"))
+	assert.NoFileExists(t, filepath.Join(directory, "services.yaml"))
+	assert.NoFileExists(t, filepath.Join(directory, "routes.yaml"))
+}
+
+func TestSymfonyXMLConverterDryRunCleanAndFilesystemFailure(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		name := "clean"
+		if failed {
+			name = "filesystem failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := copySymfonyXMLFixture(t, "plugin")
+			directory := filepath.Join(root, "src", "Resources", "config")
+			source := filepath.Join(directory, "services.xml")
+			require.NoError(t, os.Remove(source))
+			require.NoError(t, os.Remove(filepath.Join(directory, "routes.xml")))
+			if failed {
+				require.NoError(t, os.Mkdir(source, 0o755))
+			}
+			ext, err := extension.GetExtensionByFolder(t.Context(), root)
+			require.NoError(t, err)
+			result := runFixToolWithDryRun(t, SymfonyXMLConverter{}, ToolConfig{RootDir: root, Extensions: []extension.Extension{ext}}, true)
+			assert.Empty(t, result.Findings)
+			assert.Empty(t, result.Note)
+			if failed {
+				require.Len(t, result.Errors, 1)
+				var pathErr *os.PathError
+				require.ErrorAs(t, result.Errors[0], &pathErr)
+				assert.Equal(t, source, pathErr.Path)
+				assert.Equal(t, "failed", result.Status())
+			} else {
+				assert.Empty(t, result.Errors)
+				assert.Equal(t, "skipped", result.Status())
+			}
+			assert.NoFileExists(t, filepath.Join(directory, "services.yaml"))
+			assert.NoFileExists(t, filepath.Join(directory, "routes.yaml"))
 		})
 	}
 }

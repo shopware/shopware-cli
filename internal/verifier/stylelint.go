@@ -57,7 +57,11 @@ func (s StyleLint) Fix(
 	ctx context.Context,
 	config ToolConfig,
 	execution *ToolExecution,
+	dryRun bool,
 ) ToolSummary {
+	if dryRun {
+		return s.Check(ctx, config, execution)
+	}
 	return s.run(ctx, config, execution, true)
 }
 

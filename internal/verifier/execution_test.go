@@ -112,9 +112,19 @@ func runCheckTool(t *testing.T, tool CheckTool, config ToolConfig) validation.To
 
 func runFixTool(t *testing.T, tool FixTool, config ToolConfig) validation.ToolReport {
 	t.Helper()
+	return runFixToolWithDryRun(t, tool, config, false)
+}
+
+func runFixToolWithDryRun(
+	t *testing.T,
+	tool FixTool,
+	config ToolConfig,
+	dryRun bool,
+) validation.ToolReport {
+	t.Helper()
 	t.Setenv("DO_NOT_TRACK", "1")
 	return RunTools(t.Context(), ToolList[FixTool]{tool}, nil, config, nil, func(tool FixTool, execution *ToolExecution) ToolSummary {
-		return tool.Fix(t.Context(), config, execution)
+		return tool.Fix(t.Context(), config, execution, dryRun)
 	})[0]
 }
 

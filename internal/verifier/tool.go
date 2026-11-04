@@ -108,7 +108,8 @@ type CheckTool interface {
 
 type FixTool interface {
 	Tool
-	Fix(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
+	// Fix reports pending changes without applying them when dryRun is true.
+	Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
 }
 
 type FormatTool interface {

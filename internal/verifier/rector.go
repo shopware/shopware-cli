@@ -49,6 +49,7 @@ func (r Rector) Fix(
 	ctx context.Context,
 	config ToolConfig,
 	execution *ToolExecution,
+	dryRun bool,
 ) ToolSummary {
 	if result, applicable := preparePHPTool(config, execution); !applicable {
 		return result
@@ -108,7 +109,7 @@ func (r Rector) Fix(
 		return ToolSummary{}
 	}
 
-	return r.fixSources(ctx, config, execution, configFile)
+	return r.fixSources(ctx, config, execution, configFile, dryRun)
 }
 
 func (r Rector) getConfigPath(config ToolConfig) (string, error) {
@@ -132,33 +133,35 @@ func (r Rector) fixSources(
 	config ToolConfig,
 	execution *ToolExecution,
 	configFile string,
+	dryRun bool,
 ) ToolSummary {
 	changed := make(map[string]struct{})
 	reportsComplete := true
 
 	for _, sourceDirectory := range config.SourceDirectories {
-		report, canVerify := r.process(ctx, config, execution, configFile, sourceDirectory, false)
-		if report.Totals == nil {
-			reportsComplete = false
+		report, canVerify := r.process(ctx, config, execution, configFile, sourceDirectory, dryRun)
+		if !dryRun {
+			if report.Totals == nil {
+				reportsComplete = false
+			}
+			for _, file := range report.FileDiffs {
+				changed[filepath.Clean(file.File)] = struct{}{}
+			}
+			if !canVerify {
+				continue
+			}
+
+			// Applied edits are not findings. Verify without cached results to
+			// report only the changes that remain after the write pass.
+			report, _ = r.process(ctx, config, execution, configFile, sourceDirectory, true)
 		}
 
 		for _, file := range report.FileDiffs {
-			changed[filepath.Clean(file.File)] = struct{}{}
-		}
-
-		if !canVerify {
-			continue
-		}
-
-		// A write report describes applied edits. Only a subsequent dry run can
-		// establish whether the selected rules still propose unapplied changes.
-		remaining, _ := r.process(ctx, config, execution, configFile, sourceDirectory, true)
-		for _, file := range remaining.FileDiffs {
-			execution.AddFindings(file.pendingFindings(config.RootDir)...)
+			execution.AddFindings(file.pendingFindings(config.RootDir, dryRun)...)
 		}
 	}
 
-	if reportsComplete {
+	if !dryRun && reportsComplete {
 		return ToolSummary{Note: fileChangeNote(len(changed), "fixed")}
 	}
 
@@ -274,8 +277,8 @@ func parseRectorOutput(output string) (rectorOutput, error) {
 	return report, nil
 }
 
-// pendingFindings describes changes proposed by verification, not applied edits.
-func (f rectorFileDiff) pendingFindings(root string) []validation.CheckResult {
+// pendingFindings describes changes proposed by preview or verification.
+func (f rectorFileDiff) pendingFindings(root string, dryRun bool) []validation.CheckResult {
 	rules := f.AppliedRectors
 	if len(rules) == 0 {
 		rules = []string{"change"}
@@ -287,11 +290,16 @@ func (f rectorFileDiff) pendingFindings(root string) []validation.CheckResult {
 	}
 	filePath = validation.NormalizeSourcePath(filePath, root)
 
+	message := "Rector changes remain after fixing. Review the file and rerun fix."
+	if dryRun {
+		message = "Rector changes are required. Run fix without dry-run to apply them."
+	}
+
 	findings := make([]validation.CheckResult, 0, len(rules))
 	for _, rule := range rules {
 		findings = append(findings, validation.CheckResult{
 			Path:       filePath,
-			Message:    "Rector changes remain after fixing. Review the file and rerun fix.",
+			Message:    message,
 			Severity:   validation.SeverityError,
 			Identifier: "rector/" + rule,
 		})
@@ -314,7 +322,12 @@ func (e rectorError) sourceFinding(root, directory string) (validation.CheckResu
 	if !filepath.IsAbs(directory) {
 		directory = filepath.Join(root, directory)
 	}
-	relative, err := filepath.Rel(directory, filePath)
+	// Discovery may resolve source directories while the root still uses a
+	// symlink, such as macOS /var and /private/var.
+	relative, err := filepath.Rel(
+		validation.ResolveSourceRoot(directory),
+		validation.ResolveSourceRoot(filePath),
+	)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return validation.CheckResult{}, false
 	}
