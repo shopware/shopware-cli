@@ -13,8 +13,8 @@ import (
 )
 
 // writeFakeDocker puts a docker stub on PATH that answers
-// `docker compose exec ... printenv DATABASE_URL` with execOutput (or fails
-// when empty) and `docker compose port <service> <port>` with portScript.
+// `docker compose exec ... env` with DATABASE_URL=execOutput (or fails when
+// empty) and `docker compose port <service> <port>` with portScript.
 func writeFakeDocker(t *testing.T, execOutput, portScript string) {
 	t.Helper()
 
@@ -27,7 +27,7 @@ func writeFakeDocker(t *testing.T, execOutput, portScript string) {
 
 	execBranch := "exit 1"
 	if execOutput != "" {
-		execBranch = fmt.Sprintf("echo %q", execOutput)
+		execBranch = fmt.Sprintf("echo %q", "DATABASE_URL="+execOutput)
 	}
 
 	script := fmt.Sprintf(`#!%s
