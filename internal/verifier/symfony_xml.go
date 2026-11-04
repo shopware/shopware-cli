@@ -22,12 +22,7 @@ func (SymfonyXMLConverter) Name() string {
 	return "symfony-xml"
 }
 
-func (s SymfonyXMLConverter) Fix(
-	_ context.Context,
-	config ToolConfig,
-	execution *ToolExecution,
-	dryRun bool,
-) ToolSummary {
+func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	found := false
 	changed := 0
 	failed := false

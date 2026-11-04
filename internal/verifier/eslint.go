@@ -41,20 +41,11 @@ func (e Eslint) Name() string {
 	return "eslint"
 }
 
-func (e Eslint) Check(
-	ctx context.Context,
-	config ToolConfig,
-	execution *ToolExecution,
-) ToolSummary {
+func (e Eslint) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
 	return e.run(ctx, config, execution, false)
 }
 
-func (e Eslint) Fix(
-	ctx context.Context,
-	config ToolConfig,
-	execution *ToolExecution,
-	dryRun bool,
-) ToolSummary {
+func (e Eslint) Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	if dryRun {
 		return e.Check(ctx, config, execution)
 	}

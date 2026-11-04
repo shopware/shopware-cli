@@ -45,20 +45,11 @@ func (s StyleLint) Name() string {
 	return "stylelint"
 }
 
-func (s StyleLint) Check(
-	ctx context.Context,
-	config ToolConfig,
-	execution *ToolExecution,
-) ToolSummary {
+func (s StyleLint) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
 	return s.run(ctx, config, execution, false)
 }
 
-func (s StyleLint) Fix(
-	ctx context.Context,
-	config ToolConfig,
-	execution *ToolExecution,
-	dryRun bool,
-) ToolSummary {
+func (s StyleLint) Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	if dryRun {
 		return s.Check(ctx, config, execution)
 	}
