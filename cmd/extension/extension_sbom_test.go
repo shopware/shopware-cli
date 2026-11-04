@@ -128,3 +128,41 @@ func TestPackageWritesAndEmbedsSBOM(t *testing.T) {
 	// The source folder stays untouched.
 	assert.NoFileExists(t, filepath.Join(extDir, "sbom.cdx.json"))
 }
+
+func TestPackageSBOMUsesOverwrittenAppVersion(t *testing.T) {
+	extDir := testhelper.NewApp(t, "FroshApp")
+	testhelper.WriteFile(t, filepath.Join(extDir, ".shopware-extension.yml"), `build:
+  zip:
+    composer:
+      enabled: false
+    assets:
+      enabled: false
+`)
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+
+	disableGit = true
+	t.Cleanup(func() { disableGit = false })
+
+	outputDir := filepath.Join(workDir, "dist")
+	extensionPackageCmd.SetContext(t.Context())
+	for flag, value := range map[string]string{
+		"output-directory":  outputDir,
+		"overwrite-version": "2.3.4",
+		"sbom":              "true",
+	} {
+		require.NoError(t, extensionPackageCmd.Flags().Set(flag, value))
+	}
+	t.Cleanup(func() {
+		_ = extensionPackageCmd.Flags().Set("output-directory", "")
+		_ = extensionPackageCmd.Flags().Set("overwrite-version", "")
+		_ = extensionPackageCmd.Flags().Set("sbom", "false")
+	})
+
+	require.NoError(t, extensionPackageCmd.RunE(extensionPackageCmd, []string{extDir}))
+
+	doc := readSBOMFile(t, filepath.Join(outputDir, "FroshApp.cdx.json"))
+	component := doc["metadata"].(map[string]any)["component"].(map[string]any)
+	assert.Equal(t, "FroshApp", component["name"])
+	assert.Equal(t, "2.3.4", component["version"])
+}

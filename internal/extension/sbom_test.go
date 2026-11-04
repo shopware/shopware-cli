@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 const sbomTestComposerJSON = `{
@@ -280,4 +282,58 @@ func TestNpmIntegrityToHash(t *testing.T) {
 
 	_, ok = npmIntegrityToHash("")
 	assert.False(t, ok)
+}
+
+func TestSBOMLicense(t *testing.T) {
+	cases := map[string]sbomLicenseExpectation{
+		"MIT":               {id: "MIT"},
+		"Apache-2.0":        {id: "Apache-2.0"},
+		"GPL-3.0-or-later":  {id: "GPL-3.0-or-later"},
+		"proprietary":       {name: "proprietary"},
+		"UNLICENSED":        {name: "UNLICENSED"},
+		"BSD":               {name: "BSD"},
+		"MIT OR Apache-2.0": {name: "MIT OR Apache-2.0"},
+		"LicenseRef-acme":   {name: "LicenseRef-acme"},
+	}
+
+	for license, expected := range cases {
+		choice := sbomLicense(license)
+		assert.Equal(t, expected.id, choice.License.ID, license)
+		assert.Equal(t, expected.name, choice.License.Name, license)
+	}
+}
+
+type sbomLicenseExpectation struct {
+	id   string
+	name string
+}
+
+func TestGenerateSBOMKeepsAppIdentityWithoutComposerName(t *testing.T) {
+	dir := testhelper.NewApp(t, "AcmeApp")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{"description": "App with a composer.json"}`), 0o644))
+
+	ext, err := GetExtensionByFolder(t.Context(), dir)
+	require.NoError(t, err)
+
+	bom, err := GenerateSBOM(t.Context(), ext, dir, SBOMOptions{})
+	require.NoError(t, err)
+
+	root := bom.Metadata.Component
+	assert.Equal(t, "AcmeApp", root.Name)
+	assert.Equal(t, "1.0.0", root.Version)
+	assert.Empty(t, root.Group)
+	assert.Empty(t, root.PURL)
+	assert.Equal(t, "App with a composer.json", root.Description)
+}
+
+func TestGenerateSBOMRejectsNpmLockfileVersion1(t *testing.T) {
+	dir := writeSBOMTestPlugin(t)
+	lockPath := filepath.Join(dir, "src/Resources/app/administration/package-lock.json")
+	require.NoError(t, os.WriteFile(lockPath, []byte(`{"lockfileVersion": 1, "dependencies": {"lodash": {"version": "4.17.21"}}}`), 0o644))
+
+	ext, err := GetExtensionByFolder(t.Context(), dir)
+	require.NoError(t, err)
+
+	_, err = GenerateSBOM(t.Context(), ext, dir, SBOMOptions{})
+	assert.ErrorContains(t, err, "lockfileVersion 1")
 }
