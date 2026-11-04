@@ -272,6 +272,28 @@ func TestShouldCheckForUpdate(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:    "explicit false flag overrides environment",
+			version: "v1.0.0",
+			args:    []string{"--no-update-hint=false"},
+			env: map[string]string{
+				"SHOPWARE_CLI_NO_UPDATE_NOTIFICATION": "true",
+			},
+			expected: true,
+		},
+		{
+			name:     "explicit false flag overrides user config",
+			version:  "v1.0.0",
+			args:     []string{"--no-update-hint=false"},
+			config:   "no_update_hint: true\n",
+			expected: true,
+		},
+		{
+			name:     "short flag disables despite explicit false flag",
+			version:  "v1.0.0",
+			args:     []string{"--no-update-hint=false", "-n"},
+			expected: false,
+		},
+		{
 			name:     "disabled via short command-line flag",
 			version:  "v1.0.0",
 			args:     []string{"-n"},
