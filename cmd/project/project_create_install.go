@@ -194,7 +194,7 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 	}
 
 	if continueAnyway == tui.No {
-		return errors.New("project creation cancelled")
+		return errCreateCancelled
 	}
 
 	opts.noAudit = true

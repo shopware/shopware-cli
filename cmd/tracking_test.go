@@ -119,6 +119,11 @@ func TestTrackCommandExecution_ExtensionAddGenerator(t *testing.T) {
 	assert.Equal(t, "extension.add.admin_module", events[0][tracking.TagCommandName])
 }
 
+type declinedError struct{}
+
+func (declinedError) Error() string { return "declined" }
+func (declinedError) Cancelled()    {}
+
 func TestTrackCommandExecution_Result(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -134,6 +139,8 @@ func TestTrackCommandExecution_Result(t *testing.T) {
 		{name: "interrupted run that still succeeded", interrupted: true, runErr: nil, want: tracking.ResultSuccess},
 		{name: "prompt aborted with ctrl+c", runErr: fmt.Errorf("cannot create project: %w", huh.ErrUserAborted), want: tracking.ResultCancelled},
 		{name: "selection dismissed", runErr: tui.ErrFilterSelectCancelled, want: tracking.ResultCancelled},
+		{name: "declined prompt", runErr: fmt.Errorf("cannot create project: %w", tracking.NewCancelled("creation cancelled")), want: tracking.ResultCancelled},
+		{name: "custom declined error opts in", runErr: fmt.Errorf("cannot continue: %w", declinedError{}), want: tracking.ResultCancelled},
 	}
 
 	for _, tt := range tests {
