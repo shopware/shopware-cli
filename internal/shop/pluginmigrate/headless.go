@@ -93,11 +93,11 @@ func consumeRunEvents(out io.Writer, events <-chan StepEvent) error {
 		case ev.State == StateRunning:
 			_, _ = fmt.Fprintln(out, tui.BoldText.Render("▸ "+ev.Step.Label()))
 		case ev.State == StateOK:
-			_, _ = fmt.Fprintf(out, "%s %s\n", tui.CheckOK, ev.Step.Label())
+			_, _ = fmt.Fprintf(out, "%s %s\n", tui.CheckOK(), ev.Step.Label())
 		case ev.State == StateWarn:
-			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckWarn, ev.Step.Label(), ev.Err)
+			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckWarn(), ev.Step.Label(), ev.Err)
 		case ev.State == StateFail:
-			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckFail, ev.Step.Label(), ev.Err)
+			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckFail(), ev.Step.Label(), ev.Err)
 		}
 	}
 	return runErr

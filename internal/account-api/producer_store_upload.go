@@ -87,14 +87,21 @@ func UploadExtension(ctx context.Context, producer ProducerAPI, zipExt extension
 		return err
 	}
 
-	logging.FromContext(ctx).Debugf("Shopware version constraint: %s", constraint)
+	matchingVersions := availableVersions.FilterOnVersionStringList(constraint)
+	matchingVersionsText := strings.Join(matchingVersions, ", ")
+	if len(matchingVersions) == 0 {
+		matchingVersionsText = "none"
+	}
+
+	logging.FromContext(ctx).Infof("Shopware version constraint: %s", constraint)
+	logging.FromContext(ctx).Infof("Matching Shopware versions: %s", matchingVersionsText)
 
 	if foundBinary == nil {
 		logging.FromContext(ctx).Debugf("No existing binary found for version %s, creating new one", zipVersion.String())
 
 		create := ExtensionCreate{
 			Version:          zipVersion.String(),
-			SoftwareVersions: availableVersions.FilterOnVersionStringList(constraint),
+			SoftwareVersions: matchingVersions,
 			Changelogs: []ExtensionUpdateChangelog{
 				{Locale: "de_DE", Text: changelog.German},
 				{Locale: "en_GB", Text: changelog.English},
@@ -116,7 +123,7 @@ func UploadExtension(ctx context.Context, producer ProducerAPI, zipExt extension
 
 	update := ExtensionUpdate{
 		Id:               foundBinary.Id,
-		SoftwareVersions: availableVersions.FilterOnVersionStringList(constraint),
+		SoftwareVersions: matchingVersions,
 		Changelogs: []ExtensionUpdateChangelog{
 			{Locale: "de_DE", Text: changelog.German},
 			{Locale: "en_GB", Text: changelog.English},

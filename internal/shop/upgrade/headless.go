@@ -307,11 +307,11 @@ func (u *ProjectUpgrader) consumeRunEvents(out io.Writer, events <-chan StepEven
 		case ev.State == StateRunning:
 			_, _ = fmt.Fprintln(out, tui.BoldText.Render("▸ "+ev.Step.Label()))
 		case ev.State == StateOK:
-			_, _ = fmt.Fprintf(out, "%s %s\n", tui.CheckOK, ev.Step.Label())
+			_, _ = fmt.Fprintf(out, "%s %s\n", tui.CheckOK(), ev.Step.Label())
 		case ev.State == StateWarn:
-			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckWarn, ev.Step.Label(), ev.Err)
+			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckWarn(), ev.Step.Label(), ev.Err)
 		case ev.State == StateFail:
-			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckFail, ev.Step.Label(), ev.Err)
+			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckFail(), ev.Step.Label(), ev.Err)
 		}
 	}
 	return failedStep, runErr
@@ -368,11 +368,11 @@ func (u *ProjectUpgrader) trackHeadlessOutcome(outcome headlessOutcome, err erro
 func stateGlyph(s CheckState) string {
 	switch s {
 	case StateOK:
-		return tui.CheckOK
+		return tui.CheckOK()
 	case StateWarn:
-		return tui.CheckWarn
+		return tui.CheckWarn()
 	case StateFail:
-		return tui.CheckFail
+		return tui.CheckFail()
 	case StateRunning, StatePending:
 		return tui.StateDot(tui.DotPending)
 	}
