@@ -217,6 +217,12 @@ func TestShouldCheckForUpdate(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "disabled via --no-interaction",
+			version:  "v1.0.0",
+			args:     []string{"--no-interaction"},
+			expected: false,
+		},
+		{
 			name:    "unsupported environment value does not disable notifications",
 			version: "v1.0.0",
 			env: map[string]string{

@@ -164,7 +164,7 @@ func ShouldCheckForUpdate(version string, args []string) bool {
 	// An explicit --no-update-hint=false overrides the environment and user config.
 	flagEnabled := false
 	for _, arg := range args {
-		if arg == "--no-update-hint" || arg == "-n" {
+		if arg == "--no-update-hint" || arg == "--no-interaction" || arg == "-n" {
 			return false
 		}
 		// Bool flags also accept an explicit value, e.g. --no-update-hint=true.
