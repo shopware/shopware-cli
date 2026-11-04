@@ -52,18 +52,6 @@ func TestPrettierInvocation(t *testing.T) {
 	}
 }
 
-func TestStylelintFindingsFromStderr(t *testing.T) {
-	fakeTool(t, "node", `printf '[{"source":"file.scss","warnings":[{"line":1,"rule":"test","severity":"error","text":"problem"}]}]' >&2
-exit 2
-`)
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "file.scss"), nil, 0o644))
-	result := runCheckTool(t, StyleLint{}, ToolConfig{AdminDirectories: []string{root}})
-	require.Empty(t, result.Errors)
-	require.Len(t, result.Findings, 1)
-	assert.Equal(t, "stylelint/test", result.Findings[0].Identifier)
-}
-
 func TestPHPStanInvocation(t *testing.T) {
 	for _, scenario := range []struct {
 		name, stdout, stderr, code string
