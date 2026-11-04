@@ -260,6 +260,18 @@ func TestShouldCheckForUpdate(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "disabled via flag with explicit true value",
+			version:  "v1.0.0",
+			args:     []string{"--no-update-hint=true"},
+			expected: false,
+		},
+		{
+			name:     "enabled with explicit false flag value",
+			version:  "v1.0.0",
+			args:     []string{"--no-update-hint=false"},
+			expected: true,
+		},
+		{
 			name:     "disabled via short command-line flag",
 			version:  "v1.0.0",
 			args:     []string{"-n"},

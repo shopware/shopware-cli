@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -164,6 +165,12 @@ func ShouldCheckForUpdate(version string, args []string) bool {
 		for _, arg := range args {
 			if arg == "--no-update-hint" || arg == "-n" {
 				return false
+			}
+			// Bool flags also accept an explicit value, e.g. --no-update-hint=true.
+			if value, ok := strings.CutPrefix(arg, "--no-update-hint="); ok {
+				if disabled, err := strconv.ParseBool(value); err == nil && disabled {
+					return false
+				}
 			}
 		}
 	}
