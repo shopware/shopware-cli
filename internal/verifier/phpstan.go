@@ -63,9 +63,9 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
 		result.Note = "Shopware " + installed
 		if !config.IsProject {
-			mode := "highest"
-			if config.CheckAgainst == "lowest" {
-				mode = "lowest"
+			mode := CheckAgainstHighest
+			if config.CheckAgainst == CheckAgainstLowest {
+				mode = CheckAgainstLowest
 			}
 			result.Note += " (" + mode + ")"
 		}

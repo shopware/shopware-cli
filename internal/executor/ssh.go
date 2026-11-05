@@ -298,21 +298,39 @@ func (s *SSHExecutor) EnvironmentStatus(_ context.Context) (bool, error) {
 func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
 	conn := defaultDatabaseConnection()
 
-	databaseURL := s.env["DATABASE_URL"]
-
-	if databaseURL == "" {
-		var err error
-		databaseURL, err = s.remoteDatabaseURL(ctx)
+	// An explicit DATABASE_URL override skips the remote lookup entirely, the
+	// TLS variables then come from the executor env as well.
+	values := s.env
+	if s.env["DATABASE_URL"] == "" {
+		remote, err := s.remoteEnv(ctx)
 		if err != nil {
 			return nil, err
 		}
+
+		values = make(map[string]string, len(remote)+len(s.env))
+		for k, v := range remote {
+			values[k] = v
+		}
+		for k, v := range s.env {
+			if v != "" {
+				values[k] = v
+			}
+		}
 	}
 
-	if databaseURL != "" {
+	if databaseURL := values["DATABASE_URL"]; databaseURL != "" {
 		if err := applyDatabaseURL(conn, databaseURL); err != nil {
 			return nil, err
 		}
 	}
+
+	// Certificate paths refer to the remote host, so read them over SSH.
+	readFile := func(path string) ([]byte, error) {
+		out, err := s.runRemoteShell(ctx, "cat "+shellQuoteArg(path))
+		return []byte(out), err
+	}
+
+	applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile)
 
 	dialTarget := conn.Addr()
 
@@ -330,26 +348,26 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 	return conn, nil
 }
 
-// remoteDatabaseURL resolves DATABASE_URL on the remote host via
+// remoteEnv resolves the environment of the remote project via
 // `shopware-deployment-helper dump-env`, which evaluates the full Symfony
 // dotenv cascade (including .env.local.php and variable interpolation) and
 // prints the resolved values as JSON.
-func (s *SSHExecutor) remoteDatabaseURL(ctx context.Context) (string, error) {
+func (s *SSHExecutor) remoteEnv(ctx context.Context) (map[string]string, error) {
 	if _, err := s.runRemoteShell(ctx, "test -x vendor/bin/shopware-deployment-helper"); err != nil {
-		return "", errors.New("vendor/bin/shopware-deployment-helper not found on the remote host: require shopware/deployment-helper in the project (composer require shopware/deployment-helper)")
+		return nil, errors.New("vendor/bin/shopware-deployment-helper not found on the remote host: require shopware/deployment-helper in the project (composer require shopware/deployment-helper)")
 	}
 
 	stdout, err := s.runRemoteShell(ctx, s.quotedPHP()+" vendor/bin/shopware-deployment-helper dump-env")
 	if err != nil {
-		return "", fmt.Errorf("%w (dump-env requires a recent shopware/deployment-helper: run composer update shopware/deployment-helper on the remote host)", err)
+		return nil, fmt.Errorf("%w (dump-env requires a recent shopware/deployment-helper: run composer update shopware/deployment-helper on the remote host)", err)
 	}
 
 	var values map[string]string
 	if err := json.Unmarshal([]byte(stdout), &values); err != nil {
-		return "", fmt.Errorf("could not parse dump-env output: %w", err)
+		return nil, fmt.Errorf("could not parse dump-env output: %w", err)
 	}
 
-	return values["DATABASE_URL"], nil
+	return values, nil
 }
 
 // runRemoteShell executes a shell snippet inside the remote project

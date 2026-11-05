@@ -63,9 +63,9 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 		return "", &ToolError{Err: err}
 	}
 
-	mode := "highest"
-	if config.CheckAgainst == "lowest" {
-		mode = "lowest"
+	mode := CheckAgainstHighest
+	if config.CheckAgainst == CheckAgainstLowest {
+		mode = CheckAgainstLowest
 	}
 
 	// One directory per mode, so switching between them doesn't rewrite most
@@ -168,7 +168,7 @@ func validationComposerJSON(composerJSON []byte, rootDir string, checkAgainst st
 		}
 	}
 
-	if checkAgainst == "lowest" {
+	if checkAgainst == CheckAgainstLowest {
 		// Composer 2.9 uses this setting; newer versions are also covered by
 		// COMPOSER_POLICY_ADVISORIES_BLOCK below. Only the validation copy changes.
 		config, _ := data["config"].(map[string]any)
@@ -263,7 +263,7 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, checkAgai
 	}
 
 	env := append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
-	if checkAgainst == "lowest" {
+	if checkAgainst == CheckAgainstLowest {
 		// Historical compatibility analysis must include releases with advisories.
 		// Keep audit reporting and other dependency policies enabled.
 		env = append(env, "COMPOSER_POLICY_ADVISORIES_BLOCK=0")
@@ -271,7 +271,7 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, checkAgai
 
 	additionalParams := []string{"update", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
 
-	if checkAgainst == "lowest" {
+	if checkAgainst == CheckAgainstLowest {
 		additionalParams = append(additionalParams, "--prefer-lowest")
 	}
 

@@ -41,6 +41,11 @@ type Options struct {
 	AltScreen *bool
 	// Mouse enables cell-motion mouse when true.
 	Mouse bool
+	// OnExit runs once the program has ended, with the error Run returns. It
+	// also runs when a signal or a recovered panic ends the program without
+	// another Update, which the content cannot see. Only Run calls it, not a
+	// program started with tea.NewProgram directly. Not part of lattice's shell.
+	OnExit func(err error)
 }
 
 // App is a Bubble Tea model that hosts content, chrome, and overlays.
@@ -57,6 +62,7 @@ type App struct {
 	fullOverlay bool
 	altScreen   bool
 	mouse       bool
+	onExit      func(error)
 
 	overlays OverlayStack
 	keys     KeyMap
@@ -86,6 +92,7 @@ func New(opts Options) *App {
 		fullOverlay: fullOverlay,
 		altScreen:   alt,
 		mouse:       opts.Mouse,
+		onExit:      opts.OnExit,
 		commands:    NewCommandRegistry(),
 	}
 
@@ -323,7 +330,12 @@ func (a *App) View() tea.View {
 	return v
 }
 
-// Run is a convenience for tea.NewProgram(a).Run().
-func (a *App) Run() (tea.Model, error) {
-	return tea.NewProgram(a).Run()
+// Run is a convenience for tea.NewProgram(a, opts...).Run() that calls OnExit
+// once the program has ended.
+func (a *App) Run(opts ...tea.ProgramOption) (tea.Model, error) {
+	model, err := tea.NewProgram(a, opts...).Run()
+	if a.onExit != nil {
+		a.onExit(err)
+	}
+	return model, err
 }

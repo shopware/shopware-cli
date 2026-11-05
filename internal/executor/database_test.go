@@ -142,7 +142,8 @@ func TestApplyDatabaseURLInvalid(t *testing.T) {
 func TestDatabaseConnectionMySQLConfig(t *testing.T) {
 	conn := &DatabaseConnection{Host: "db.internal", Port: "3307", Username: "app", Password: "secret", Database: "shop"}
 
-	cfg := conn.MySQLConfig()
+	cfg, err := conn.MySQLConfig()
+	require.NoError(t, err)
 
 	assert.Equal(t, "tcp", cfg.Net)
 	assert.Equal(t, "db.internal:3307", cfg.Addr)
@@ -150,6 +151,7 @@ func TestDatabaseConnectionMySQLConfig(t *testing.T) {
 	assert.Equal(t, "secret", cfg.Passwd)
 	assert.Equal(t, "shop", cfg.DBName)
 	assert.Equal(t, 0, cfg.MaxAllowedPacket, "must fetch max_allowed_packet from the server")
+	assert.Nil(t, cfg.TLS, "TLS is off unless configured")
 }
 
 func TestDatabaseConnectionOpenUnreachable(t *testing.T) {

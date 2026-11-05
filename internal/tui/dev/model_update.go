@@ -87,9 +87,6 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 			return m, nil
 		}
 		if tui.KeyString(msg) == "q" || tui.KeyString(msg) == tui.KeyCtrlC {
-			if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
-				trackEventNow(tracking.EventDevAction, tags)
-			}
 			m.shutdown()
 			return m, tea.Quit
 		}

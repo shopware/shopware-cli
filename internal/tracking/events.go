@@ -22,6 +22,7 @@ const (
 
 	// The project.dev.* events are sent by the interactive dev TUI (internal/tui/dev).
 	EventDevSession         = "project.dev.session"
+	EventDevSessionStart    = "project.dev.session_start"
 	EventDevInstall         = "project.dev.install"
 	EventDevMigrationWizard = "project.dev.migration_wizard"
 	EventDevDockerStart     = "project.dev.docker_start"
@@ -45,6 +46,7 @@ const (
 
 	// Every event, set by Track
 	TagCLIVersion = "cli_version"
+	TagSessionID  = "session_id"
 
 	// EventCommand
 	TagCommandName = "command_name"
@@ -57,6 +59,9 @@ const (
 	TagMissing     = "missing"
 	// TagShopwareVersion is the project's Shopware version, on project commands run inside a project.
 	TagShopwareVersion = "shopware_version"
+	// Tools behind a failed tool report (validate, fix, format), sorted and comma-separated.
+	TagFailedTools            = "failed_tools"
+	TagToolsWithErrorFindings = "tools_with_error_findings"
 
 	// EventProjectCreate
 	TagVersion           = "version"
@@ -107,8 +112,10 @@ const (
 	// EventDevHealth
 	TagCheck = "check"
 
+	// EventDevSession and EventDevSessionStart
+	TagExecutor = "executor"
+
 	// EventDevSession
-	TagExecutor     = "executor"
 	TagTabsVisited  = "tabs_visited"
 	TagActions      = "actions"
 	TagWatchersUsed = "watchers_used"

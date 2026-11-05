@@ -196,7 +196,7 @@ printf '{"files":{},"errors":[]}'
 	configFile := filepath.Join(root, "phpstan.neon.dist")
 	require.NoError(t, os.WriteFile(configFile, []byte("parameters:\n    level: 5\n"), 0o644))
 
-	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: "lowest"})
+	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstLowest})
 
 	require.Empty(t, result.Errors)
 	assert.Equal(t, "Shopware 6.6.0.0 (lowest)", result.Note)
@@ -226,7 +226,7 @@ func TestPHPStanSkipsAnalysisAfterFailedDependencyRefresh(t *testing.T) {
 	require.NoError(t, os.MkdirAll(cachedVendor, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(cachedVendor, "autoload.php"), nil, 0o644))
 
-	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: "lowest"})
+	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstLowest})
 
 	require.NotEmpty(t, result.Errors)
 	assert.Empty(t, result.Note)
@@ -290,7 +290,7 @@ printf '{"files":{}}'
 	for _, name := range []string{"rector.php", "phpstan.neon"} {
 		require.NoError(t, os.WriteFile(filepath.Join(root, name), nil, 0o644))
 	}
-	cfg := ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: "lowest"}
+	cfg := ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstLowest}
 	workDir := filepath.Join(root, "var/cache/shopware-cli/composer-lowest")
 	var previousManifest []byte
 	for _, name := range []string{"phpstan", "rector"} {
@@ -362,7 +362,7 @@ exit "$RECTOR_EXIT"
 				require.NoError(t, os.WriteFile(filepath.Join(root, "rector.php"), []byte("<?php"), 0o644))
 			}
 			tools := t.TempDir()
-			cfg := ToolConfig{RootDir: root, ToolDirectory: tools, SourceDirectories: []string{root}, MinShopwareVersion: "6.7.0.0", CheckAgainst: "highest", IsProject: scenario.project}
+			cfg := ToolConfig{RootDir: root, ToolDirectory: tools, SourceDirectories: []string{root}, MinShopwareVersion: "6.7.0.0", CheckAgainst: CheckAgainstHighest, IsProject: scenario.project}
 			result := runFixTool(t, Rector{}, cfg)
 			assert.Equal(t, scenario.fail, len(result.Errors) > 0)
 			workDir := filepath.Join(root, "var/cache/shopware-cli/composer-lowest")

@@ -96,7 +96,9 @@ All events share a common envelope:
 | `tags`      | Event-specific key/value pairs (all string values), described below |
 
 Every event's `tags` also carry `cli_version`, the version of `shopware-cli`
-that sent it, so dev builds can be excluded for every event.
+that sent it, so dev builds can be excluded for every event. They also carry
+`session_id`, a random ID for one run of the CLI that is not saved on the
+machine, so the events of the same run can be linked.
 
 There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
@@ -156,6 +158,8 @@ overall CLI usage.
 | `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider                                                                                                                                                                         | `github` / `gitlab` / `bitbucket` / `other` |
 | `shopware_version` | The installed Shopware version, looked up in the background near command startup from installed packages with `composer.lock` as fallback. Omitted if the lookup is not ready when the command finishes; commands that modify dependencies may affect the observed version. Accepts a release, a release candidate or `dev-trunk`; other development branches are never sent. Only on `project` commands run inside a project, not on `project create` | `6.7.11.0` |
 | `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` unless `--docker` was passed explicitly | `compose_plugin_missing,docker_not_running` |
+| `failed_tools` | Tools that failed, sorted and comma-separated; only with `result=failure` on commands that report tool results (`validate`, `fix`, `format`). A tool fails when it cannot run or breaks while running, and on `fix` also when ESLint or Stylelint leave problems they cannot fix | `eslint` |
+| `tools_with_error_findings` | Tools that reported error findings, sorted and comma-separated; only with `result=failure` on the same commands. Warnings and ignored findings do not count | `builtin,phpstan` |
 
 Notes:
 
@@ -164,6 +168,13 @@ Notes:
   `php_version` and `other`. The versions found or required are never sent.
 - A pinned `php_version` that is not installed stops the command before the
   dependency check and is reported as `php_version`.
+- `failed_tools` and `tools_with_error_findings` use the tool names that
+  `--only` accepts, such as `phpstan` or `storefront-twig`. Tools that run as a
+  subprocess use the same names in the `tool` tag of
+  `shopware_cli.tool.subprocess`; `builtin`, `storefront-twig` and `symfony-xml`
+  run inside the CLI and send no such event. A command that fails before its
+  tools run, for example because Node.js is too old, has neither tag. Findings,
+  rule identifiers, paths and tool output are never sent.
 - The command _name_ is captured (e.g. `project.create`), but **not** its
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not
@@ -344,20 +355,34 @@ the check's level is sent, never the underlying values.
 | `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker`             |
 | `result` | The check's level                                                                         | `ok` / `warn` / `critical` |
 
+### `shopware_cli.project.dev.session_start` — dashboard opened
+
+Sent when the dashboard opens. The `shopware_cli.project.dev.session` event
+that ends the session carries the same `session_id`, so we can tell sessions
+that ended normally from those that crashed or were closed abruptly.
+
+| Tag        | Meaning                         | Example            |
+| ---------- | ------------------------------- | ------------------ |
+| `executor` | Environment the project runs in | `docker` / `local` |
+
 ### `shopware_cli.project.dev.session` — dashboard session shape
 
-Sent when the user leaves the dashboard (the overall command duration is
-already covered by `shopware_cli.command`; this event adds what happened
-inside the TUI).
+Sent when the user leaves the dashboard, and in most cases also when it is
+stopped from outside or crashes (the overall command duration is already
+covered by `shopware_cli.command`; this event adds what happened inside the
+TUI).
 
 | Tag             | Meaning                                                                  | Example                                     |
 | --------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
 | `executor`      | Environment the project runs in                                          | `docker` / `local`                          |
-| `duration_ms`   | TUI session length                                                       | `1912734`                                   |
+| `duration_ms`   | Time since the TUI launched, including container start and install       | `1912734`                                   |
 | `tabs_visited`  | Which tabs were opened (sorted, comma-separated)                         | `config,instance,overview`                  |
 | `actions`       | Number of palette actions invoked                                        | `3`                                         |
 | `watchers_used` | Which watchers were started (omitted if none)                            | `admin,storefront`                          |
-| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` |
+| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` / `terminated` / `interrupted` / `panic` / `error` |
+
+If the dashboard is stopped from outside, for example with `kill`, or crashes,
+`result` is `terminated`, `interrupted`, `panic` or `error` instead.
 
 ## What we explicitly do **not** collect
 

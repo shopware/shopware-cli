@@ -23,7 +23,7 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 
 	// Fix against the minimum compatible dependency set, independently of the
 	// extension's locally installed dependencies. Projects keep their vendor/.
-	config.CheckAgainst = "lowest"
+	config.CheckAgainst = CheckAgainstLowest
 	autoloadFile, toolErr := prepareComposerAutoload(ctx, config, execution)
 	if toolErr != nil {
 		execution.Fail(toolErr)
@@ -48,7 +48,7 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
 		result.Note = "Shopware " + installed
 		if !config.IsProject {
-			result.Note += " (lowest)"
+			result.Note += " (" + CheckAgainstLowest + ")"
 		}
 		result.Note += "; " + rulesNote
 	}

@@ -47,7 +47,7 @@ func TestValidationComposerJSONPreservesExtensionAutoload(t *testing.T) {
 			"exclude-from-classmap": ["/classes/excluded/"]
 		},
 		"autoload-dev": {"psr-4": {"Acme\\Tests\\": "tests/"}}
-	}`), root, "lowest")
+	}`), root, CheckAgainstLowest)
 	require.NoError(t, err)
 	var data map[string]map[string]any
 	require.NoError(t, json.Unmarshal(result, &data))
@@ -61,7 +61,7 @@ func TestValidationComposerJSONPreservesExtensionAutoload(t *testing.T) {
 	assert.Equal(t, map[string]any{"psr-4": map[string]any{"Acme\\Tests\\": filepath.Join(root, "tests")}}, data["autoload-dev"])
 
 	// Exclusions must still point into the extension if the cache layout changes.
-	for _, mode := range []string{"lowest", "highest"} {
+	for _, mode := range []string{CheckAgainstLowest, CheckAgainstHighest} {
 		t.Run(mode, func(t *testing.T) {
 			workDir := filepath.Join(root, extension.ValidationCacheDir, "composer-"+mode)
 			exclusion := data["autoload"]["exclude-from-classmap"].([]any)[0].(string)
@@ -71,7 +71,7 @@ func TestValidationComposerJSONPreservesExtensionAutoload(t *testing.T) {
 }
 
 func TestValidationComposerJSONAdvisoryBlocking(t *testing.T) {
-	for _, mode := range []string{"", "highest", "lowest"} {
+	for _, mode := range []string{"", CheckAgainstHighest, CheckAgainstLowest} {
 		manifest := []byte(`{"config":{"platform":{"php":"8.3"},"audit":{"block-insecure":true,"abandoned":"report"},"policy":{"malware":{"block":true}}}}`)
 		result, err := validationComposerJSON(manifest, t.TempDir(), mode)
 		require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestValidationComposerJSONAdvisoryBlocking(t *testing.T) {
 			}
 		}
 		require.NoError(t, json.Unmarshal(result, &data))
-		assert.Equal(t, mode != "lowest", data.Config.Audit["block-insecure"])
+		assert.Equal(t, mode != CheckAgainstLowest, data.Config.Audit["block-insecure"])
 		assert.Equal(t, "report", data.Config.Audit["abandoned"])
 		assert.Equal(t, "8.3", data.Config.Platform["php"])
 		assert.Equal(t, map[string]any{"malware": map[string]any{"block": true}}, data.Config.Policy)
@@ -167,14 +167,14 @@ func TestPrepareComposerAutoloadUpdatesCacheOnEveryRun(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "vendor", "autoload.php"), []byte("local vendor"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.lock"), []byte("local lockfile"), 0o644))
 
-	modes := []string{"", "lowest", "highest", "lowest", "highest"}
+	modes := []string{"", CheckAgainstLowest, CheckAgainstHighest, CheckAgainstLowest, CheckAgainstHighest}
 	for _, checkAgainst := range modes {
 		autoloadFile, toolErr := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: checkAgainst}, testExecution())
 		require.Nil(t, toolErr)
 
 		mode := checkAgainst
 		if mode == "" {
-			mode = "highest"
+			mode = CheckAgainstHighest
 		}
 		workDir := filepath.Join(rootDir, extension.ValidationCacheDir, "composer-"+mode)
 		assert.Equal(t, filepath.Join(workDir, "vendor", "autoload.php"), autoloadFile)
@@ -192,8 +192,8 @@ func TestPrepareComposerAutoloadUpdatesCacheOnEveryRun(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(runs)), "\n")
 	require.Len(t, lines, len(modes))
 	for i, mode := range modes {
-		assert.Equal(t, mode == "lowest", strings.Contains(lines[i], "--prefer-lowest"))
-		if mode == "lowest" {
+		assert.Equal(t, mode == CheckAgainstLowest, strings.Contains(lines[i], "--prefer-lowest"))
+		if mode == CheckAgainstLowest {
 			assert.Contains(t, lines[i], "advisories=0")
 		} else {
 			assert.Contains(t, lines[i], "advisories=1")
