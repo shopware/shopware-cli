@@ -68,7 +68,7 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 		}
 	}
 	var failedStep *tracking.FailedStepError
-	if result == tracking.ResultFailure && errors.As(runErr, &failedStep) {
+	if result != tracking.ResultSuccess && errors.As(runErr, &failedStep) {
 		tags[tracking.TagFailedStep] = failedStep.Step
 	}
 	if shopwareVersion != "" {

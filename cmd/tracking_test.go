@@ -373,6 +373,7 @@ func TestTrackCommandExecution_FailedStep(t *testing.T) {
 
 	require.Len(t, *events, 3)
 	assert.Equal(t, "composer_install", (*events)[0][tracking.TagFailedStep])
-	assert.NotContains(t, (*events)[1], tracking.TagFailedStep)
+	assert.Equal(t, tracking.ResultCancelled, (*events)[1][tracking.TagResult])
+	assert.Equal(t, "composer_install", (*events)[1][tracking.TagFailedStep], "a cancelled run keeps the step it stopped at")
 	assert.NotContains(t, (*events)[2], tracking.TagFailedStep)
 }

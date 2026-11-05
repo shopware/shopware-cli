@@ -158,7 +158,7 @@ overall CLI usage.
 | `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` unless `--docker` was passed explicitly | `compose_plugin_missing,docker_not_running` |
 | `failed_tools` | Tools that failed, sorted and comma-separated; only with `result=failure` on commands that report tool results (`validate`, `fix`, `format`). A tool fails when it cannot run or breaks while running, and on `fix` also when ESLint or Stylelint leave problems they cannot fix | `eslint` |
 | `tools_with_error_findings` | Tools that reported error findings, sorted and comma-separated; only with `result=failure` on the same commands. Warnings and ignored findings do not count | `builtin,phpstan` |
-| `failed_step` | The step a failed `project create` stopped at; only with `result=failure`. Absent when the run failed before the first step, for example on an unknown flag. Values are listed below | `composer_install` |
+| `failed_step` | The step a failed or cancelled `project create` stopped at; only with `result=failure` or `result=cancelled`. Absent when the run failed before the first step, for example on an unknown flag. Values are listed below | `composer_install` |
 
 Notes:
 

@@ -60,7 +60,7 @@ const (
 	// Tools behind a failed tool report (validate, fix, format), sorted and comma-separated.
 	TagFailedTools            = "failed_tools"
 	TagToolsWithErrorFindings = "tools_with_error_findings"
-	// TagFailedStep is the step a failed run stopped at, from FailedAt here.
+	// TagFailedStep is the step a failed or cancelled run stopped at, from FailedAt here.
 	// Also on EventProjectUpgrade, EventDevInstall and EventDevWatcher.
 	TagFailedStep = "failed_step"
 
