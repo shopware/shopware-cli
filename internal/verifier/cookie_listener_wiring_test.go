@@ -216,37 +216,38 @@ func TestFindCookieListenersSkipsDependenciesAndAnonymousClasses(t *testing.T) {
 	assert.Equal(t, map[string]string{`Test\Listener`: filepath.Join(tmpDir, "Listener.php")}, listeners)
 }
 
-func TestCookieListenerWiringFailsOnUnreadableFiles(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores file permissions")
+func TestCookieListenerWiringFailsOnFileSystemErrors(t *testing.T) {
+	config := filepath.Join("src", "Resources", "config")
+	replaceWithDirectoryLink := func(path string) func(root string) error {
+		return func(root string) error {
+			if err := os.Remove(filepath.Join(root, path)); err != nil {
+				return err
+			}
+			return os.Symlink(root, filepath.Join(root, path))
+		}
 	}
 
 	cases := map[string]struct {
-		path      string
-		createDir bool
-		mode      os.FileMode
-		sources   string
-		message   string
+		prepare func(root string) error
+		sources string
+		message string
 	}{
-		"unreadable source directory": {
-			path: filepath.Join("src", "Locked"), createDir: true, mode: 0o000,
-			sources: "src", message: "cannot search cookie listeners",
-		},
 		"unreadable source file": {
-			path: filepath.Join("src", "Cookie", "MigratedCookieProvider.php"), mode: 0o000,
+			prepare: replaceWithDirectoryLink(filepath.Join("src", "Cookie", "LegacyCookieProvider.php")),
 			sources: "src", message: "cannot search cookie listeners",
 		},
-		"unreadable configuration directory": {
-			path: filepath.Join("src", "Resources", "config", "packages"), createDir: true, mode: 0o000,
+		"configuration directory is a file": {
+			prepare: func(root string) error {
+				if err := os.RemoveAll(filepath.Join(root, "src", "Resources")); err != nil {
+					return err
+				}
+				return os.WriteFile(filepath.Join(root, "src", "Resources"), nil, 0o644)
+			},
 			sources: filepath.Join("src", "Cookie"), message: "cannot search service configuration",
 		},
 		"unreadable configuration file": {
-			path: filepath.Join("src", "Resources", "config", "services.yaml"), mode: 0o000,
+			prepare: replaceWithDirectoryLink(filepath.Join(config, "services.yaml")),
 			sources: filepath.Join("src", "Cookie"), message: "cannot read service configuration",
-		},
-		"read-only configuration file": {
-			path: filepath.Join("src", "Resources", "config", "services.yaml"), mode: 0o444,
-			sources: filepath.Join("src", "Cookie"), message: "cannot write service configuration",
 		},
 	}
 
@@ -256,15 +257,7 @@ func TestCookieListenerWiringFailsOnUnreadableFiles(t *testing.T) {
 			require.NoError(t, os.CopyFS(tmpDir, os.DirFS(filepath.Join("testdata", "cookie-listener-wiring", "yaml"))))
 			ext, err := extension.GetExtensionByFolder(t.Context(), tmpDir)
 			require.NoError(t, err)
-
-			path := filepath.Join(tmpDir, tc.path)
-			if tc.createDir {
-				require.NoError(t, os.MkdirAll(path, 0o755))
-			}
-			info, err := os.Stat(path)
-			require.NoError(t, err)
-			require.NoError(t, os.Chmod(path, tc.mode))
-			t.Cleanup(func() { _ = os.Chmod(path, info.Mode().Perm()) })
+			require.NoError(t, tc.prepare(tmpDir))
 
 			result := runFixTool(t, CookieListenerWiring{}, ToolConfig{Extensions: []extension.Extension{ext}, RootDir: tmpDir, SourceDirectories: []string{filepath.Join(tmpDir, tc.sources)}})
 
@@ -272,4 +265,22 @@ func TestCookieListenerWiringFailsOnUnreadableFiles(t *testing.T) {
 			assert.ErrorContains(t, result.Errors[0].Err, tc.message)
 		})
 	}
+}
+
+func TestCookieListenerWiringFailsOnReadOnlyConfiguration(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file permissions")
+	}
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.CopyFS(tmpDir, os.DirFS(filepath.Join("testdata", "cookie-listener-wiring", "yaml"))))
+	ext, err := extension.GetExtensionByFolder(t.Context(), tmpDir)
+	require.NoError(t, err)
+	servicesFile := filepath.Join(tmpDir, "src", "Resources", "config", "services.yaml")
+	require.NoError(t, os.Chmod(servicesFile, 0o444))
+
+	result := runFixTool(t, CookieListenerWiring{}, ToolConfig{Extensions: []extension.Extension{ext}, RootDir: tmpDir, SourceDirectories: []string{filepath.Join(tmpDir, "src", "Cookie")}})
+
+	require.Len(t, result.Errors, 1)
+	assert.ErrorContains(t, result.Errors[0].Err, "cannot write service configuration")
 }
