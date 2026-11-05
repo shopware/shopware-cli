@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -282,4 +283,15 @@ func TestWatcherProxiedDetection(t *testing.T) {
 	reg.Upsert(proxy.ProjectEntry{ProjectRoot: proxy.CanonicalProjectRoot(dir), Hostname: "my-shop.shopware.local"})
 	require.NoError(t, reg.Save())
 	assert.Equal(t, "storefront-watch.my-shop.shopware.local", storefrontWatchOptions(dir, extension.StorefrontWatcherOptions{}).ProxyHostname)
+}
+
+func TestRenderDomains_CertificateRowFollowsTrust(t *testing.T) {
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", t.TempDir(), nil, &shop.Config{})
+	m.domainsSetupDone = true
+
+	m.certTrusted = false
+	assert.Contains(t, ansi.Strip(m.renderDomains()), "[ ] Local certificate trusted")
+
+	m.certTrusted = true
+	assert.Contains(t, ansi.Strip(m.renderDomains()), "[x] Local certificate trusted")
 }

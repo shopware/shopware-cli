@@ -103,3 +103,14 @@ func readTestCertificate(t *testing.T, path string) *x509.Certificate {
 
 	return cert
 }
+
+func TestCertificateTrusted(t *testing.T) {
+	t.Setenv("CAROOT", t.TempDir())
+	dir := t.TempDir()
+
+	assert.False(t, CertificateTrusted(dir, "my-shop."+DefaultDomain), "no certificate yet")
+
+	_, err := EnsureCertificate(dir, CertHosts(DefaultDomain, nil))
+	assert.NoError(t, err)
+	assert.False(t, CertificateTrusted(dir, "my-shop."+DefaultDomain), "a fresh CA is not trusted by the system")
+}

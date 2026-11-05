@@ -141,6 +141,17 @@ func certIssuedBy(certPath string, caCert *x509.Certificate) bool {
 	return cert.CheckSignatureFrom(caCert) == nil
 }
 
+// CertificateTrusted reports whether the server certificate in dir is trusted
+// by the system for hostname.
+func CertificateTrusted(dir, hostname string) bool {
+	cert, err := readCertificate(ServerCertPath(dir))
+	if err != nil {
+		return false
+	}
+	_, err = cert.Verify(x509.VerifyOptions{DNSName: hostname})
+	return err == nil
+}
+
 func readCertificate(path string) (*x509.Certificate, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {

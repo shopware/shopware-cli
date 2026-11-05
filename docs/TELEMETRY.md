@@ -350,7 +350,7 @@ the check's level is sent, never the underlying values.
 
 | Tag      | Meaning                                                                                   | Example                    |
 | -------- | ----------------------------------------------------------------------------------------- | -------------------------- |
-| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker`             |
+| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`; for proxy projects also `proxy` and `hostname_resolves`, which looks up the project's hostname through the system resolver) | `admin_worker`             |
 | `result` | The check's level                                                                         | `ok` / `warn` / `critical` |
 
 ### `shopware_cli.project.dev.session` — dashboard session shape
