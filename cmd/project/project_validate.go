@@ -3,10 +3,12 @@ package project
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
@@ -61,6 +63,7 @@ var projectValidateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		tracking.SetCommandTag(ctx, tracking.TagExtensionCount, strconv.Itoa(len(toolCfg.Extensions)))
 
 		finishSetup := progress.Start("preparing tools")
 		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)

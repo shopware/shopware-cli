@@ -62,6 +62,8 @@ const (
 	// Tools behind a failed tool report (validate, fix, format), sorted and comma-separated.
 	TagFailedTools            = "failed_tools"
 	TagToolsWithErrorFindings = "tools_with_error_findings"
+	// TagExtensionCount is the number of extensions project validate checks, without configured bundles, set with SetCommandTag.
+	TagExtensionCount = "extension_count"
 
 	// EventProjectCreate
 	TagVersion           = "version"

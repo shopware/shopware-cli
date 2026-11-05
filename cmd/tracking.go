@@ -70,6 +70,12 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	if shopwareVersion != "" {
 		tags[tracking.TagShopwareVersion] = shopwareVersion
 	}
+	// Tags the command set itself never replace the ones above.
+	for key, value := range tracking.CommandTags(ctx) {
+		if _, set := tags[key]; !set {
+			tags[key] = value
+		}
+	}
 	trackEvent(trackCtx, tracking.EventCommand, tags)
 }
 

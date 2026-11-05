@@ -360,3 +360,28 @@ func TestTrackCommandExecution_ShopwareVersionTag(t *testing.T) {
 	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagShopwareVersion])
 	assert.NotContains(t, (*events)[1], tracking.TagShopwareVersion)
 }
+
+func TestTrackCommandExecution_CommandTags(t *testing.T) {
+	tests := []struct {
+		name   string
+		runErr error
+		result string
+	}{
+		{name: "success", result: tracking.ResultSuccess},
+		{name: "failure", runErr: errors.New("boom"), result: tracking.ResultFailure},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := useTrackingTestRoot(t, "shopware-cli")
+			ctx := tracking.WithCommandTags(t.Context())
+			tracking.SetCommandTag(ctx, tracking.TagExtensionCount, "3")
+			tracking.SetCommandTag(ctx, tracking.TagResult, "replaced")
+
+			trackCommandExecution(ctx, []string{"project", "console"}, 0, tt.runErr, "")
+
+			require.Len(t, *events, 1)
+			assert.Equal(t, "3", (*events)[0][tracking.TagExtensionCount])
+			assert.Equal(t, tt.result, (*events)[0][tracking.TagResult])
+		})
+	}
+}

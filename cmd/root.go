@@ -51,6 +51,7 @@ func Execute(ctx context.Context) int {
 	ctx = logging.WithLogger(ctx, logging.NewLogger(verbose))
 	ctx = logging.WithVerbose(ctx, verbose)
 	ctx = system.WithInteraction(ctx, !slices.Contains(args, "--no-interaction") && !slices.Contains(args, "-n") && isatty.IsTerminal(os.Stdin.Fd()))
+	ctx = tracking.WithCommandTags(ctx)
 	rootCmd.SetArgs(args)
 
 	updateHandle, updateCancel := startUpdateCheck(ctx, args)
