@@ -360,3 +360,20 @@ func TestTrackCommandExecution_ShopwareVersionTag(t *testing.T) {
 	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagShopwareVersion])
 	assert.NotContains(t, (*events)[1], tracking.TagShopwareVersion)
 }
+
+func TestTrackCommandExecution_FailedStep(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	runErr := errors.Join(tracking.FailedAt("composer_install", errors.New("exit status 2")), errors.New("cannot remove created directory"))
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	trackCommandExecution(t.Context(), []string{"project", "create"}, 0, runErr, "")
+	trackCommandExecution(cancelled, []string{"project", "create"}, 0, runErr, "")
+	trackCommandExecution(t.Context(), []string{"project", "create"}, 0, errors.New("boom"), "")
+
+	require.Len(t, *events, 3)
+	assert.Equal(t, "composer_install", (*events)[0][tracking.TagFailedStep])
+	assert.Equal(t, tracking.ResultCancelled, (*events)[1][tracking.TagResult])
+	assert.Equal(t, "composer_install", (*events)[1][tracking.TagFailedStep], "a cancelled run keeps the step it stopped at")
+	assert.NotContains(t, (*events)[2], tracking.TagFailedStep)
+}
