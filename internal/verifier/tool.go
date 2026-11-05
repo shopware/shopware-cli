@@ -36,6 +36,11 @@ func GetToolsOf[T Tool]() ToolList[T] {
 	return tools
 }
 
+const (
+	CheckAgainstHighest = "highest"
+	CheckAgainstLowest  = "lowest"
+)
+
 type ToolConfig struct {
 	// Path to the tool directory
 	ToolDirectory string

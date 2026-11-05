@@ -135,6 +135,48 @@ func TestSessionTagsSentOnce(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestSessionStartTagsSentOnce(t *testing.T) {
+	tel := newTelemetryState(true)
+
+	tags, ok := tel.sessionStartTags()
+	assert.True(t, ok)
+	assert.Equal(t, "docker", tags["executor"])
+
+	_, ok = tel.sessionStartTags()
+	assert.False(t, ok)
+}
+
+func TestSessionStartNotSentAfterTheSessionEnded(t *testing.T) {
+	tel := newTelemetryState(true)
+	tel.sessionTags()
+
+	_, ok := tel.sessionStartTags()
+	assert.False(t, ok)
+}
+
+func TestExitTagsEndAnOpenSessionWithTheResult(t *testing.T) {
+	tel := newTelemetryState(false)
+	tel.sessionStartTags()
+
+	tags, ok := tel.exitTags("panic")
+	assert.True(t, ok)
+	assert.Equal(t, "panic", tags["result"])
+}
+
+func TestExitTagsSkipSessionsThatEndedOrNeverOpened(t *testing.T) {
+	neverOpened := newTelemetryState(false)
+	_, ok := neverOpened.exitTags("terminated")
+	assert.False(t, ok, "a normal quit before the dashboard also returns nil")
+
+	ended := newTelemetryState(false)
+	ended.sessionStartTags()
+	ended.setExitChoice("stop_containers")
+	ended.sessionTags()
+	_, ok = ended.exitTags("panic")
+	assert.False(t, ok)
+	assert.Equal(t, "stop_containers", ended.exitChoice, "an ended session keeps how it ended")
+}
+
 func TestSessionTagsDefaults(t *testing.T) {
 	tel := newTelemetryState(false)
 	tags, ok := tel.sessionTags()
@@ -231,6 +273,10 @@ func TestNilTelemetryStateIsSafe(t *testing.T) {
 	tel.watcherStarted(watcherAdmin, false)
 
 	_, ok := tel.sessionTags()
+	assert.False(t, ok)
+	_, ok = tel.sessionStartTags()
+	assert.False(t, ok)
+	_, ok = tel.exitTags("terminated")
 	assert.False(t, ok)
 	_, ok = tel.taskTags("success")
 	assert.False(t, ok)
