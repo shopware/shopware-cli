@@ -51,12 +51,12 @@ pid=$!
 # Never leave the watcher behind when this script fails.
 trap 'kill -s KILL -- "-$pid" 2>/dev/null || true' EXIT
 
-# Only an HTTP status counts: Docker accepts TCP before the container listens.
+# Only a 2xx or 3xx counts: Docker accepts TCP early and a proxy can answer with an error.
 start=$SECONDS
 code=$(status)
-while [[ $code == 000 ]]; do
-  kill -0 "$pid" 2>/dev/null || fail "exited before $url answered"
-  ((SECONDS - start < timeout)) || fail "no HTTP answer from $url within ${timeout}s"
+while [[ $code != [23]?? ]]; do
+  kill -0 "$pid" 2>/dev/null || fail "exited before $url answered (last HTTP $code)"
+  ((SECONDS - start < timeout)) || fail "no successful answer from $url within ${timeout}s (last HTTP $code)"
   sleep 5
   code=$(status)
 done
