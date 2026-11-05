@@ -196,7 +196,7 @@ printf '{"files":{},"errors":[]}'
 	configFile := filepath.Join(root, "phpstan.neon.dist")
 	require.NoError(t, os.WriteFile(configFile, []byte("parameters:\n    level: 5\n"), 0o644))
 
-	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: "lowest"})
+	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstLowest})
 
 	require.Empty(t, result.Errors)
 	assert.Equal(t, "Shopware 6.6.0.0 (lowest)", result.Note)
@@ -226,7 +226,7 @@ func TestPHPStanSkipsAnalysisAfterFailedDependencyRefresh(t *testing.T) {
 	require.NoError(t, os.MkdirAll(cachedVendor, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(cachedVendor, "autoload.php"), nil, 0o644))
 
-	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: "lowest"})
+	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstLowest})
 
 	require.NotEmpty(t, result.Errors)
 	assert.Empty(t, result.Note)
