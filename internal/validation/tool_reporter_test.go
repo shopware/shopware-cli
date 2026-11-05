@@ -135,7 +135,7 @@ func TestToolReportNamesFailingTools(t *testing.T) {
 	var toolReport *ToolReportError
 	require.ErrorAs(t, reportErr, &toolReport)
 	assert.Equal(t, []string{"eslint"}, toolReport.FailedTools)
-	assert.Equal(t, []string{"builtin", "eslint", "phpstan"}, toolReport.ToolsWithErrors)
+	assert.Equal(t, []string{"builtin", "eslint", "phpstan"}, toolReport.ToolsWithErrorFindings)
 	assert.ErrorIs(t, reportErr, ErrToolReportFailed)
 	var silent logging.SilenceError
 	assert.ErrorAs(t, reportErr, &silent)

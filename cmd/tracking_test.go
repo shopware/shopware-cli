@@ -287,22 +287,22 @@ func TestTrackCommandExecution_PlainFailureHasNoMissingTag(t *testing.T) {
 
 func TestTrackCommandExecution_ToolReportTags(t *testing.T) {
 	tests := []struct {
-		name            string
-		cancelled       bool
-		report          *validation.ToolReportError
-		failedTools     string
-		toolsWithErrors string
+		name                   string
+		cancelled              bool
+		report                 *validation.ToolReportError
+		failedTools            string
+		toolsWithErrorFindings string
 	}{
 		{
-			name:            "findings only",
-			report:          &validation.ToolReportError{ToolsWithErrors: []string{"builtin", "phpstan"}},
-			toolsWithErrors: "builtin,phpstan",
+			name:                   "findings only",
+			report:                 &validation.ToolReportError{ToolsWithErrorFindings: []string{"builtin", "phpstan"}},
+			toolsWithErrorFindings: "builtin,phpstan",
 		},
 		{
-			name:            "tool failure and findings",
-			report:          &validation.ToolReportError{FailedTools: []string{"eslint"}, ToolsWithErrors: []string{"builtin", "eslint"}},
-			failedTools:     "eslint",
-			toolsWithErrors: "builtin,eslint",
+			name:                   "tool failure and findings",
+			report:                 &validation.ToolReportError{FailedTools: []string{"eslint"}, ToolsWithErrorFindings: []string{"builtin", "eslint"}},
+			failedTools:            "eslint",
+			toolsWithErrorFindings: "builtin,eslint",
 		},
 		{
 			name:        "tool failure only",
@@ -328,7 +328,7 @@ func TestTrackCommandExecution_ToolReportTags(t *testing.T) {
 
 			require.Len(t, *events, 1)
 			tags := (*events)[0]
-			for key, want := range map[string]string{tracking.TagFailedTools: tt.failedTools, tracking.TagToolsWithErrors: tt.toolsWithErrors} {
+			for key, want := range map[string]string{tracking.TagFailedTools: tt.failedTools, tracking.TagToolsWithErrorFindings: tt.toolsWithErrorFindings} {
 				if want == "" {
 					assert.NotContains(t, tags, key)
 				} else {

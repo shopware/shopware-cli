@@ -61,7 +61,7 @@ func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 	slices.SortFunc(tools, func(a, b ToolReport) int { return cmp.Compare(a.Name, b.Name) })
 	findings := make([]CheckResult, 0)
 	statuses := make([]toolInvocationStatus, 0, len(tools))
-	var failedTools, toolsWithErrors []string
+	var failedTools, toolsWithErrorFindings []string
 	for _, tool := range tools {
 		findings = append(findings, tool.Findings...)
 		status := toolInvocationStatus{Name: tool.Name, Status: "invoked", Note: tool.Note, HasFindings: tool.HasFindings}
@@ -74,7 +74,7 @@ func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 			status.FindingsIncomplete = tool.HasFindings
 		}
 		if slices.ContainsFunc(tool.Findings, func(finding CheckResult) bool { return finding.Severity == SeverityError }) {
-			toolsWithErrors = append(toolsWithErrors, tool.Name)
+			toolsWithErrorFindings = append(toolsWithErrorFindings, tool.Name)
 		}
 		statuses = append(statuses, status)
 	}
@@ -99,8 +99,8 @@ func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 	if err != nil {
 		return err
 	}
-	if len(failedTools) > 0 || len(toolsWithErrors) > 0 {
-		return &ToolReportError{FailedTools: failedTools, ToolsWithErrors: toolsWithErrors}
+	if len(failedTools) > 0 || len(toolsWithErrorFindings) > 0 {
+		return &ToolReportError{FailedTools: failedTools, ToolsWithErrorFindings: toolsWithErrorFindings}
 	}
 	return nil
 }

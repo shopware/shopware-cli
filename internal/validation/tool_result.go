@@ -13,8 +13,8 @@ var ErrToolReportFailed = logging.NewSilent("tool report contains errors")
 type ToolReportError struct {
 	// FailedTools reported execution errors, so the report shows them as failed.
 	FailedTools []string
-	// ToolsWithErrors ran and reported findings with error severity.
-	ToolsWithErrors []string
+	// ToolsWithErrorFindings ran and reported findings with error severity.
+	ToolsWithErrorFindings []string
 }
 
 func (e *ToolReportError) Error() string {

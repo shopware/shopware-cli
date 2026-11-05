@@ -63,8 +63,8 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 		if len(toolReport.FailedTools) > 0 {
 			tags[tracking.TagFailedTools] = strings.Join(toolReport.FailedTools, ",")
 		}
-		if len(toolReport.ToolsWithErrors) > 0 {
-			tags[tracking.TagToolsWithErrors] = strings.Join(toolReport.ToolsWithErrors, ",")
+		if len(toolReport.ToolsWithErrorFindings) > 0 {
+			tags[tracking.TagToolsWithErrorFindings] = strings.Join(toolReport.ToolsWithErrorFindings, ",")
 		}
 	}
 	if shopwareVersion != "" {
