@@ -1,0 +1,7 @@
+[per-file-ignores]
+".github/pull_request_template.md" = ["MD041"]
+
+[MD013]
+reflow = true
+code-blocks = false
+

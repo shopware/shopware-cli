@@ -43,9 +43,9 @@ var projectDoctor = &cobra.Command{
 		}
 
 		if shopCfg.IsFallback() {
-			fmt.Printf("%s Project config: %s\n", tui.CheckWarn, tui.SecondaryText.Render("not found, using fallback"))
+			fmt.Printf("%s Project config: %s\n", tui.CheckWarn(), tui.SecondaryText.Render("not found, using fallback"))
 		} else {
-			fmt.Printf("%s Project config: %s\n", tui.CheckOK, tui.GreenText.Render(actualProjectConfigPath))
+			fmt.Printf("%s Project config: %s\n", tui.CheckOK(), tui.GreenText.Render(actualProjectConfigPath))
 		}
 
 		shopwareConstraint, err := extension.GetShopwareProjectConstraint(projectDir)
@@ -53,7 +53,7 @@ var projectDoctor = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("%s Shopware version: %s\n", tui.CheckOK, tui.GreenText.Render(shopwareConstraint.String()))
+		fmt.Printf("%s Shopware version: %s\n", tui.CheckOK(), tui.GreenText.Render(shopwareConstraint.String()))
 
 		fmt.Println()
 		fmt.Println(tui.SectionHeadingStyle.Render("Detected Extensions & Bundles"))
@@ -62,7 +62,7 @@ var projectDoctor = &cobra.Command{
 		sources := extension.FindAssetSourcesOfProject(logging.DisableLogger(cmd.Context()), projectDir, shopCfg)
 
 		if len(sources) == 0 {
-			fmt.Printf("%s No extensions or bundles detected\n", tui.CheckWarn)
+			fmt.Printf("%s No extensions or bundles detected\n", tui.CheckWarn())
 			return nil
 		}
 

@@ -54,6 +54,12 @@ const (
 	TagIsTUI       = "is_tui"
 	TagIsWSL       = "is_wsl"
 	TagCIProvider  = "ci_provider"
+	TagMissing     = "missing"
+	// TagShopwareVersion is the project's Shopware version, on project commands run inside a project.
+	TagShopwareVersion = "shopware_version"
+	// Tools behind a failed tool report (validate, fix, format), sorted and comma-separated.
+	TagFailedTools            = "failed_tools"
+	TagToolsWithErrorFindings = "tools_with_error_findings"
 
 	// EventProjectCreate
 	TagVersion           = "version"

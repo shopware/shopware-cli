@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -104,7 +103,7 @@ func checkSecurityAdvisories(ctx context.Context, opts *createOptions, chosenVer
 		}
 
 		if continueAnyway == tui.No {
-			return errors.New("project creation cancelled")
+			return errCreateCancelled
 		}
 
 		opts.noAudit = true
@@ -134,7 +133,7 @@ func checkIncompatibilities(ctx context.Context, opts *createOptions) error {
 			}
 
 			if continueAnyway == tui.No {
-				return errors.New("project creation cancelled")
+				return errCreateCancelled
 			}
 		} else {
 			logging.FromContext(ctx).Warnf("%s. %s", incompatibility.Title, incompatibility.Description)

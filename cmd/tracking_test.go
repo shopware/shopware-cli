@@ -17,6 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 // useTrackingTestRoot swaps rootCmd for a minimal tree containing
@@ -35,6 +36,9 @@ func useTrackingTestRoot(t *testing.T, rootName string) *[]map[string]string {
 		Use:                "console",
 		DisableFlagParsing: true,
 		RunE:               func(*cobra.Command, []string) error { return nil },
+	}, &cobra.Command{
+		Use:  "create",
+		RunE: func(*cobra.Command, []string) error { return nil },
 	})
 	extensionCmd := &cobra.Command{Use: "extension"}
 	extensionCmd.AddCommand(&cobra.Command{
@@ -69,7 +73,7 @@ func TestTrackCommandExecution_NormalizesNameAcrossBinaryNames(t *testing.T) {
 			// Execute sets rootCmd.Use to the invoked binary name before tracking.
 			events := useTrackingTestRoot(t, commandNameFromArgs(tt.argv))
 
-			trackCommandExecution(context.Background(), mapAliasArgs(tt.argv), time.Now(), nil)
+			trackCommandExecution(context.Background(), mapAliasArgs(tt.argv), 0, nil, "")
 
 			require.Len(t, *events, 1)
 			assert.Equal(t, "project.console", (*events)[0][tracking.TagCommandName])
@@ -81,7 +85,7 @@ func TestTrackCommandExecution_NormalizesNameAcrossBinaryNames(t *testing.T) {
 func TestTrackCommandExecution_ReplacesHyphensAndSpaces(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 
-	trackCommandExecution(context.Background(), []string{"extension", "build-me", "./plugin"}, time.Now(), nil)
+	trackCommandExecution(context.Background(), []string{"extension", "build-me", "./plugin"}, 0, nil, "")
 
 	require.Len(t, *events, 1)
 	assert.Equal(t, "extension.build_me", (*events)[0][tracking.TagCommandName])
@@ -109,11 +113,16 @@ func TestTrackCommandExecution_ExtensionAddGenerator(t *testing.T) {
 		events = append(events, tags)
 	}
 
-	trackCommandExecution(context.Background(), []string{"extension", "add", "admin-module"}, time.Now(), nil)
+	trackCommandExecution(context.Background(), []string{"extension", "add", "admin-module"}, 0, nil, "")
 
 	require.Len(t, events, 1)
 	assert.Equal(t, "extension.add.admin_module", events[0][tracking.TagCommandName])
 }
+
+type declinedError struct{}
+
+func (declinedError) Error() string { return "declined" }
+func (declinedError) Cancelled()    {}
 
 func TestTrackCommandExecution_Result(t *testing.T) {
 	tests := []struct {
@@ -130,6 +139,8 @@ func TestTrackCommandExecution_Result(t *testing.T) {
 		{name: "interrupted run that still succeeded", interrupted: true, runErr: nil, want: tracking.ResultSuccess},
 		{name: "prompt aborted with ctrl+c", runErr: fmt.Errorf("cannot create project: %w", huh.ErrUserAborted), want: tracking.ResultCancelled},
 		{name: "selection dismissed", runErr: tui.ErrFilterSelectCancelled, want: tracking.ResultCancelled},
+		{name: "declined prompt", runErr: fmt.Errorf("cannot create project: %w", tracking.NewCancelled("creation cancelled")), want: tracking.ResultCancelled},
+		{name: "custom declined error opts in", runErr: fmt.Errorf("cannot continue: %w", declinedError{}), want: tracking.ResultCancelled},
 	}
 
 	for _, tt := range tests {
@@ -143,7 +154,7 @@ func TestTrackCommandExecution_Result(t *testing.T) {
 				cancel()
 			}
 
-			trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), tt.runErr)
+			trackCommandExecution(ctx, []string{"project", "console"}, 0, tt.runErr, "")
 
 			require.Len(t, *events, 1)
 			assert.Equal(t, tt.want, (*events)[0][tracking.TagResult])
@@ -155,7 +166,7 @@ func TestTrackCommandExecution_Tags(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 	ctx := system.WithInteraction(context.Background(), true)
 
-	trackCommandExecution(ctx, []string{"project", "console"}, time.Now().Add(-2*time.Second), nil)
+	trackCommandExecution(ctx, []string{"project", "console"}, 2*time.Second, nil, "")
 
 	require.Len(t, *events, 1)
 	tags := (*events)[0]
@@ -181,7 +192,7 @@ func TestTrackCommandExecution_CIProvider(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "true")
 	events := useTrackingTestRoot(t, "shopware-cli")
 
-	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil)
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, nil, "")
 
 	require.Len(t, *events, 1)
 	assert.Equal(t, "github", (*events)[0][tracking.TagCIProvider])
@@ -191,7 +202,7 @@ func TestTrackCommandExecution_NoCIProviderOutsideCI(t *testing.T) {
 	clearCIProviderEnv(t)
 	events := useTrackingTestRoot(t, "shopware-cli")
 
-	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil)
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, nil, "")
 
 	require.Len(t, *events, 1)
 	assert.NotContains(t, (*events)[0], tracking.TagCIProvider)
@@ -201,7 +212,7 @@ func TestTrackCommandExecution_IsTUIFollowsInteraction(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 	ctx := system.WithInteraction(context.Background(), false)
 
-	trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), nil)
+	trackCommandExecution(ctx, []string{"project", "console"}, 0, nil, "")
 
 	require.Len(t, *events, 1)
 	assert.Equal(t, "false", (*events)[0][tracking.TagIsTUI])
@@ -223,7 +234,7 @@ func TestTrackCommandExecution_SkipsNonRunnableInvocations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			events := useTrackingTestRoot(t, "shopware-cli")
 
-			trackCommandExecution(context.Background(), tt.args, time.Now(), nil)
+			trackCommandExecution(context.Background(), tt.args, 0, nil, "")
 
 			assert.Empty(t, *events)
 		})
@@ -242,9 +253,110 @@ func TestTrackCommandExecution_TracksAfterContextCancelled(t *testing.T) {
 		originalTrack(trackCtx, event, tags)
 	}
 
-	trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), ctx.Err())
+	trackCommandExecution(ctx, []string{"project", "console"}, 0, ctx.Err(), "")
 
 	require.Len(t, *events, 1)
 	assert.Equal(t, tracking.ResultCancelled, (*events)[0][tracking.TagResult])
 	assert.NoError(t, trackCtxErr, "tracking must get a live context even after the command context was cancelled")
+}
+
+func TestTrackCommandExecution_MissingDependencies(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	runErr := fmt.Errorf("cannot create project: %w", &system.MissingDependenciesError{Missing: []system.MissingDependency{
+		{Name: "Docker", Reason: "not running", ID: "docker_not_running"},
+		{Name: "Docker Compose plugin", Reason: "not installed", ID: "compose_plugin_missing"},
+	}})
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, runErr, "")
+
+	require.Len(t, *events, 1)
+	tags := (*events)[0]
+	assert.Equal(t, tracking.ResultFailure, tags[tracking.TagResult])
+	assert.Equal(t, "compose_plugin_missing,docker_not_running", tags[tracking.TagMissing])
+	assert.NotContains(t, tags, tracking.TagFailureCategory, "the category list is still open")
+}
+
+func TestTrackCommandExecution_PlainFailureHasNoMissingTag(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, errors.New("boom"), "")
+
+	require.Len(t, *events, 1)
+	assert.NotContains(t, (*events)[0], tracking.TagMissing)
+}
+
+func TestTrackCommandExecution_ToolReportTags(t *testing.T) {
+	tests := []struct {
+		name                   string
+		cancelled              bool
+		report                 *validation.ToolReportError
+		failedTools            string
+		toolsWithErrorFindings string
+	}{
+		{
+			name:                   "findings only",
+			report:                 &validation.ToolReportError{ToolsWithErrorFindings: []string{"builtin", "phpstan"}},
+			toolsWithErrorFindings: "builtin,phpstan",
+		},
+		{
+			name:                   "tool failure and findings",
+			report:                 &validation.ToolReportError{FailedTools: []string{"eslint"}, ToolsWithErrorFindings: []string{"builtin", "eslint"}},
+			failedTools:            "eslint",
+			toolsWithErrorFindings: "builtin,eslint",
+		},
+		{
+			name:        "tool failure only",
+			report:      &validation.ToolReportError{FailedTools: []string{"phpstan"}},
+			failedTools: "phpstan",
+		},
+		{
+			name:      "cancelled run",
+			cancelled: true,
+			report:    &validation.ToolReportError{FailedTools: []string{"phpstan"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := useTrackingTestRoot(t, "shopware-cli")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tt.cancelled {
+				cancel()
+			}
+
+			trackCommandExecution(ctx, []string{"extension", "build-me"}, 0, fmt.Errorf("cannot validate: %w", tt.report), "")
+
+			require.Len(t, *events, 1)
+			tags := (*events)[0]
+			for key, want := range map[string]string{tracking.TagFailedTools: tt.failedTools, tracking.TagToolsWithErrorFindings: tt.toolsWithErrorFindings} {
+				if want == "" {
+					assert.NotContains(t, tags, key)
+				} else {
+					assert.Equal(t, want, tags[key])
+				}
+			}
+		})
+	}
+}
+
+func TestTrackCommandExecution_PinnedPHPNotFound(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	runErr := fmt.Errorf("cannot start the development environment: %w", &system.PHPVersionNotFoundError{Pin: "8.3"})
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, runErr, "")
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "php_version", (*events)[0][tracking.TagMissing])
+}
+
+func TestTrackCommandExecution_ShopwareVersionTag(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, nil, "6.7.11.0")
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, nil, "")
+
+	require.Len(t, *events, 2)
+	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagShopwareVersion])
+	assert.NotContains(t, (*events)[1], tracking.TagShopwareVersion)
 }

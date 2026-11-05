@@ -19,6 +19,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/dev"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // bootstrapProxyFallback sets up the shared proxy for a proxy-mode project
@@ -77,7 +78,7 @@ func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) error {
 // ErrEnvironmentDown is returned by the `project dev status` command when the
 // development environment is not running. It causes the CLI to exit with code 1
 // without printing an additional error message.
-var ErrEnvironmentDown = errors.New("development environment is down")
+var ErrEnvironmentDown = logging.NewSilent("development environment is down")
 
 type devEnvironment struct {
 	projectRoot string
