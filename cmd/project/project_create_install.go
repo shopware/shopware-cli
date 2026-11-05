@@ -171,8 +171,10 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 // isComposerSecurityBlocked reports whether composer output indicates that
 // dependency resolution failed because packages affected by security
 // advisories were blocked (composer >= 2.9 with audit blocking enabled).
+// Composer also mentions advisories as a side note when resolution fails for
+// another reason, such as a missing PHP extension; that does not count.
 func isComposerSecurityBlocked(output string) bool {
-	return strings.Contains(output, "affected by security advisories")
+	return strings.Contains(output, "but these were not loaded, because they are affected by security advisories")
 }
 
 // handleSecurityBlockedInstall is called when composer refused to install
