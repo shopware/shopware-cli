@@ -137,7 +137,7 @@ When CLI and docs disagree on a requirement:
 
 Known differences:
 
-- Icon: the CLI's `metadata.icon.size` check rejects icons below 112 px and
+- Icon: the CLI's `metadata.icon.size` check rejects icons outside 84–256 px and
   files above 30 kB, stricter than L4. When it fires, add that the Store
   standard is 84–256 px.
 - German metadata: the CLI requires `de-DE` label, description, manufacturerLink
