@@ -42,6 +42,9 @@ var dockerfileTemplate string
 //go:embed project_scaffold_static/dockerignore
 var dockerignoreContent string
 
+//go:embed project_scaffold_static/admin_worker.yaml
+var adminWorkerConfig string
+
 // ShopwareProjectScaffold describes the files and directories of a new
 // Shopware project. CLI concerns such as prompting, tracking, and detecting
 // local tools intentionally live outside this type.
@@ -167,6 +170,18 @@ func (s *ShopwareProjectScaffold) scaffold(ctx context.Context) error {
 		filepath.Join("custom", "static-plugins"),
 	} {
 		if err := os.MkdirAll(filepath.Join(s.ProjectFolder, path), os.ModePerm); err != nil {
+			return err
+		}
+	}
+
+	// Disable the browser-based admin worker for dev: the Docker environment
+	// then runs a dedicated queue worker instead.
+	if s.UseDocker {
+		packagesDir := filepath.Join(s.ProjectFolder, "config", "packages")
+		if err := os.MkdirAll(packagesDir, os.ModePerm); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(packagesDir, "admin_worker.yaml"), []byte(adminWorkerConfig), os.ModePerm); err != nil {
 			return err
 		}
 	}

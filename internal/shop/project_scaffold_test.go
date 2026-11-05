@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
+	"github.com/shopware/shopware-cli/internal/symfony"
 )
 
 func TestShopwareProjectScaffold(t *testing.T) {
@@ -108,6 +109,30 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		require.NoError(t, scaffold2.Scaffold(t.Context()))
 		env2 := readScaffoldFile(t, projectFolder2, ".env")
 		assert.NotEqual(t, envContent, env2)
+	})
+
+	t.Run("disables the admin worker for Docker dev only", func(t *testing.T) {
+		t.Parallel()
+
+		for _, useDocker := range []bool{true, false} {
+			projectFolder := t.TempDir()
+			scaffold := ShopwareProjectScaffold{
+				ProjectFolder:    projectFolder,
+				Version:          "6.7.12.1",
+				DeploymentMethod: DeploymentNone,
+				CISystem:         CINone,
+				UseDocker:        useDocker,
+			}
+			require.NoError(t, scaffold.Scaffold(t.Context()))
+
+			devEnabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, "dev")
+			require.NoError(t, err)
+			assert.Equal(t, !useDocker, devEnabled, "docker=%v", useDocker)
+
+			prodEnabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, "prod")
+			require.NoError(t, err)
+			assert.True(t, prodEnabled, "docker=%v", useDocker)
+		}
 	})
 
 	t.Run("writes an explicit compose project name", func(t *testing.T) {
