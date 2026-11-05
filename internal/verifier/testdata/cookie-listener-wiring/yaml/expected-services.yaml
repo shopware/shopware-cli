@@ -1,0 +1,18 @@
+services:
+    # Adds the tracking cookie
+    Test\TestPlugin\Cookie\MigratedCookieProvider:
+        arguments:
+            - '@logger'
+        tags:
+            - { name: kernel.event_listener, event: Shopware\Core\Content\Cookie\Event\CookieGroupCollectEvent }
+
+    test.autowired_cookie_provider:
+        class: Test\TestPlugin\Cookie\AutowiredCookieProvider
+        autowire: true
+        tags:
+            - { name: test.tag }
+            - { name: kernel.event_listener, event: Shopware\Core\Content\Cookie\Event\CookieGroupCollectEvent }
+
+    Test\TestPlugin\Cookie\LegacyCookieProvider:
+        decorates: Shopware\Storefront\Framework\Cookie\CookieProviderInterface
+        arguments: ['@.inner']

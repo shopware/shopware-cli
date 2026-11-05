@@ -21,7 +21,7 @@ func (SymfonyXMLConverter) Name() string {
 	return "symfony-xml"
 }
 
-func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+func (SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
 	found := false
 	changed := 0
 	conversions := []struct {
@@ -32,7 +32,7 @@ func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution
 		{"routes.xml", symfony.ConvertRoutesXMLFile},
 	}
 
-	for _, configDir := range s.collectConfigDirs(config) {
+	for _, configDir := range pluginConfigDirs(config) {
 		for _, conversion := range conversions {
 			xmlPath := filepath.Join(configDir, conversion.fileName)
 
@@ -68,12 +68,12 @@ func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution
 	return ToolSummary{Note: fileChangeNote(changed, "converted")}
 }
 
-// collectConfigDirs returns the Resources/config directories of all platform
+// pluginConfigDirs returns the Resources/config directories of all platform
 // plugins covered by the tool config. Apps cannot use the dependency injection
 // container and bundles may load their configuration files explicitly by
 // path, so only plugins (where Shopware picks the XML or YAML variant
 // automatically) are converted.
-func (SymfonyXMLConverter) collectConfigDirs(config ToolConfig) []string {
+func pluginConfigDirs(config ToolConfig) []string {
 	dirs := []string{}
 
 	for _, ext := range config.Extensions {

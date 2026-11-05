@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<container xmlns="http://symfony.com/schema/dic/services"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
+    <services>
+        <!-- Adds the tracking cookie -->
+        <service id="Test\TestPlugin\Cookie\MigratedCookieProvider">
+            <argument type="service" id="logger"/>
+            <tag name="kernel.event_listener" event="Shopware\Core\Content\Cookie\Event\CookieGroupCollectEvent"/>
+        </service>
+
+        <service id="test.autowired_cookie_provider" class="Test\TestPlugin\Cookie\AutowiredCookieProvider">
+            <tag name="kernel.event_listener" event="Shopware\Core\Content\Cookie\Event\CookieGroupCollectEvent"/>
+        </service>
+
+        <service id="Test\TestPlugin\Cookie\LegacyCookieProvider" decorates="Shopware\Storefront\Framework\Cookie\CookieProviderInterface">
+            <argument type="service" id=".inner"/>
+        </service>
+    </services>
+</container>

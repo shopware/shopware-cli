@@ -82,6 +82,13 @@ built-in extension rules; the legacy name `sw-cli` is still accepted as an input
 alias. It does not validate per-extension metadata in a project context. There
 is no separate Composer verifier tool.
 
+Fixers run in parallel, so a fixer must not depend on files another fixer
+changes. `FollowUpFixTools` returns fixers that run after all selected fixers
+have finished; they are not registered with `AddTool`. `cookie-listener-wiring`
+follows `rector`: it rewrites the services.xml or services.yaml definitions of
+cookie providers that Rector migrated to `CookieGroupCollectEvent` listeners.
+In parallel it could race with the `symfony-xml` conversion of the same files.
+
 Extension commands report selected tools as `invoked` and others as `skipped`.
 This describes selection and invocation, not whether a tool found applicable
 files or changed them.
