@@ -38,6 +38,7 @@ workflows:
         - 'actions/setup-go@v7.0.0'
         - 'actions/setup-node@v7.1.0'
         - 'shivammathur/setup-php@2.40.0'
+        - 'shopware/github-actions@main'
         - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/release.yml':
         - 'actions/attest@v4.2.2'
@@ -178,6 +179,11 @@ dependencies:
         commit: 'sha1-88233d3fdb6b4b6ad7085c45210085c51b727d82'
         owner_id: 612628
         repo_id: 1035878178
+    'shopware/github-actions@main':
+        ref: 'main'
+        commit: 'sha1-bfab5d308ecab430f2421dac6507e036c3f0977f'
+        owner_id: 612628
+        repo_id: 742404068
     'sigstore/cosign-installer@v4.1.2':
         ref: 'v4.1.2'
         commit: 'sha1-6f9f17788090df1f26f669e9d70d6ae9567deba6'

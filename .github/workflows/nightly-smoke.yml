@@ -29,14 +29,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        line: ['6.6', '6.7']
         include:
-          # 6.6 serves the admin watcher with webpack, 6.7 with Vite.
+          # 6.6 serves the admin watcher with webpack, the newest release with Vite.
           # SwagExtensionStore develops 6.6 on its 6.6.x branch and the newest line on trunk.
           - line: '6.6'
             admin_port: 8080
             store_ref: '6.6.x'
-          - line: '6.7'
+          - line: latest
             admin_port: 5173
             store_ref: trunk
     steps:
@@ -63,23 +62,19 @@ jobs:
       - name: Move to usr/bin
         run: mv shopware-cli /usr/local/bin/
 
-      - name: Resolve the newest ${{ matrix.line }} release
-        run: |
-          set -o pipefail
-          version=$(curl -fsS --retry 3 --retry-all-errors https://repo.packagist.org/p2/shopware/core.json \
-            | jq -r --arg re '^v?${{ matrix.line }}\.[0-9]+\.[0-9]+$' '.packages["shopware/core"][].version | select(test($re))' \
-            | sort -V | tail -n 1)
-          version=${version#v}
-          if [ -z "$version" ]; then
-            echo "::error::no ${{ matrix.line }} release of shopware/core found on Packagist"
-            exit 1
-          fi
-          echo "Shopware $version"
-          echo "SW_VERSION=$version" >> "$GITHUB_ENV"
+      # The CLI resolves latest itself, 6.6 needs an exact version.
+      - name: Find the newest 6.6 release
+        id: versions
+        if: matrix.line == '6.6'
+        uses: shopware/github-actions/versions@main
+        with:
+          lts-major: v6.6.
 
       # The project commands run Composer and npm in the web container, extension build uses the runner's Node.
       - name: Create Docker project
-        run: shopware-cli project create --docker --no-audit shop "$SW_VERSION"
+        env:
+          SW_VERSION: ${{ steps.versions.outputs.lts-latest-version || matrix.line }}
+        run: shopware-cli project create --docker --no-audit shop "${SW_VERSION#v}"
 
       - name: Install Shopware
         working-directory: shop
@@ -175,7 +170,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        line: ['6.6', '6.7']
+        line: ['6.6', latest]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2.22.3
@@ -210,22 +205,17 @@ jobs:
       - name: Move to usr/bin
         run: mv shopware-cli /usr/local/bin/
 
-      - name: Resolve the newest ${{ matrix.line }} release
-        run: |
-          set -o pipefail
-          version=$(curl -fsS --retry 3 --retry-all-errors https://repo.packagist.org/p2/shopware/core.json \
-            | jq -r --arg re '^v?${{ matrix.line }}\.[0-9]+\.[0-9]+$' '.packages["shopware/core"][].version | select(test($re))' \
-            | sort -V | tail -n 1)
-          version=${version#v}
-          if [ -z "$version" ]; then
-            echo "::error::no ${{ matrix.line }} release of shopware/core found on Packagist"
-            exit 1
-          fi
-          echo "Shopware $version"
-          echo "SW_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Find the newest 6.6 release
+        id: versions
+        if: matrix.line == '6.6'
+        uses: shopware/github-actions/versions@main
+        with:
+          lts-major: v6.6.
 
       - name: Create Composer project
-        run: shopware-cli project create --no-audit shop "$SW_VERSION"
+        env:
+          SW_VERSION: ${{ steps.versions.outputs.lts-latest-version || matrix.line }}
+        run: shopware-cli project create --no-audit shop "${SW_VERSION#v}"
 
       - name: Build for production
         working-directory: shop
@@ -272,7 +262,7 @@ jobs:
             echo "No Slack webhook is configured, skipping the report"
             exit 0
           fi
-          # The jobs API names the failed matrix legs, for example "Docker 6.6".
+          # The jobs API names the failed matrix legs, for example "Docker latest".
           failed_jobs=$(gh api "/repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '[.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name] | join(", ")' || true)
           payload=$(jq --null-input \
             --arg summary "$GH_REPO: nightly smoke test failed on $REF_NAME after a retry" \
