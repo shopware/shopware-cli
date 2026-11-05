@@ -86,7 +86,7 @@ const (
 
 	// EventDevInstall
 	TagAbandonedAt       = "abandoned_at"
-	TagFailedStep        = "failed_step"
+	TagFailedStep        = "failed_step" // also on EventCommand, see FailedAt
 	TagFailureCategory   = "failure_category"
 	TagLanguage          = "language"
 	TagCurrency          = "currency"

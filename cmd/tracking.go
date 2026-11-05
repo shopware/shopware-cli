@@ -67,6 +67,10 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 			tags[tracking.TagToolsWithErrorFindings] = strings.Join(toolReport.ToolsWithErrorFindings, ",")
 		}
 	}
+	var failedStep *tracking.FailedStepError
+	if result == tracking.ResultFailure && errors.As(runErr, &failedStep) {
+		tags[tracking.TagFailedStep] = failedStep.Step
+	}
 	if shopwareVersion != "" {
 		tags[tracking.TagShopwareVersion] = shopwareVersion
 	}
