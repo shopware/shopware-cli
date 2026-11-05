@@ -74,7 +74,12 @@ jobs:
       - name: Create Docker project
         env:
           SW_VERSION: ${{ steps.versions.outputs.lts-latest-version || matrix.line }}
-        run: shopware-cli project create --docker --no-audit shop "${SW_VERSION#v}"
+        run: |
+          if [ "$SW_VERSION" = 6.6 ]; then
+            echo "::error::shopware/github-actions/versions found no 6.6 release"
+            exit 1
+          fi
+          shopware-cli project create --docker --no-audit shop "${SW_VERSION#v}"
 
       - name: Install Shopware
         working-directory: shop
@@ -215,7 +220,12 @@ jobs:
       - name: Create Composer project
         env:
           SW_VERSION: ${{ steps.versions.outputs.lts-latest-version || matrix.line }}
-        run: shopware-cli project create --no-audit shop "${SW_VERSION#v}"
+        run: |
+          if [ "$SW_VERSION" = 6.6 ]; then
+            echo "::error::shopware/github-actions/versions found no 6.6 release"
+            exit 1
+          fi
+          shopware-cli project create --no-audit shop "${SW_VERSION#v}"
 
       - name: Build for production
         working-directory: shop
