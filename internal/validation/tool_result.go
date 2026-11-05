@@ -6,8 +6,28 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-// ErrToolReportFailed indicates a failure already described by a tool report.
+// ErrToolReportFailed matches every ToolReportError with errors.Is.
 var ErrToolReportFailed = logging.NewSilent("tool report contains errors")
+
+// ToolReportError fails a command whose tool report already shows the problems and names the tools behind them.
+type ToolReportError struct {
+	// FailedTools reported execution errors, so the report shows them as failed.
+	FailedTools []string
+	// ToolsWithErrorFindings ran and reported findings with error severity.
+	ToolsWithErrorFindings []string
+}
+
+func (e *ToolReportError) Error() string {
+	return ErrToolReportFailed.Error()
+}
+
+// SilenceError prevents logging the tool report a second time.
+func (e *ToolReportError) SilenceError() {}
+
+// Is lets errors.Is match the error against ErrToolReportFailed.
+func (e *ToolReportError) Is(target error) bool {
+	return target == ErrToolReportFailed
+}
 
 // ToolResult describes one invocation, independently of its collected findings.
 type ToolResult struct {

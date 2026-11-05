@@ -156,6 +156,8 @@ overall CLI usage.
 | `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider                                                                                                                                                                         | `github` / `gitlab` / `bitbucket` / `other` |
 | `shopware_version` | The installed Shopware version, looked up in the background near command startup from installed packages with `composer.lock` as fallback. Omitted if the lookup is not ready when the command finishes; commands that modify dependencies may affect the observed version. Accepts a release, a release candidate or `dev-trunk`; other development branches are never sent. Only on `project` commands run inside a project, not on `project create` | `6.7.11.0` |
 | `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` unless `--docker` was passed explicitly | `compose_plugin_missing,docker_not_running` |
+| `failed_tools` | Tools that failed, sorted and comma-separated; only with `result=failure` on commands that report tool results (`validate`, `fix`, `format`). A tool fails when it cannot run or breaks while running, and on `fix` also when ESLint or Stylelint leave problems they cannot fix | `eslint` |
+| `tools_with_error_findings` | Tools that reported error findings, sorted and comma-separated; only with `result=failure` on the same commands. Warnings and ignored findings do not count | `builtin,phpstan` |
 
 Notes:
 
@@ -164,6 +166,13 @@ Notes:
   `php_version` and `other`. The versions found or required are never sent.
 - A pinned `php_version` that is not installed stops the command before the
   dependency check and is reported as `php_version`.
+- `failed_tools` and `tools_with_error_findings` use the tool names that
+  `--only` accepts, such as `phpstan` or `storefront-twig`. Tools that run as a
+  subprocess use the same names in the `tool` tag of
+  `shopware_cli.tool.subprocess`; `builtin`, `storefront-twig` and `symfony-xml`
+  run inside the CLI and send no such event. A command that fails before its
+  tools run, for example because Node.js is too old, has neither tag. Findings,
+  rule identifiers, paths and tool output are never sent.
 - The command _name_ is captured (e.g. `project.create`), but **not** its
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not

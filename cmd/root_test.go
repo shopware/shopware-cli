@@ -106,6 +106,11 @@ func TestExitCode(t *testing.T) {
 			wantCode: 1,
 		},
 		{
+			name:     "tool report naming its tools exits silently",
+			err:      fmt.Errorf("status: %w", &validation.ToolReportError{ToolsWithErrorFindings: []string{"phpstan"}}),
+			wantCode: 1,
+		},
+		{
 			name:     "environment down exits silently",
 			err:      project.ErrEnvironmentDown,
 			wantCode: 1,
