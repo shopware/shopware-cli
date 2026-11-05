@@ -14,7 +14,7 @@ import (
 var projectFixCmd = &cobra.Command{
 	Use:   "fix [path]",
 	Short: "Apply code-quality fixes to a project",
-	Long:  "Run code-quality fixers on the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. Use --dry-run to report issues and proposed changes without applying fixes.",
+	Long:  "Run code-quality fixers on the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. Use --dry-run to report findings and proposed changes without applying fixes.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		only, _ := cmd.Flags().GetString("only")
