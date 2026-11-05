@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -158,30 +159,35 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 	conn := defaultDatabaseConnection()
 	conn.Host = "database"
 
-	databaseURL := d.env["DATABASE_URL"]
-
-	if databaseURL == "" {
-		// Always disable TTY: this captures stdout and is never interactive.
-		cmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web", "printenv", "DATABASE_URL")
-		cmd.Dir = d.projectRoot
-		logCmd(ctx, cmd)
-
-		var stdout, stderr strings.Builder
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-
-		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("could not read DATABASE_URL from the web container, is the environment running?: %w\n%s", err, stderr.String())
+	// An explicit DATABASE_URL override skips the container lookup entirely,
+	// the TLS variables then come from the executor env as well.
+	values := d.env
+	if d.env["DATABASE_URL"] == "" {
+		containerEnv, err := d.containerEnv(ctx)
+		if err != nil {
+			return nil, err
 		}
 
-		databaseURL = strings.TrimSpace(stdout.String())
+		values = containerEnv
+		for k, v := range d.env {
+			if v != "" {
+				values[k] = v
+			}
+		}
 	}
 
-	if databaseURL != "" {
+	if databaseURL := values["DATABASE_URL"]; databaseURL != "" {
 		if err := applyDatabaseURL(conn, databaseURL); err != nil {
 			return nil, err
 		}
 	}
+
+	// Certificate paths refer to the web container, so read them there.
+	readFile := func(path string) ([]byte, error) {
+		return d.containerOutput(ctx, "cat", path)
+	}
+
+	applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile)
 
 	// The host part of DATABASE_URL is only resolvable inside the compose
 	// network when it names a compose service. Swap it for the address the
@@ -191,6 +197,42 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 	}
 
 	return conn, nil
+}
+
+// containerEnv returns the environment of the web container.
+func (d *DockerExecutor) containerEnv(ctx context.Context) (map[string]string, error) {
+	out, err := d.containerOutput(ctx, "env")
+	if err != nil {
+		return nil, fmt.Errorf("could not read DATABASE_URL from the web container, is the environment running?: %w", err)
+	}
+
+	values := make(map[string]string)
+	for _, line := range strings.Split(string(out), "\n") {
+		key, value, found := strings.Cut(strings.TrimRight(line, "\r"), "=")
+		if found && key != "" {
+			values[key] = value
+		}
+	}
+
+	return values, nil
+}
+
+// containerOutput runs a command in the web container and returns its stdout.
+func (d *DockerExecutor) containerOutput(ctx context.Context, args ...string) ([]byte, error) {
+	// Always disable TTY: this captures stdout and is never interactive.
+	cmd := exec.CommandContext(ctx, "docker", append([]string{"compose", "exec", "-T", "web"}, args...)...)
+	cmd.Dir = d.projectRoot
+	logCmd(ctx, cmd)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("%w\n%s", err, stderr.String())
+	}
+
+	return stdout.Bytes(), nil
 }
 
 // resolvePublishedPort rewrites conn's address to the host-published mapping
@@ -225,6 +267,11 @@ func (d *DockerExecutor) resolvePublishedPort(ctx context.Context, conn *Databas
 
 	if host == "0.0.0.0" || host == "::" || host == "" {
 		host = "127.0.0.1"
+	}
+
+	// The certificate is issued for the service, not the published address.
+	if conn.TLS.ServerName == "" {
+		conn.TLS.ServerName = conn.Host
 	}
 
 	conn.Host = host

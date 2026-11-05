@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 var trackEvent = tracking.Track
@@ -24,11 +25,13 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 		return
 	}
 
-	// Ctrl+C counts as cancelled, also when a child process or a prompt reported it.
+	// Ctrl+C counts as cancelled, also when a child process or a prompt reported it, and so does a declined prompt.
+	var declined tracking.Cancelled
 	result := tracking.ResultSuccess
 	switch {
 	case runErr == nil:
-	case ctx.Err() != nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, huh.ErrUserAborted) || errors.Is(runErr, tui.ErrFilterSelectCancelled):
+	case ctx.Err() != nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, huh.ErrUserAborted) || errors.Is(runErr, tui.ErrFilterSelectCancelled) ||
+		errors.As(runErr, &declined):
 		result = tracking.ResultCancelled
 	default:
 		result = tracking.ResultFailure
@@ -48,6 +51,7 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	}
 	var missing *system.MissingDependenciesError
 	var pinnedPHP *system.PHPVersionNotFoundError
+	var toolReport *validation.ToolReportError
 	switch {
 	case result != tracking.ResultFailure:
 	case errors.As(runErr, &missing):
@@ -55,6 +59,13 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	case errors.As(runErr, &pinnedPHP):
 		// A pinned PHP that is not installed stops the command before the dependency check.
 		tags[tracking.TagMissing] = "php_version"
+	case errors.As(runErr, &toolReport):
+		if len(toolReport.FailedTools) > 0 {
+			tags[tracking.TagFailedTools] = strings.Join(toolReport.FailedTools, ",")
+		}
+		if len(toolReport.ToolsWithErrorFindings) > 0 {
+			tags[tracking.TagToolsWithErrorFindings] = strings.Join(toolReport.ToolsWithErrorFindings, ",")
+		}
 	}
 	if shopwareVersion != "" {
 		tags[tracking.TagShopwareVersion] = shopwareVersion

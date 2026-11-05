@@ -17,6 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 // useTrackingTestRoot swaps rootCmd for a minimal tree containing
@@ -118,6 +119,11 @@ func TestTrackCommandExecution_ExtensionAddGenerator(t *testing.T) {
 	assert.Equal(t, "extension.add.admin_module", events[0][tracking.TagCommandName])
 }
 
+type declinedError struct{}
+
+func (declinedError) Error() string { return "declined" }
+func (declinedError) Cancelled()    {}
+
 func TestTrackCommandExecution_Result(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -133,6 +139,8 @@ func TestTrackCommandExecution_Result(t *testing.T) {
 		{name: "interrupted run that still succeeded", interrupted: true, runErr: nil, want: tracking.ResultSuccess},
 		{name: "prompt aborted with ctrl+c", runErr: fmt.Errorf("cannot create project: %w", huh.ErrUserAborted), want: tracking.ResultCancelled},
 		{name: "selection dismissed", runErr: tui.ErrFilterSelectCancelled, want: tracking.ResultCancelled},
+		{name: "declined prompt", runErr: fmt.Errorf("cannot create project: %w", tracking.NewCancelled("creation cancelled")), want: tracking.ResultCancelled},
+		{name: "custom declined error opts in", runErr: fmt.Errorf("cannot continue: %w", declinedError{}), want: tracking.ResultCancelled},
 	}
 
 	for _, tt := range tests {
@@ -275,6 +283,60 @@ func TestTrackCommandExecution_PlainFailureHasNoMissingTag(t *testing.T) {
 
 	require.Len(t, *events, 1)
 	assert.NotContains(t, (*events)[0], tracking.TagMissing)
+}
+
+func TestTrackCommandExecution_ToolReportTags(t *testing.T) {
+	tests := []struct {
+		name                   string
+		cancelled              bool
+		report                 *validation.ToolReportError
+		failedTools            string
+		toolsWithErrorFindings string
+	}{
+		{
+			name:                   "findings only",
+			report:                 &validation.ToolReportError{ToolsWithErrorFindings: []string{"builtin", "phpstan"}},
+			toolsWithErrorFindings: "builtin,phpstan",
+		},
+		{
+			name:                   "tool failure and findings",
+			report:                 &validation.ToolReportError{FailedTools: []string{"eslint"}, ToolsWithErrorFindings: []string{"builtin", "eslint"}},
+			failedTools:            "eslint",
+			toolsWithErrorFindings: "builtin,eslint",
+		},
+		{
+			name:        "tool failure only",
+			report:      &validation.ToolReportError{FailedTools: []string{"phpstan"}},
+			failedTools: "phpstan",
+		},
+		{
+			name:      "cancelled run",
+			cancelled: true,
+			report:    &validation.ToolReportError{FailedTools: []string{"phpstan"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := useTrackingTestRoot(t, "shopware-cli")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tt.cancelled {
+				cancel()
+			}
+
+			trackCommandExecution(ctx, []string{"extension", "build-me"}, 0, fmt.Errorf("cannot validate: %w", tt.report), "")
+
+			require.Len(t, *events, 1)
+			tags := (*events)[0]
+			for key, want := range map[string]string{tracking.TagFailedTools: tt.failedTools, tracking.TagToolsWithErrorFindings: tt.toolsWithErrorFindings} {
+				if want == "" {
+					assert.NotContains(t, tags, key)
+				} else {
+					assert.Equal(t, want, tags[key])
+				}
+			}
+		})
+	}
 }
 
 func TestTrackCommandExecution_PinnedPHPNotFound(t *testing.T) {

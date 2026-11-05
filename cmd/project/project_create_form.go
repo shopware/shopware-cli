@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -633,7 +632,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		}
 
 		if selectConfirm == "cancel" {
-			return errors.New("project creation cancelled")
+			return errCreateCancelled
 		}
 	}
 }
