@@ -92,7 +92,7 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 			}
 		}
 
-		if err := installComposerDeps(ctx, config.RootDir, "highest", execution); err != nil {
+		if err := installComposerDeps(ctx, config.RootDir, CheckAgainstHighest, execution); err != nil {
 			execution.Fail(err)
 			return ToolSummary{}
 		}

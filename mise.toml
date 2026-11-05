@@ -43,6 +43,10 @@ run = "golangci-lint fmt --diff ./..."
 description = "Build the shopware-cli binary"
 run = "go build -o ./bin/shopware-cli ."
 
+[tasks.cache-clear]
+description = "Clear the global shopware-cli cache. Development builds need manual clearing after tool or config changes; releases use a fresh cache per version."
+run = "go run ./scripts/clear-cache.go"
+
 [tasks.test]
 description = "Run the network-isolated test suite"
 run = "./scripts/run-tests.sh"

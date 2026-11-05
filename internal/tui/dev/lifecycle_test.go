@@ -185,13 +185,16 @@ func TestUpdateLifecycle_DockerStarted_ErrorStaysAndRendersError(t *testing.T) {
 }
 
 func TestUpdateLifecycle_ShopwareInstalled_StartsDashboard(t *testing.T) {
+	events := captureDevEvents(t)
 	m := newLifecycleModel(t)
+	m.telemetry = newTelemetryState(false)
 	m.phase = phaseStarting
 
 	updated, cmd := m.updateLifecycle(shopwareInstalledMsg{})
 	final := updated.(Model)
 	assert.Equal(t, phaseDashboard, final.phase)
 	assert.NotNil(t, cmd)
+	assert.Equal(t, 1, sessionStarts(*events))
 }
 
 func TestUpdateLifecycle_ShopwareNotInstalled_OpensInstallPrompt(t *testing.T) {
@@ -211,6 +214,7 @@ func TestUpdateLifecycle_ShopwareNotInstalled_OpensInstallPrompt(t *testing.T) {
 }
 
 func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
+	events := captureDevEvents(t)
 	dir := t.TempDir()
 
 	creds := tui.NewCredentialStep(tui.CredentialStepOptions{Username: "myadmin", Password: "supersecret"})
@@ -226,6 +230,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 			step:           installStepCredentials,
 		},
 		installProg: installProgress{progress: newInstallProgress()},
+		telemetry:   newTelemetryState(false),
 	}
 	ch := make(chan string)
 	close(ch)
@@ -248,6 +253,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 	assert.Empty(t, final.overlayLines)
 	assert.Nil(t, final.dockerOutChan)
 	assert.NotNil(t, cmd, "should kick off dashboard")
+	assert.Equal(t, 1, sessionStarts(*events))
 }
 
 func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsFailedPhase(t *testing.T) {
