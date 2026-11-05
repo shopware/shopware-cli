@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -45,16 +44,6 @@ type CookieListenerWiring struct{}
 
 func (CookieListenerWiring) Name() string {
 	return "cookie-listener-wiring"
-}
-
-// FollowUpFixTools returns the fixers that must run after the selected fixers
-// have finished.
-func FollowUpFixTools(selected ToolList[FixTool]) ToolList[FixTool] {
-	if slices.ContainsFunc(selected, func(tool FixTool) bool { return tool.Name() == Rector{}.Name() }) {
-		return ToolList[FixTool]{CookieListenerWiring{}}
-	}
-
-	return nil
 }
 
 func (CookieListenerWiring) Fix(_ context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
@@ -395,10 +384,13 @@ func (e yamlLineEdits) rewire(key, definition *yaml.Node) bool {
 		innerName = value.Value
 	}
 
+	var argumentsKey *yaml.Node
 	for j := 0; j+1 < len(definition.Content); j += 2 {
 		switch definition.Content[j].Value {
 		case "decorates", "decoration_inner_name", "decoration_priority", "decoration_on_invalid":
 			e.removed[definition.Content[j].Line-1] = true
+		case "arguments":
+			argumentsKey = definition.Content[j]
 		}
 	}
 
@@ -418,7 +410,7 @@ func (e yamlLineEdits) rewire(key, definition *yaml.Node) bool {
 			remaining++
 		}
 		if remaining == 0 {
-			e.removed[mappingKey(definition, "arguments").Line-1] = true
+			e.removed[argumentsKey.Line-1] = true
 		}
 	}
 
@@ -434,16 +426,6 @@ func (e yamlLineEdits) rewire(key, definition *yaml.Node) bool {
 	}
 
 	return true
-}
-
-func mappingKey(mapping *yaml.Node, key string) *yaml.Node {
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		if mapping.Content[i].Value == key {
-			return mapping.Content[i]
-		}
-	}
-
-	return nil
 }
 
 func mappingValue(mapping *yaml.Node, key string) *yaml.Node {

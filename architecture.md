@@ -84,7 +84,8 @@ is no separate Composer verifier tool.
 
 Fixers run in parallel, so a fixer must not depend on files another fixer
 changes. `FollowUpFixTools` returns fixers that run after all selected fixers
-have finished; they are not registered with `AddTool`. `cookie-listener-wiring`
+have finished; they are not registered with `AddTool`. `RunFixTools` runs both
+phases for `extension fix` and `project fix`. `cookie-listener-wiring`
 follows `rector`: it rewrites the services.xml or services.yaml definitions of
 cookie providers that Rector migrated to `CookieGroupCollectEvent` listeners.
 In parallel it could race with the `symfony-xml` conversion of the same files.

@@ -50,14 +50,7 @@ var extensionFixCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
-		fix := func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
-			return tool.Fix(cmd.Context(), *toolCfg, execution)
-		}
-		results := verifier.RunTools(cmd.Context(), tools, statuses, *toolCfg, progress, fix)
-		// Follow-up fixers depend on the files the parallel fixers changed.
-		if followUps := verifier.FollowUpFixTools(tools); len(followUps) > 0 && cmd.Context().Err() == nil {
-			results = append(results, verifier.RunTools(cmd.Context(), followUps, nil, *toolCfg, progress, fix)...)
-		}
+		results := verifier.RunFixTools(cmd.Context(), tools, statuses, *toolCfg, progress)
 		return validation.ReportTools(results, "summary", "Fixers")
 	},
 }

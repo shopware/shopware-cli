@@ -63,9 +63,7 @@ var projectFixCmd = &cobra.Command{
 			return err
 		}
 
-		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
-			return tool.Fix(ctx, *toolCfg, execution)
-		})
+		results := verifier.RunFixTools(ctx, tools, statuses, *toolCfg, progress)
 		return validation.ReportTools(results, "summary", "Fixers")
 	},
 }
