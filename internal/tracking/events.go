@@ -46,6 +46,7 @@ const (
 
 	// Every event, set by Track
 	TagCLIVersion = "cli_version"
+	TagSessionID  = "session_id"
 
 	// EventCommand
 	TagCommandName = "command_name"
@@ -109,8 +110,7 @@ const (
 	TagCheck = "check"
 
 	// EventDevSession and EventDevSessionStart
-	TagSessionID = "session_id"
-	TagExecutor  = "executor"
+	TagExecutor = "executor"
 
 	// EventDevSession
 	TagTabsVisited  = "tabs_visited"

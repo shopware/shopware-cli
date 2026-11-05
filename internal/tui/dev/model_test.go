@@ -966,7 +966,7 @@ func sessionStarts(events []devEvent) int {
 	return count
 }
 
-func TestDashboardSessionStartAndEndShareTheID(t *testing.T) {
+func TestDashboardSendsSessionStartAndEnd(t *testing.T) {
 	events := captureDevEvents(t)
 	m := newTestModel(t)
 	m.telemetry = newTelemetryState(false)
@@ -978,8 +978,6 @@ func TestDashboardSessionStartAndEndShareTheID(t *testing.T) {
 	start, end := (*events)[0], (*events)[1]
 	assert.Equal(t, tracking.EventDevSessionStart, start.name)
 	assert.Equal(t, tracking.EventDevSession, end.name)
-	assert.NotEmpty(t, start.tags[tracking.TagSessionID])
-	assert.Equal(t, start.tags[tracking.TagSessionID], end.tags[tracking.TagSessionID])
 }
 
 func TestExitResultNamesHowTheProgramEnded(t *testing.T) {
@@ -1013,7 +1011,6 @@ func TestReportExitEndsAnOpenSessionOnce(t *testing.T) {
 	end := (*events)[1]
 	assert.Equal(t, tracking.EventDevSession, end.name)
 	assert.Equal(t, "terminated", end.tags[tracking.TagResult])
-	assert.Equal(t, (*events)[0].tags[tracking.TagSessionID], end.tags[tracking.TagSessionID])
 }
 
 func TestReportExitAlsoEndsTheRunningTask(t *testing.T) {

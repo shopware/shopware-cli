@@ -2,7 +2,6 @@ package dev
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"slices"
 	"strconv"
@@ -50,7 +49,6 @@ const (
 // construct Model directly without it, so every method is nil-safe.
 type telemetryState struct {
 	sessionStart time.Time
-	sessionID    string
 	executor     string
 
 	tabsVisited      map[string]struct{}
@@ -77,7 +75,6 @@ func newTelemetryState(dockerMode bool) *telemetryState {
 	}
 	return &telemetryState{
 		sessionStart: time.Now(),
-		sessionID:    rand.Text(),
 		executor:     executorType,
 		tabsVisited:  map[string]struct{}{"overview": {}},
 		watchersUsed: map[string]struct{}{},
@@ -140,8 +137,7 @@ func (t *telemetryState) sessionStartTags() (map[string]string, bool) {
 	}
 	t.sessionStartSent = true
 	return map[string]string{
-		tracking.TagSessionID: t.sessionID,
-		tracking.TagExecutor:  t.executor,
+		tracking.TagExecutor: t.executor,
 	}, true
 }
 
@@ -158,7 +154,6 @@ func (t *telemetryState) sessionTags() (map[string]string, bool) {
 		exit = exitQuit
 	}
 	tags := map[string]string{
-		tracking.TagSessionID:   t.sessionID,
 		tracking.TagExecutor:    t.executor,
 		tracking.TagDurationMS:  durationMS(time.Since(t.sessionStart)),
 		tracking.TagTabsVisited: joinSet(t.tabsVisited),

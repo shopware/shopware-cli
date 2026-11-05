@@ -96,7 +96,9 @@ All events share a common envelope:
 | `tags`      | Event-specific key/value pairs (all string values), described below |
 
 Every event's `tags` also carry `cli_version`, the version of `shopware-cli`
-that sent it, so dev builds can be excluded for every event.
+that sent it, so dev builds can be excluded for every event. They also carry
+`session_id`, a random ID for one run of the CLI that is never saved, so the
+events of the same run can be linked.
 
 There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
@@ -350,10 +352,9 @@ Sent when the dashboard opens. The `shopware_cli.project.dev.session` event
 that ends the session carries the same `session_id`, so we can tell sessions
 that ended normally from those that crashed or were closed abruptly.
 
-| Tag          | Meaning                                                                          | Example                      |
-| ------------ | -------------------------------------------------------------------------------- | ---------------------------- |
-| `session_id` | Random ID created for this session only; not saved on the machine and not reused | `4STH7GMDHUDF6VGTLGHSKU7FOD` |
-| `executor`   | Environment the project runs in                                                  | `docker` / `local`           |
+| Tag        | Meaning                         | Example            |
+| ---------- | ------------------------------- | ------------------ |
+| `executor` | Environment the project runs in | `docker` / `local` |
 
 ### `shopware_cli.project.dev.session` — dashboard session shape
 
@@ -364,7 +365,6 @@ TUI).
 
 | Tag             | Meaning                                                                  | Example                                     |
 | --------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
-| `session_id`    | Same random ID as on `session_start`                                     | `4STH7GMDHUDF6VGTLGHSKU7FOD`                |
 | `executor`      | Environment the project runs in                                          | `docker` / `local`                          |
 | `duration_ms`   | Time since the TUI launched, including container start and install       | `1912734`                                   |
 | `tabs_visited`  | Which tabs were opened (sorted, comma-separated)                         | `config,instance,overview`                  |
