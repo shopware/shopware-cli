@@ -97,8 +97,8 @@ All events share a common envelope:
 
 Every event's `tags` also carry `cli_version`, the version of `shopware-cli`
 that sent it, so dev builds can be excluded for every event. They also carry
-`session_id`, a random ID for one run of the CLI that is never saved, so the
-events of the same run can be linked.
+`session_id`, a random ID for one run of the CLI that is not saved on the
+machine, so the events of the same run can be linked.
 
 There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
