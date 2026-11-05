@@ -24,7 +24,7 @@ func TestValidationComposerJSONDropsAutoload(t *testing.T) {
 		"autoload-dev": {"classmap": ["tests/"]},
 		"require": {"shopware/core": "~6.6.0"},
 		"config": {"platform": {"php": "8.2"}}
-	}`), t.TempDir())
+	}`), t.TempDir(), "")
 	require.NoError(t, err)
 
 	var data map[string]any
@@ -37,7 +37,7 @@ func TestValidationComposerJSONRequiresSuggestedPackages(t *testing.T) {
 	result, err := validationComposerJSON([]byte(`{
 		"require": {"shopware/core": "~6.6.0", "psr/log": "^3.0"},
 		"suggest": {"psr/log": "already required", "psr/container": "optional"}
-	}`), t.TempDir())
+	}`), t.TempDir(), "")
 	require.NoError(t, err)
 
 	var data struct {
@@ -52,6 +52,26 @@ func TestValidationComposerJSONRequiresSuggestedPackages(t *testing.T) {
 	}, data.Require)
 }
 
+func TestValidationComposerJSONAdvisoryBlocking(t *testing.T) {
+	for _, mode := range []string{"", CheckAgainstHighest, CheckAgainstLowest} {
+		manifest := []byte(`{"config":{"platform":{"php":"8.3"},"audit":{"block-insecure":true,"abandoned":"report"},"policy":{"malware":{"block":true}}}}`)
+		result, err := validationComposerJSON(manifest, t.TempDir(), mode)
+		require.NoError(t, err)
+		var data struct {
+			Config struct {
+				Platform map[string]string
+				Audit    map[string]any
+				Policy   map[string]any
+			}
+		}
+		require.NoError(t, json.Unmarshal(result, &data))
+		assert.Equal(t, mode != CheckAgainstLowest, data.Config.Audit["block-insecure"])
+		assert.Equal(t, "report", data.Config.Audit["abandoned"])
+		assert.Equal(t, "8.3", data.Config.Platform["php"])
+		assert.Equal(t, map[string]any{"malware": map[string]any{"block": true}}, data.Config.Policy)
+	}
+}
+
 func TestValidationComposerJSONResolvesPathRepositories(t *testing.T) {
 	rootDir := t.TempDir()
 	cases := map[string]string{
@@ -61,7 +81,7 @@ func TestValidationComposerJSONResolvesPathRepositories(t *testing.T) {
 
 	for name, repositories := range cases {
 		t.Run(name, func(t *testing.T) {
-			result, err := validationComposerJSON([]byte(`{"repositories": `+repositories+`}`), rootDir)
+			result, err := validationComposerJSON([]byte(`{"repositories": `+repositories+`}`), rootDir, "")
 			require.NoError(t, err)
 
 			var data struct {
@@ -88,12 +108,12 @@ func TestValidationComposerJSONResolvesPathRepositories(t *testing.T) {
 	}
 }
 
-func TestPrepareComposerAutoloadKeepsExistingVendor(t *testing.T) {
+func TestPrepareComposerAutoloadKeepsProjectVendor(t *testing.T) {
 	rootDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), []byte(`{"require": {"shopware/core": "*"}}`), 0o644))
 	require.NoError(t, os.Mkdir(filepath.Join(rootDir, "vendor"), 0o755))
 
-	autoloadFile, toolErr := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: "lowest"}, testExecution())
+	autoloadFile, toolErr := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, IsProject: true}, testExecution())
 	require.Nil(t, toolErr)
 
 	assert.Equal(t, filepath.Join(rootDir, "vendor", "autoload.php"), autoloadFile)
@@ -117,24 +137,34 @@ func TestPrepareComposerAutoloadRequiresProjectVendor(t *testing.T) {
 func TestPrepareComposerAutoloadUpdatesCacheOnEveryRun(t *testing.T) {
 	// A fake composer records its arguments and creates the autoload file in
 	// the directory it runs in.
+	t.Setenv("COMPOSER_POLICY_ADVISORIES_BLOCK", "1")
 	runsLog := filepath.Join(t.TempDir(), "runs.log")
-	fakeTool(t, "composer", "echo \"$*\" >> '"+runsLog+"'\n/bin/mkdir -p vendor\n: > vendor/autoload.php\n")
+	fakeTool(t, "composer", "echo \"$* advisories=$COMPOSER_POLICY_ADVISORIES_BLOCK\" >> '"+runsLog+"'\n/bin/mkdir -p vendor\n: > vendor/autoload.php\n")
 
 	rootDir := t.TempDir()
 	composerJSON := []byte(`{"name": "acme/plugin", "require": {"shopware/core": "~6.6.0"}}`)
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), composerJSON, 0o644))
-	dependencies, err := validationComposerJSON(composerJSON, rootDir)
-	require.NoError(t, err)
 
-	for _, checkAgainst := range []string{"highest", "highest", "lowest"} {
+	require.NoError(t, os.Mkdir(filepath.Join(rootDir, "vendor"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "vendor", "autoload.php"), []byte("local vendor"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.lock"), []byte("local lockfile"), 0o644))
+
+	modes := []string{"", CheckAgainstLowest, CheckAgainstHighest, CheckAgainstLowest, CheckAgainstHighest}
+	for _, checkAgainst := range modes {
 		autoloadFile, toolErr := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: checkAgainst}, testExecution())
 		require.Nil(t, toolErr)
 
-		workDir := filepath.Join(rootDir, extension.ValidationCacheDir, "composer-"+checkAgainst)
+		mode := checkAgainst
+		if mode == "" {
+			mode = CheckAgainstHighest
+		}
+		workDir := filepath.Join(rootDir, extension.ValidationCacheDir, "composer-"+mode)
 		assert.Equal(t, filepath.Join(workDir, "vendor", "autoload.php"), autoloadFile)
 		assert.FileExists(t, autoloadFile)
 
 		cached, err := os.ReadFile(filepath.Join(workDir, "composer.json"))
+		require.NoError(t, err)
+		dependencies, err := validationComposerJSON(composerJSON, rootDir, checkAgainst)
 		require.NoError(t, err)
 		assert.Equal(t, dependencies, cached)
 	}
@@ -142,13 +172,24 @@ func TestPrepareComposerAutoloadUpdatesCacheOnEveryRun(t *testing.T) {
 	runs, err := os.ReadFile(runsLog)
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(string(runs)), "\n")
-	require.Len(t, lines, 3)
-	assert.NotContains(t, lines[1], "--prefer-lowest")
-	assert.Contains(t, lines[2], "--prefer-lowest")
-
-	entries, err := os.ReadDir(rootDir)
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"composer.json", "var"}, entryNames(entries))
+	require.Len(t, lines, len(modes))
+	for i, mode := range modes {
+		assert.Equal(t, mode == CheckAgainstLowest, strings.Contains(lines[i], "--prefer-lowest"))
+		if mode == CheckAgainstLowest {
+			assert.Contains(t, lines[i], "advisories=0")
+		} else {
+			assert.Contains(t, lines[i], "advisories=1")
+		}
+	}
+	for name, expected := range map[string]string{
+		"composer.json":       string(composerJSON),
+		"composer.lock":       "local lockfile",
+		"vendor/autoload.php": "local vendor",
+	} {
+		contents, err := os.ReadFile(filepath.Join(rootDir, name))
+		require.NoError(t, err)
+		assert.Equal(t, expected, string(contents))
+	}
 }
 
 func TestPrepareComposerAutoloadRunsComposerOneAtATime(t *testing.T) {
