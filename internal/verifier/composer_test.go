@@ -51,7 +51,7 @@ func TestValidationComposerJSONPreservesExtensionAutoload(t *testing.T) {
 	require.NoError(t, err)
 	var data map[string]map[string]any
 	require.NoError(t, json.Unmarshal(result, &data))
-	assert.Equal(t, map[string]any{
+	require.Equal(t, map[string]any{
 		"psr-4":                 map[string]any{"Acme\\": []any{filepath.Join(root, "src"), "/opt/shared/"}},
 		"psr-0":                 map[string]any{"Legacy_": filepath.Join(root, "legacy")},
 		"files":                 []any{filepath.Join(root, "src/functions.php")},
@@ -59,6 +59,15 @@ func TestValidationComposerJSONPreservesExtensionAutoload(t *testing.T) {
 		"exclude-from-classmap": []any{"../../../../classes/excluded/"},
 	}, data["autoload"])
 	assert.Equal(t, map[string]any{"psr-4": map[string]any{"Acme\\Tests\\": filepath.Join(root, "tests")}}, data["autoload-dev"])
+
+	// Exclusions must still point into the extension if the cache layout changes.
+	for _, mode := range []string{"lowest", "highest"} {
+		t.Run(mode, func(t *testing.T) {
+			workDir := filepath.Join(root, extension.ValidationCacheDir, "composer-"+mode)
+			exclusion := data["autoload"]["exclude-from-classmap"].([]any)[0].(string)
+			assert.Equal(t, filepath.Join(root, "classes", "excluded"), filepath.Clean(filepath.Join(workDir, exclusion)))
+		})
+	}
 }
 
 func TestValidationComposerJSONAdvisoryBlocking(t *testing.T) {
