@@ -14,8 +14,15 @@ import (
 // fakeTool runs without external tool installations or network access.
 func fakeTool(t *testing.T, name, script string) {
 	t.Helper()
+	fakeTools(t, map[string]string{name: script})
+}
+
+func fakeTools(t *testing.T, scripts map[string]string) {
+	t.Helper()
 	directory := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(directory, name), []byte("#!/bin/sh\n"+script), 0o755))
+	for name, script := range scripts {
+		require.NoError(t, os.WriteFile(filepath.Join(directory, name), []byte("#!/bin/sh\n"+script), 0o755))
+	}
 	t.Setenv("PATH", directory)
 }
 
@@ -160,13 +167,70 @@ func TestPHPStanInvocation(t *testing.T) {
 			installedDir := filepath.Join(root, "vendor", "composer")
 			require.NoError(t, os.MkdirAll(installedDir, 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(installedDir, "installed.json"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.1.0"}]}`), 0o644))
-			result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: "lowest"})
+			result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, IsProject: true})
 			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 			assert.Equal(t, scenario.skipped, result.SkipReason != "")
 			assert.Len(t, result.Findings, scenario.findings)
 			assert.Equal(t, "Shopware 6.7.1.0", result.Note)
 		})
 	}
+}
+
+func TestPHPStanExtensionBaseline(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("BASELINE_ROOT", root)
+	fakeTools(t, map[string]string{
+		"composer": `/bin/mkdir -p vendor/composer
+printf '{"packages":[{"name":"shopware/core","version":"6.6.0.0"}]}' > vendor/composer/installed.json
+: > vendor/autoload.php
+`,
+		"php": `printf '%s\n' "$@" > "$BASELINE_ROOT/php-args"
+printf '%s' "$PWD" > "$BASELINE_ROOT/php-cwd"
+printf '{"files":{},"errors":[]}'
+`,
+	})
+	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{"require":{"shopware/core":"^6.6"}}`), 0o644))
+	localVendor := filepath.Join(root, "vendor", "composer")
+	require.NoError(t, os.MkdirAll(localVendor, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(localVendor, "installed.json"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.1.0"}]}`), 0o644))
+	configFile := filepath.Join(root, "phpstan.neon.dist")
+	require.NoError(t, os.WriteFile(configFile, []byte("parameters:\n    level: 5\n"), 0o644))
+
+	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstLowest})
+
+	require.Empty(t, result.Errors)
+	assert.Equal(t, "Shopware 6.6.0.0 (lowest)", result.Note)
+	workDir := filepath.Join(root, "var/cache/shopware-cli", "composer-lowest")
+	arguments, err := os.ReadFile(filepath.Join(root, "php-args"))
+	require.NoError(t, err)
+	assert.Contains(t, string(arguments), "--autoload-file\n"+filepath.Join(workDir, "vendor/autoload.php")+"\n")
+	assert.Contains(t, string(arguments), "--configuration\n"+configFile+"\n")
+	workingDir, err := os.ReadFile(filepath.Join(root, "php-cwd"))
+	require.NoError(t, err)
+	// macOS shells resolve the /var symlink in their working directory.
+	expectedDir, err := filepath.EvalSymlinks(workDir)
+	require.NoError(t, err)
+	assert.Equal(t, expectedDir, string(workingDir))
+}
+
+func TestPHPStanSkipsAnalysisAfterFailedDependencyRefresh(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("BASELINE_ROOT", root)
+	fakeTools(t, map[string]string{
+		"composer": "exit 1\n",
+		"php":      `: > "$BASELINE_ROOT/php-invoked"`,
+	})
+	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{}`), 0o644))
+	// An existing cache must not be used when refreshing its dependencies fails.
+	cachedVendor := filepath.Join(root, "var/cache/shopware-cli", "composer-lowest", "vendor")
+	require.NoError(t, os.MkdirAll(cachedVendor, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cachedVendor, "autoload.php"), nil, 0o644))
+
+	result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstLowest})
+
+	require.NotEmpty(t, result.Errors)
+	assert.Empty(t, result.Note)
+	assert.NoFileExists(t, filepath.Join(root, "php-invoked"))
 }
 
 func TestPHPCSFixerInvocation(t *testing.T) {
