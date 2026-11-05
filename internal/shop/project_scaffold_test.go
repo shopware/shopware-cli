@@ -111,27 +111,34 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.NotEqual(t, envContent, env2)
 	})
 
-	t.Run("disables the admin worker for Docker dev only", func(t *testing.T) {
+	t.Run("disables the admin worker for Docker projects with a working queue worker", func(t *testing.T) {
 		t.Parallel()
 
-		for _, useDocker := range []bool{true, false} {
+		tests := []struct {
+			version   string
+			useDocker bool
+			enabled   bool
+		}{
+			{version: "6.7.12.1", useDocker: true, enabled: false},
+			{version: "6.6.3.1", useDocker: true, enabled: true},
+			{version: "6.7.12.1", useDocker: false, enabled: true},
+		}
+		for _, tt := range tests {
 			projectFolder := t.TempDir()
 			scaffold := ShopwareProjectScaffold{
 				ProjectFolder:    projectFolder,
-				Version:          "6.7.12.1",
+				Version:          tt.version,
 				DeploymentMethod: DeploymentNone,
 				CISystem:         CINone,
-				UseDocker:        useDocker,
+				UseDocker:        tt.useDocker,
 			}
 			require.NoError(t, scaffold.Scaffold(t.Context()))
 
-			devEnabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, "dev")
-			require.NoError(t, err)
-			assert.Equal(t, !useDocker, devEnabled, "docker=%v", useDocker)
-
-			prodEnabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, "prod")
-			require.NoError(t, err)
-			assert.True(t, prodEnabled, "docker=%v", useDocker)
+			for _, env := range []string{"dev", "prod"} {
+				enabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, env)
+				require.NoError(t, err)
+				assert.Equal(t, tt.enabled, enabled, "version=%s docker=%v env=%s", tt.version, tt.useDocker, env)
+			}
 		}
 	})
 
@@ -437,4 +444,13 @@ func readScaffoldFile(t *testing.T, root string, path ...string) string {
 	require.NoError(t, err)
 
 	return string(content)
+}
+
+func TestSupportsDedicatedWorker(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, supportsDedicatedWorker("6.6.3.1"))
+	assert.True(t, supportsDedicatedWorker("6.6.4.0"))
+	assert.True(t, supportsDedicatedWorker("6.7.12.1"))
+	assert.True(t, supportsDedicatedWorker("dev-trunk"))
 }

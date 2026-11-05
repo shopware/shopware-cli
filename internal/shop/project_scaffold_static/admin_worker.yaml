@@ -1,4 +1,6 @@
-when@dev:
-    shopware:
-        admin_worker:
-            enable_admin_worker: false
+# The admin worker is disabled, as Shopware recommends. Queue workers must run
+# instead (bin/console messenger:consume); the Docker setup runs one for you.
+# See https://developer.shopware.com/docs/guides/hosting/infrastructure/message-queue.html
+shopware:
+    admin_worker:
+        enable_admin_worker: false

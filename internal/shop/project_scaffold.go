@@ -10,6 +10,8 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/shyim/go-version"
+
 	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/logging"
@@ -174,9 +176,9 @@ func (s *ShopwareProjectScaffold) scaffold(ctx context.Context) error {
 		}
 	}
 
-	// Disable the browser-based admin worker for dev: the Docker environment
-	// then runs a dedicated queue worker instead.
-	if s.UseDocker {
+	// Disable the browser-based admin worker: the Docker environment then runs a
+	// dedicated queue worker instead.
+	if s.UseDocker && supportsDedicatedWorker(s.Version) {
 		packagesDir := filepath.Join(s.ProjectFolder, "config", "packages")
 		if err := os.MkdirAll(packagesDir, os.ModePerm); err != nil {
 			return err
@@ -216,6 +218,21 @@ func (s *ShopwareProjectScaffold) WriteComposerJson(ctx context.Context) error {
 	}
 
 	return os.WriteFile(filepath.Join(s.ProjectFolder, "composer.json"), []byte(composerJSON), os.ModePerm)
+}
+
+// dedicatedWorkerConstraint is the Shopware version range whose Symfony (7.1+)
+// supports the `messenger:consume --all` the Docker queue worker runs.
+var dedicatedWorkerConstraint = version.MustConstraints(version.NewConstraint(">=6.6.4.0"))
+
+// supportsDedicatedWorker reports whether the Docker queue worker works with the
+// given Shopware version. Dev branches (e.g. dev-trunk) are recent enough.
+func supportsDedicatedWorker(rawVersion string) bool {
+	v, err := version.NewVersion(rawVersion)
+	if err != nil {
+		return strings.HasPrefix(rawVersion, "dev-")
+	}
+
+	return dedicatedWorkerConstraint.Check(v)
 }
 
 func envLocalContent(useDocker bool) string {
