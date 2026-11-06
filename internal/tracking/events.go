@@ -71,8 +71,8 @@ const (
 	TagSourceDirCount     = "source_dir_count"
 	TagAdminDirCount      = "admin_dir_count"
 	TagStorefrontDirCount = "storefront_dir_count"
-	// The Shopware version extension validate checked against and its
-	// --check-against mode, set by PHPStan with SetCommandTag.
+	// The Shopware version extension validate or fix ran against and its
+	// --check-against mode, set by PHPStan and Rector with SetCommandTag.
 	TagCheckedShopwareVersion = "checked_shopware_version"
 	TagCheckAgainst           = "check_against"
 	// CPU use of the same runs: the tool subprocesses' CPU time and the logical CPUs the CLI can run on.

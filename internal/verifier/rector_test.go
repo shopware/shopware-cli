@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
@@ -531,6 +532,10 @@ exit "$RECTOR_EXIT"
 				note = "no changes; " + note
 			}
 			assert.Equal(t, note, result.Note)
+			if !scenario.project && !scenario.fail {
+				assert.Equal(t, "6.7.0.0", tracking.CommandTags()[tracking.TagCheckedShopwareVersion])
+				assert.Equal(t, CheckAgainstLowest, tracking.CommandTags()[tracking.TagCheckAgainst])
+			}
 			args, err := os.ReadFile(filepath.Join(root, "rector-args"))
 			require.NoError(t, err)
 			assert.Equal(t, scenario.dryRun, strings.Contains(string(args), "--dry-run\n"))
