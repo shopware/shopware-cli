@@ -158,6 +158,17 @@ func validationComposerJSON(composerJSON []byte, rootDir string, checkAgainst st
 		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
 	}
 
+	otherMode := CheckAgainstLowest
+	if checkAgainst == CheckAgainstLowest {
+		otherMode = CheckAgainstHighest
+	}
+	// Root classmaps can include local dependencies and the other validation
+	// baseline. Keep the selected cache available for dependency classmaps.
+	excludedPaths := []any{
+		resolveAutoloadPaths("/vendor/", rootDir, true),
+		resolveAutoloadPaths("/"+path.Join(extension.ValidationCacheDir, "composer-"+otherMode)+"/", rootDir, true),
+	}
+
 	// Keep extension classes and bootstrap files available to custom configs
 	// without loading the extension's locally installed dependencies.
 	for _, key := range []string{"autoload", "autoload-dev"} {
@@ -165,6 +176,8 @@ func validationComposerJSON(composerJSON []byte, rootDir string, checkAgainst st
 			for kind, paths := range autoload {
 				autoload[kind] = resolveAutoloadPaths(paths, rootDir, kind == "exclude-from-classmap")
 			}
+			excluded, _ := autoload["exclude-from-classmap"].([]any)
+			autoload["exclude-from-classmap"] = append(excluded, excludedPaths...)
 		}
 	}
 

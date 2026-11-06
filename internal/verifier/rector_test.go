@@ -558,3 +558,42 @@ exit "$RECTOR_EXIT"
 		})
 	}
 }
+
+func TestRectorExtensionReportsCachedPaths(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		name := "fix"
+		if dryRun {
+			name = "dry run"
+		}
+		t.Run(name, func(t *testing.T) {
+			fakeTools(t, map[string]string{
+				"composer": "/bin/mkdir -p vendor\n: > vendor/autoload.php\n",
+				"php": `printf '{"totals":{"changed_files":1,"errors":1},"changed_files":["../../../../src/changed.php"],"errors":[{"file":"../../../../src/broken.php","message":"Syntax error","line":2}]}'
+exit 1`,
+			})
+			root := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "rector.php"), []byte("<?php"), 0o644))
+			source := filepath.Join(root, "src")
+			require.NoError(t, os.Mkdir(source, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(source, "changed.php"), []byte("<?php"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(source, "broken.php"), []byte("<?php :"), 0o644))
+			result := runFixToolWithDryRun(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{source}}, dryRun)
+			require.Empty(t, result.Errors)
+			expected := []validation.CheckResult{{
+				Path: "src/broken.php", Line: 2, Message: "Syntax error",
+				Severity: validation.SeverityError, Identifier: "rector/error",
+			}}
+			if dryRun {
+				expected = append(expected, validation.CheckResult{
+					Path: "src/changed.php", Line: 1,
+					Message:  "Rector changes are required. Run fix without dry-run to apply them.",
+					Severity: validation.SeverityError, Identifier: "rector/change",
+				})
+			} else {
+				assert.Contains(t, result.Note, "1 file fixed")
+			}
+			assert.ElementsMatch(t, expected, result.Findings)
+		})
+	}
+}

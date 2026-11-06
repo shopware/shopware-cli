@@ -180,6 +180,19 @@ func (r Rector) process(
 		return rectorOutput{}
 	}
 
+	// Rector reports paths relative to its working directory, which is the
+	// dependency cache for extensions and the source root for projects.
+	for i := range report.FileDiffs {
+		if !filepath.IsAbs(report.FileDiffs[i].File) {
+			report.FileDiffs[i].File = filepath.Join(cmd.Dir, report.FileDiffs[i].File)
+		}
+	}
+	for i := range report.Errors {
+		if report.Errors[i].File != "" && !filepath.IsAbs(report.Errors[i].File) {
+			report.Errors[i].File = filepath.Join(cmd.Dir, report.Errors[i].File)
+		}
+	}
+
 	for _, issue := range report.Errors {
 		if finding, ok := issue.sourceFinding(config.RootDir, directory); ok {
 			execution.AddFindings(finding)

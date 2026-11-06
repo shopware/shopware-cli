@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -56,9 +57,9 @@ func TestValidationComposerJSONPreservesExtensionAutoload(t *testing.T) {
 		"psr-0":                 map[string]any{"Legacy_": filepath.Join(root, "legacy")},
 		"files":                 []any{filepath.Join(root, "src/functions.php")},
 		"classmap":              []any{filepath.Join(root, "classes")},
-		"exclude-from-classmap": []any{"../../../../classes/excluded/"},
+		"exclude-from-classmap": []any{"../../../../classes/excluded/", "../../../../vendor/", "../../../../var/cache/shopware-cli/composer-highest/"},
 	}, data["autoload"])
-	assert.Equal(t, map[string]any{"psr-4": map[string]any{"Acme\\Tests\\": filepath.Join(root, "tests")}}, data["autoload-dev"])
+	assert.Equal(t, map[string]any{"exclude-from-classmap": []any{"../../../../vendor/", "../../../../var/cache/shopware-cli/composer-highest/"}, "psr-4": map[string]any{"Acme\\Tests\\": filepath.Join(root, "tests")}}, data["autoload-dev"])
 
 	// Exclusions must still point into the extension if the cache layout changes.
 	for _, mode := range []string{CheckAgainstLowest, CheckAgainstHighest} {
@@ -87,6 +88,55 @@ func TestValidationComposerJSONAdvisoryBlocking(t *testing.T) {
 		assert.Equal(t, "report", data.Config.Audit["abandoned"])
 		assert.Equal(t, "8.3", data.Config.Platform["php"])
 		assert.Equal(t, map[string]any{"malware": map[string]any{"block": true}}, data.Config.Policy)
+	}
+}
+
+func TestValidationComposerClassmapIsolation(t *testing.T) {
+	for _, tool := range []string{"composer", "php"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s is required to check Composer autoloading", tool)
+		}
+	}
+	t.Setenv("COMPOSER_HOME", t.TempDir())
+	t.Setenv("COMPOSER_DISABLE_NETWORK", "1")
+	for _, mode := range []string{CheckAgainstLowest, CheckAgainstHighest} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			workDir := filepath.Join(root, extension.ValidationCacheDir, "composer-"+mode)
+			otherMode := CheckAgainstLowest
+			if mode == CheckAgainstLowest {
+				otherMode = CheckAgainstHighest
+			}
+			for file, contents := range map[string]string{
+				"src/Extension.php":           "<?php class ExtensionSource {}",
+				"tests/Extension.php":         "<?php class ExtensionTest {}",
+				"src/Excluded.php":            "<?php class ExcludedSource {}",
+				"vendor/local/Dependency.php": "<?php class LocalDependency {}",
+				filepath.Join(extension.ValidationCacheDir, "composer-"+otherMode, "vendor/Other.php"):                 "<?php class OtherBaseline {}",
+				filepath.Join(extension.ValidationCacheDir, "composer-"+mode, "vendor/acme/dependency/Dependency.php"): "<?php class CachedDependency {}",
+				filepath.Join(extension.ValidationCacheDir, "composer-"+mode, "vendor/composer/installed.json"):        `{"packages":[{"name":"acme/dependency","version":"1.0.0","install-path":"../acme/dependency","autoload":{"classmap":["Dependency.php"]}}],"dev":true,"dev-package-names":[]}`,
+			} {
+				file = filepath.Join(root, file)
+				require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o755))
+				require.NoError(t, os.WriteFile(file, []byte(contents), 0o644))
+			}
+			manifest, err := validationComposerJSON([]byte(`{
+				"name":"acme/extension",
+				"autoload":{"classmap":["."],"exclude-from-classmap":["/src/Excluded.php"]},
+				"autoload-dev":{"classmap":["."]},
+				"config":{"classmap-authoritative":true}
+			}`), root, mode)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(workDir, "composer.json"), manifest, 0o644))
+			cmd := exec.CommandContext(t.Context(), "composer", "dump-autoload", "--no-plugins", "--no-scripts", "--no-interaction")
+			cmd.Dir = workDir
+			output, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s", output)
+			cmd = exec.CommandContext(t.Context(), "php", "-r", `require $argv[1]; foreach (['ExtensionSource', 'ExtensionTest', 'CachedDependency', 'LocalDependency', 'OtherBaseline', 'ExcludedSource'] as $class) { if (class_exists($class)) { echo $class, "\n"; } }`, filepath.Join(workDir, "vendor/autoload.php"))
+			output, err = cmd.CombinedOutput()
+			require.NoError(t, err, "%s", output)
+			assert.ElementsMatch(t, []string{"ExtensionSource", "ExtensionTest", "CachedDependency"}, strings.Fields(string(output)))
+		})
 	}
 }
 
