@@ -478,18 +478,18 @@ func TestRectorDependenciesAndReporting(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("RECTOR_ROOT", root)
-			fakeTool(t, "composer", `printf '%s' "$* advisories=$COMPOSER_POLICY_ADVISORIES_BLOCK" > "$RECTOR_ROOT/composer-args"
+			fakeTools(t, map[string]string{
+				"composer": `printf '%s' "$* advisories=$COMPOSER_POLICY_ADVISORIES_BLOCK" > "$RECTOR_ROOT/composer-args"
 /bin/mkdir -p vendor/composer
 printf '{"packages":[{"name":"shopware/core","version":"6.7.0.0"}]}' > vendor/composer/installed.json
 : > vendor/autoload.php
-`)
-			composerPath := os.Getenv("PATH")
-			fakeTool(t, "php", `printf '%s\n' "$@" > "$RECTOR_ROOT/rector-args"
+`,
+				"php": `printf '%s\n' "$@" > "$RECTOR_ROOT/rector-args"
 printf '%s' "$PWD" > "$RECTOR_ROOT/rector-cwd"
 printf '{"totals":{"changed_files":0,"errors":0}}'
 exit "$RECTOR_EXIT"
-`)
-			t.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+composerPath)
+`,
+			})
 			t.Setenv("RECTOR_EXIT", "0")
 			if scenario.fail {
 				t.Setenv("RECTOR_EXIT", "1")
