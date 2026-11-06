@@ -417,6 +417,7 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// The program resumes after the interactive setup; refresh the Domains
 		// status and the setup-health checks it affects.
 		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
+		m.overview.certTrusted = overviewCertTrusted(m.projectRoot)
 		m.overview.healthLoading = true
 		return m, loadSetupHealth(m.commandContext(), m.projectRoot, m.executor)
 
