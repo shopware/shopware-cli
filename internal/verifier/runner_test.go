@@ -174,7 +174,7 @@ func TestRunToolsSetsCPUTags(t *testing.T) {
 	})
 
 	tags := tracking.CommandTags()
-	assert.Equal(t, strconv.Itoa(runtime.GOMAXPROCS(0)), tags[tracking.TagCPUCount])
+	assert.Equal(t, strconv.Itoa(runtime.NumCPU()), tags[tracking.TagCPUCount])
 	cpu, err := strconv.ParseInt(tags[tracking.TagCPUMS], 10, 64)
 	require.NoError(t, err)
 	assert.Positive(t, cpu)
@@ -195,5 +195,5 @@ func TestRunToolsLeavesOutCPUTimeWithoutChildCPUTime(t *testing.T) {
 
 	tags := tracking.CommandTags()
 	assert.Equal(t, "marker", tags[tracking.TagCPUMS])
-	assert.Equal(t, strconv.Itoa(runtime.GOMAXPROCS(0)), tags[tracking.TagCPUCount])
+	assert.Equal(t, strconv.Itoa(runtime.NumCPU()), tags[tracking.TagCPUCount])
 }

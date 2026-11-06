@@ -38,7 +38,8 @@ func RunTools[T Tool](
 	for key, value := range configTelemetryTags(config) {
 		tracking.SetCommandTag(key, value)
 	}
-	tracking.SetCommandTag(tracking.TagCPUCount, strconv.Itoa(runtime.GOMAXPROCS(0)))
+	// Logical CPUs, not GOMAXPROCS: that is a scheduler setting, which rounds container limits up.
+	tracking.SetCommandTag(tracking.TagCPUCount, strconv.Itoa(runtime.NumCPU()))
 	var cpuTime atomic.Int64
 	results := make([]validation.ToolReport, len(tools), len(tools)+len(skipped))
 	sourceRoot := validation.ResolveSourceRoot(config.RootDir)
