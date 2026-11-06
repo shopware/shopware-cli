@@ -92,9 +92,7 @@ type watcherRun struct {
 // trackEvent sends one anonymous usage event without blocking the UI: the
 // send (including DNS resolution) runs in a goroutine with a short timeout.
 var trackEvent = func(name string, tags map[string]string) {
-	go func() {
-		trackEventNow(name, tags)
-	}()
+	go trackEventNow(name, tags)
 }
 
 // trackEventNow sends synchronously. Quit paths must use it — a goroutine
