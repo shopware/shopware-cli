@@ -1,0 +1,21 @@
+id: cobra-empty-long
+language: Go
+severity: error
+message: Omit empty Long fields from commands
+note: See docs/COMMAND_CONVENTIONS.md
+
+# Match Go syntax, including the enclosing command, rather than source text.
+rule:
+  pattern:
+    context: 'cobra.Command{Long: ""}'
+    selector: keyed_element
+  inside:
+    kind: literal_value
+    inside:
+      pattern: cobra.Command{$$$FIELDS}
+
+fix:
+  template: ''
+  # ast-grep requires a text matcher for this unnamed punctuation token.
+  expandEnd:
+    regex: '^,$'

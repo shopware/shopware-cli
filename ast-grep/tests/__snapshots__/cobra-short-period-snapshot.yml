@@ -1,0 +1,63 @@
+id: cobra-short-period
+snapshots:
+  "var cmd = &cobra.Command{\n  Use: \"build\",\n  Short: \"Build assets.\", // Keep this comment\n  Long: \"Keep this description.\",\n}\n":
+    fixed: |
+      var cmd = &cobra.Command{
+        Use: "build",
+        Short: "Build assets", // Keep this comment
+        Long: "Keep this description.",
+      }
+    labels:
+    - source: "\"Build assets.\""
+      style: primary
+      start: 51
+      end: 66
+    - source: |-
+        cobra.Command{
+          Use: "build",
+          Short: "Build assets.", // Keep this comment
+          Long: "Keep this description.",
+        }
+      style: secondary
+      start: 11
+      end: 124
+    - source: |-
+        {
+          Use: "build",
+          Short: "Build assets.", // Keep this comment
+          Long: "Keep this description.",
+        }
+      style: secondary
+      start: 24
+      end: 124
+    - source: "Short: \"Build assets.\""
+      style: secondary
+      start: 44
+      end: 66
+    - source: "\"Build assets.\""
+      style: secondary
+      start: 51
+      end: 66
+  "var cmd = &cobra.Command{Short: \"Build assets.\"}":
+    fixed: "var cmd = &cobra.Command{Short: \"Build assets\"}"
+    labels:
+    - source: "\"Build assets.\""
+      style: primary
+      start: 32
+      end: 47
+    - source: "cobra.Command{Short: \"Build assets.\"}"
+      style: secondary
+      start: 11
+      end: 48
+    - source: "{Short: \"Build assets.\"}"
+      style: secondary
+      start: 24
+      end: 48
+    - source: "Short: \"Build assets.\""
+      style: secondary
+      start: 25
+      end: 47
+    - source: "\"Build assets.\""
+      style: secondary
+      start: 32
+      end: 47

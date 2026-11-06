@@ -12,6 +12,9 @@ go = "1.27"
 # Keep this in sync with the version in .github/workflows/lint.yml.
 golangci-lint = "2.15.0"
 
+# Structural command convention checks, shared by local tasks and CI.
+ast-grep = "0.51.1"
+
 # Workflow tools are shared by local tasks and CI; checksums are in mise.lock.
 jactionlint = "2.4.0"
 shellcheck = "0.11.0"
@@ -60,8 +63,8 @@ description = "Run the Go vet checks"
 run = "go vet ./..."
 
 [tasks.lint]
-description = "Lint Go and Markdown files"
-depends = ["lint-go", "lint-markdown"]
+description = "Lint Go, Markdown, and command conventions"
+depends = ["lint-go", "lint-markdown", "lint-conventions"]
 
 [tasks.lint-go]
 description = "Lint Go source files"
@@ -69,7 +72,23 @@ run = "golangci-lint run ./... --timeout 4m"
 
 [tasks.check]
 description = "Run formatting, build, tests, vet, and lint checks"
-depends = ["format-check", "build", "test", "vet", "lint", "lint-workflows"]
+depends = ["format-check", "build", "test", "vet", "lint", "lint-workflows", "test-conventions"]
+
+[tasks.lint-conventions]
+description = "Check command conventions"
+run = "ast-grep scan cmd/"
+
+[tasks.test-conventions]
+description = "Test command convention rules and fixes"
+run = [
+    "ast-grep test --skip-snapshot-tests",
+    "ast-grep test --filter cobra-short-period",
+    "bash scripts/test-convention-fixes.sh",
+]
+
+[tasks.fix-conventions]
+description = "Apply command convention fixes"
+run = "ast-grep scan cmd/ --update-all"
 
 [tasks.lint-workflows]
 description = "Validate GitHub Actions workflows"

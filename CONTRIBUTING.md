@@ -75,15 +75,46 @@ mise run build        # Build the shopware-cli binary
 mise run test         # Run the network-isolated test suite (Linux/macOS only)
 mise run test-unit    # Run Go tests without the sandbox wrapper (works everywhere)
 mise run vet          # Run go vet
-mise run lint         # Lint Go and Markdown files
+mise run lint         # Lint Go, Markdown, and command conventions
 mise run format-markdown # Format Markdown and report remaining lint findings
 mise run lint-markdown # Check Markdown without changing files
 mise run lint-workflows # Validate GitHub Actions workflows
+mise run lint-conventions # Check command conventions
+mise run test-conventions # Test convention rules and their fixes
+mise run fix-conventions # Apply convention fixes locally
 ```
 
 For machine-specific settings, create `mise.local.toml`. This file is ignored
 by Git and should not contain secrets that belong in a dedicated secret
 manager.
+
+### Command convention rules
+
+ast-grep checks Cobra command literals under `cmd/` against a small subset of
+[the command conventions](docs/COMMAND_CONVENTIONS.md). It currently reports
+trailing periods in plain quoted `Short` descriptions and empty
+`Long: ""` fields. The `Short` rule skips escapes, raw strings, ellipses, and
+indirect values such as `generator.Short`. These structural checks expect the
+usual `cobra.Command` spelling; they do not resolve import or type aliases.
+
+Run `mise run fix-conventions` to apply fixes, review the diff, then run
+`mise run format-go` if field removal needs formatting. CI only checks rules
+and code; it never applies fixes or updates snapshots.
+
+To add a rule, create a YAML file in `ast-grep/rules/` and a matching test file
+in `ast-grep/tests/` with the same rule ID and a few valid and invalid Go
+examples. To update the trailing-period rule's snapshots, run:
+
+```sh
+mise exec -- ast-grep test --filter cobra-short-period --update-all
+```
+
+Review the diagnostic ranges and `fixed` output in the snapshot diff.
+For empty `Long`, ast-grep's snapshot
+output does not account for comma removal through `expandEnd`, so
+`scripts/test-convention-fixes.sh` checks actual fixes against the fixtures in
+`ast-grep/tests/fixes/`. Run `mise run test-conventions` to check both rules,
+their fixes, and fix idempotence without updating expectations.
 
 ## Reviews
 
