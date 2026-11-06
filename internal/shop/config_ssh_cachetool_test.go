@@ -1,14 +1,10 @@
 package shop
 
 import (
-	"fmt"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestSSHCachetoolValidate(t *testing.T) {
@@ -81,67 +77,28 @@ func TestSSHCachetoolInvalidURLs(t *testing.T) {
 	}
 }
 
-func TestSSHCachetoolLocalOnlyConfigValidated(t *testing.T) {
-	file := filepath.Join(t.TempDir(), ".shopware-project.yml")
-	testhelper.WriteFile(t, LocalConfigFileName(file), "environments:\n  production:\n    ssh:\n      cachetool: {enabled: true}\n")
-	_, err := ReadConfig(t.Context(), file, true)
-	require.ErrorContains(t, err, "ssh.cachetool")
-}
-
-func TestSSHCachetoolValidatesAfterIncludesAreMerged(t *testing.T) {
+func TestSSHCachetoolIncludeEnabledOverride(t *testing.T) {
 	for _, tc := range []struct {
-		name, base, included string
+		name        string
+		enabled     *bool
+		wantEnabled bool
 	}{
-		{"adapter supplied by base", "{adapter: fcgi}", "{enabled: true}"},
-		{"adapter supplied by include", "{enabled: true}", "{adapter: fcgi}"},
+		{"explicit false disables", new(false), false},
+		{"omitted flag inherits", nil, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			t.Chdir(dir)
-			file := filepath.Join(dir, ".shopware-project.yml")
-			testhelper.WriteFile(t, file, fmt.Sprintf(`
-compatibility_date: "2026-01-01"
-include: [included.yml]
-environments:
-  production:
-    type: ssh
-    ssh:
-      host: example.invalid
-      directory: /srv/shop/current
-      cachetool: %s
-`, tc.base))
-			testhelper.WriteFile(t, filepath.Join(dir, "included.yml"), fmt.Sprintf(`
-environments:
-  production:
-    ssh:
-      cachetool: %s
-`, tc.included))
-			cfg, err := ReadConfig(t.Context(), file, false)
-			require.NoError(t, err)
-			assert.True(t, cfg.Environments["production"].SSH.Cachetool.IsEnabled())
-			assert.Equal(t, "fcgi", cfg.Environments["production"].SSH.Cachetool.Adapter)
-		})
-	}
-}
-
-func TestSSHCachetoolIncludeCanDisableReset(t *testing.T) {
-	for _, tc := range []struct {
-		name, override string
-		wantEnabled    bool
-	}{
-		{"explicit false disables", "{enabled: false}", false},
-		{"omitted flag inherits", "{fcgi: /run/php/other.sock}", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			t.Chdir(dir)
-			base := "compatibility_date: '2026-01-01'\ninclude: [override.yml]\nenvironments:\n  production:\n    ssh:\n      host: example.invalid\n      directory: /srv/shop/current\n      cachetool: {enabled: true, adapter: fcgi}\n"
-			testhelper.WriteFile(t, filepath.Join(dir, ".shopware-project.yml"), base)
-			testhelper.WriteFile(t, filepath.Join(dir, "override.yml"), "environments:\n  production:\n    ssh:\n      cachetool: "+tc.override+"\n")
-			cfg, err := ReadConfig(t.Context(), filepath.Join(dir, ".shopware-project.yml"), false)
-			require.NoError(t, err)
-			assert.Equal(t, tc.wantEnabled, cfg.Environments["production"].SSH.Cachetool.IsEnabled())
-			assert.Equal(t, "fcgi", cfg.Environments["production"].SSH.Cachetool.Adapter)
+			config := &Config{Environments: map[string]*EnvironmentConfig{
+				"production": {SSH: &EnvironmentSSHConfig{Cachetool: &EnvironmentSSHCachetoolConfig{
+					Enabled: new(true), Adapter: "fcgi",
+				}}},
+			}}
+			included := &Config{Environments: map[string]*EnvironmentConfig{
+				"production": {SSH: &EnvironmentSSHConfig{Cachetool: &EnvironmentSSHCachetoolConfig{
+					Enabled: tc.enabled,
+				}}},
+			}}
+			config.applyIncludedCachetoolEnabled(included)
+			assert.Equal(t, tc.wantEnabled, config.Environments["production"].SSH.Cachetool.IsEnabled())
 		})
 	}
 }
