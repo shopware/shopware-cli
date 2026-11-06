@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
@@ -72,8 +73,12 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 	}
 	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
 		note := "Shopware " + installed
+		if version := tracking.ReportableShopwareVersion(installed); version != "" {
+			tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
+		}
 		if !config.IsProject {
 			note += " (" + CheckAgainstLowest + ")"
+			tracking.SetCommandTag(tracking.TagCheckAgainst, CheckAgainstLowest)
 		}
 		rulesNote = note + "; " + rulesNote
 	}
