@@ -61,16 +61,18 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 		return ToolSummary{}
 	}
 	result := ToolSummary{}
-	var checkedVersion, mode string
 	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
 		result.Note = "Shopware " + installed
 		if !config.IsProject {
-			mode = CheckAgainstHighest
+			mode := CheckAgainstHighest
 			if config.CheckAgainst == CheckAgainstLowest {
 				mode = CheckAgainstLowest
 			}
 			result.Note += " (" + mode + ")"
-			checkedVersion = tracking.ReportableShopwareVersion(installed)
+			if version := tracking.ReportableShopwareVersion(installed); version != "" {
+				tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
+				tracking.SetCommandTag(tracking.TagCheckAgainst, mode)
+			}
 		}
 	}
 	// All source directories go into one run, so PHPStan knows the classes of
@@ -117,11 +119,6 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	if parsed.Files == nil {
 		execution.Fail(subprocess.ToolError(errors.New("cannot parse phpstan output: missing file results")))
 		return result
-	}
-	// Report the baseline only once PHPStan has analysed against it.
-	if checkedVersion != "" {
-		tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, checkedVersion)
-		tracking.SetCommandTag(tracking.TagCheckAgainst, mode)
 	}
 	for _, message := range parsed.Errors {
 		execution.Fail(subprocess.ToolError(fmt.Errorf("cannot complete phpstan analysis: %s", message)))

@@ -532,7 +532,7 @@ exit "$RECTOR_EXIT"
 				note = "no changes; " + note
 			}
 			assert.Equal(t, note, result.Note)
-			if !scenario.project && !scenario.fail {
+			if !scenario.project {
 				assert.Equal(t, "6.7.0.0", tracking.CommandTags()[tracking.TagCheckedShopwareVersion])
 				assert.Equal(t, CheckAgainstLowest, tracking.CommandTags()[tracking.TagCheckAgainst])
 			}

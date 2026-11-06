@@ -71,22 +71,19 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 	if configFile != path.Join(config.RootDir, "rector.php") {
 		rulesNote = "bundled rules for Shopware " + config.MinShopwareVersion[:3]
 	}
-	var checkedVersion string
 	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
 		note := "Shopware " + installed
 		if !config.IsProject {
 			note += " (" + CheckAgainstLowest + ")"
-			checkedVersion = tracking.ReportableShopwareVersion(installed)
+			if version := tracking.ReportableShopwareVersion(installed); version != "" {
+				tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
+				tracking.SetCommandTag(tracking.TagCheckAgainst, CheckAgainstLowest)
+			}
 		}
 		rulesNote = note + "; " + rulesNote
 	}
 
-	result, reportsComplete := r.fixSources(ctx, config, execution, configFile, autoloadFile, dryRun)
-	// Report the baseline only once Rector has run against it.
-	if reportsComplete && checkedVersion != "" {
-		tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, checkedVersion)
-		tracking.SetCommandTag(tracking.TagCheckAgainst, CheckAgainstLowest)
-	}
+	result := r.fixSources(ctx, config, execution, configFile, autoloadFile, dryRun)
 	if result.Note != "" {
 		result.Note += "; "
 	}
@@ -110,8 +107,6 @@ func (r Rector) getConfigPath(config ToolConfig) (string, error) {
 	), nil
 }
 
-// fixSources runs Rector on each source directory. It also reports whether
-// every run produced a complete report.
 func (r Rector) fixSources(
 	ctx context.Context,
 	config ToolConfig,
@@ -119,15 +114,12 @@ func (r Rector) fixSources(
 	configFile,
 	autoloadFile string,
 	dryRun bool,
-) (ToolSummary, bool) {
+) ToolSummary {
 	changed := make(map[string]struct{})
 	reportsComplete := true
 
 	for _, sourceDirectory := range config.SourceDirectories {
 		report := r.process(ctx, config, execution, configFile, autoloadFile, sourceDirectory, dryRun)
-		if report.Totals == nil {
-			reportsComplete = false
-		}
 		if dryRun {
 			for _, file := range report.FileDiffs {
 				execution.AddFindings(file.pendingFindings(config.RootDir)...)
@@ -135,6 +127,9 @@ func (r Rector) fixSources(
 			continue
 		}
 
+		if report.Totals == nil {
+			reportsComplete = false
+		}
 		// A write report lists applied edits. Remaining source errors have
 		// already been reported by process and are the only normal findings.
 		for _, file := range report.FileDiffs {
@@ -143,10 +138,10 @@ func (r Rector) fixSources(
 	}
 
 	if !dryRun && reportsComplete {
-		return ToolSummary{Note: fileChangeNote(len(changed), "fixed")}, true
+		return ToolSummary{Note: fileChangeNote(len(changed), "fixed")}
 	}
 
-	return ToolSummary{}, reportsComplete
+	return ToolSummary{}
 }
 
 // process interprets one Rector invocation. Syntax errors in analyzed source
