@@ -76,7 +76,7 @@ func TestClassifyInstallFailure_KnownPatterns(t *testing.T) {
 		name     string
 		step     string
 		line     string
-		category installFailureCategory
+		category failureCategory
 	}{
 		{"memory limit", "theme:change", "PHP Fatal error: Allowed memory size of 134217728 bytes exhausted", installFailurePHP},
 		{"fatal PHP error", "theme:change", "PHP Fatal error: Call to undefined method", installFailurePHP},

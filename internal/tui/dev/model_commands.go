@@ -154,12 +154,14 @@ func readFromChan(ch <-chan string) tea.Cmd {
 	)
 }
 
-func runComposeCommand(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
+func runComposeCommand(ctx context.Context, projectRoot string, args []string, resultFn func(output []string, err error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
 	lineChan := make(chan string, tui.StreamBufferSize)
 
 	doneCmd = func() tea.Msg {
 		cmd := composeCommand(ctx, projectRoot, args...)
-		return resultFn(tui.StreamCmdOutput(cmd, lineChan, false))
+		output, err := tui.DrainCmdOutput(cmd, lineChan, false)
+		close(lineChan)
+		return resultFn(output, err)
 	}
 
 	return lineChan, readFromChan(lineChan), doneCmd
@@ -171,7 +173,7 @@ func (m *Model) startContainers() tea.Cmd {
 		m.commandContext(),
 		m.projectRoot,
 		[]string{"up", "-d"},
-		func(err error) tea.Msg { return dockerStartedMsg{err: err} },
+		func(output []string, err error) tea.Msg { return dockerStartedMsg{err: err, output: output} },
 	)
 	m.dockerOutChan = ch
 	return tea.Batch(outputCmd, doneCmd)
@@ -213,8 +215,8 @@ func (m *Model) restartContainersForConfig() tea.Cmd {
 		if err != nil {
 			return configRestartDoneMsg{err: err}
 		}
-		cmd := composeCommand(ctx, projectRoot, "up", "-d")
-		return configRestartDoneMsg{err: cmd.Run()}
+		output, err := composeCommand(ctx, projectRoot, "up", "-d").CombinedOutput()
+		return configRestartDoneMsg{err: err, output: strings.Split(string(output), "\n")}
 	}
 }
 
@@ -225,7 +227,7 @@ func (m *Model) stopContainers() tea.Cmd {
 		m.cleanupContext(),
 		m.projectRoot,
 		[]string{"down"},
-		func(err error) tea.Msg { return dockerStoppedMsg{err: err} },
+		func(_ []string, err error) tea.Msg { return dockerStoppedMsg{err: err} },
 	)
 	m.dockerOutChan = ch
 	return tea.Batch(outputCmd, doneCmd)

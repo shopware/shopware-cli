@@ -206,20 +206,22 @@ func TestTaskTagsRoundTrip(t *testing.T) {
 
 func TestDockerStartTagsRequireBegin(t *testing.T) {
 	tel := newTelemetryState(true)
-	_, ok := tel.dockerStartTags(nil)
+	_, ok := tel.dockerStartTags(nil, nil)
 	assert.False(t, ok)
 
 	tel.beginDockerStart()
-	tags, ok := tel.dockerStartTags(assert.AnError)
+	tags, ok := tel.dockerStartTags(assert.AnError, []string{"Error response from daemon: Bind for 0.0.0.0:3306 failed: port is already allocated"})
 	assert.True(t, ok)
 	assert.Equal(t, "initial", tags["trigger"])
 	assert.Equal(t, "failure", tags["result"])
+	assert.Equal(t, "port_in_use", tags["failure_category"])
 
 	tel.beginConfigRestart()
-	tags, ok = tel.configRestartTags(nil)
+	tags, ok = tel.configRestartTags(nil, nil)
 	assert.True(t, ok)
 	assert.Equal(t, "config_change", tags["trigger"])
 	assert.Equal(t, "success", tags["result"])
+	assert.NotContains(t, tags, "failure_category")
 }
 
 func TestHealthEventTagsOnePerCheck(t *testing.T) {
@@ -280,9 +282,9 @@ func TestNilTelemetryStateIsSafe(t *testing.T) {
 	assert.False(t, ok)
 	_, ok = tel.taskTags("success")
 	assert.False(t, ok)
-	_, ok = tel.dockerStartTags(nil)
+	_, ok = tel.dockerStartTags(nil, nil)
 	assert.False(t, ok)
-	_, ok = tel.configRestartTags(nil)
+	_, ok = tel.configRestartTags(nil, nil)
 	assert.False(t, ok)
 }
 
