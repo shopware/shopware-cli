@@ -126,7 +126,7 @@ arguments, paths, or package names. They are included for failed starts too.
 | ----------------------------- | ------------------------------------- |
 | PHPStan or Rector preparation | `composer_require`, `composer_update` |
 | PHPStan                       | `analyse`                             |
-| Rector                        | `fix`                                 |
+| Rector                        | `check` (dry run), `fix`               |
 | ESLint, Stylelint             | `check`, `fix`                        |
 | Prettier, PHP-CS-Fixer        | `check` (dry run), `format`           |
 

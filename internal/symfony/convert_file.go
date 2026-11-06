@@ -1,6 +1,8 @@
 package symfony
 
 import (
+	"encoding/xml"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -84,7 +86,7 @@ func (r *Routes) toYAML() ([]byte, error) {
 func ConvertServicesXMLFile(path string) (map[string]string, error) {
 	return convertXMLConfigFile(path, func(content []byte) (convertibleXMLConfig, error) {
 		return ParseServicesXML(content)
-	})
+	}, false)
 }
 
 // ConvertRoutesXMLFile converts a Symfony routes.xml file and any local XML
@@ -93,15 +95,38 @@ func ConvertServicesXMLFile(path string) (map[string]string, error) {
 func ConvertRoutesXMLFile(path string) (map[string]string, error) {
 	return convertXMLConfigFile(path, func(content []byte) (convertibleXMLConfig, error) {
 		return ParseRoutesXML(content)
-	})
+	}, false)
 }
 
-func convertXMLConfigFile(path string, parse func([]byte) (convertibleXMLConfig, error)) (map[string]string, error) {
+// PlanServicesXMLFile validates conversion of a services file and its local XML
+// imports, returning the planned XML-to-YAML paths without changing any files.
+func PlanServicesXMLFile(path string) (map[string]string, error) {
+	return convertXMLConfigFile(path, func(content []byte) (convertibleXMLConfig, error) {
+		return ParseServicesXML(content)
+	}, true)
+}
+
+// PlanRoutesXMLFile validates conversion of a routes file and its local XML
+// imports, returning the planned XML-to-YAML paths without changing any files.
+func PlanRoutesXMLFile(path string) (map[string]string, error) {
+	return convertXMLConfigFile(path, func(content []byte) (convertibleXMLConfig, error) {
+		return ParseRoutesXML(content)
+	}, true)
+}
+
+func convertXMLConfigFile(
+	path string,
+	parse func([]byte) (convertibleXMLConfig, error),
+	dryRun bool,
+) (map[string]string, error) {
 	contents := map[string][]byte{}
 	targets := map[string]string{}
 
 	if err := planConversion(path, parse, contents, targets); err != nil {
 		return nil, err
+	}
+	if dryRun {
+		return targets, nil
 	}
 
 	for xmlPath, target := range targets {
@@ -131,7 +156,12 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 
 	config, err := parse(content)
 	if err != nil {
-		return fmt.Errorf("%s: %w", path, err)
+		kind := XMLConversionUnsupported
+		var syntaxError *xml.SyntaxError
+		if errors.As(err, &syntaxError) {
+			kind = XMLConversionInvalidXML
+		}
+		return &XMLConversionError{Path: path, Kind: kind, Err: err}
 	}
 
 	withoutExtension := strings.TrimSuffix(path, filepath.Ext(path))
@@ -139,7 +169,9 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 
 	for _, existing := range []string{target, withoutExtension + ".yml"} {
 		if _, err := os.Stat(existing); err == nil {
-			return fmt.Errorf("cannot convert %s: %s exists already", path, existing)
+			return &XMLConversionError{Path: path, Kind: XMLConversionTargetExists, Err: fmt.Errorf("%s exists already", existing)}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
 
@@ -156,6 +188,9 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 
 		importPath := filepath.Join(filepath.Dir(path), filepath.FromSlash(resource))
 		if _, err := os.Stat(importPath); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
 			continue
 		}
 
@@ -172,7 +207,7 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 
 	converted, err := config.toYAML()
 	if err != nil {
-		return fmt.Errorf("%s: %w", path, err)
+		return &XMLConversionError{Path: path, Kind: XMLConversionUnsupported, Err: err}
 	}
 
 	contents[path] = converted
