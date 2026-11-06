@@ -106,7 +106,8 @@ func (r Rector) fixSources(
 	ctx context.Context,
 	config ToolConfig,
 	execution *ToolExecution,
-	configFile, autoloadFile string,
+	configFile,
+	autoloadFile string,
 	dryRun bool,
 ) ToolSummary {
 	changed := make(map[string]struct{})
