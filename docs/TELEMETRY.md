@@ -161,7 +161,10 @@ overall CLI usage.
 | `failed_tools` | Tools that failed, sorted and comma-separated; only with `result=failure` on commands that report tool results (`validate`, `fix`, `format`). A tool fails when it cannot run or breaks while running, and on `fix` also when ESLint or Stylelint leave problems they cannot fix | `eslint` |
 | `tools_with_error_findings` | Tools that reported error findings, sorted and comma-separated; only with `result=failure` on the same commands. Warnings and ignored findings do not count | `builtin,phpstan` |
 | `failed_step` | The step a failed or cancelled `project create` stopped at; only with `result=failure` or `result=cancelled`. Absent when the run failed before the first step, for example on an unknown flag. Values are listed below | `composer_install` |
-| `extension_count` | How many extensions the command checks; only on `project validate`. Bundles configured in the project are not counted, and extension names are never sent | `12` |
+| `extension_count` | How many extensions the tools work on, on commands that report tool results (`validate`, `fix`, `format`). Bundles configured in the project are not counted, and extension names are never sent | `12` |
+| `source_dir_count` | How many source folders the tools work on, including those of configured bundles; on the same commands | `14` |
+| `admin_dir_count` | How many Administration folders the tools work on; on the same commands | `3` |
+| `storefront_dir_count` | How many Storefront folders the tools work on; on the same commands | `2` |
 
 Notes:
 
@@ -177,6 +180,8 @@ Notes:
   run inside the CLI and send no such event. A command that fails before its
   tools run, for example because Node.js is too old, has neither tag. Findings,
   rule identifiers, paths and tool output are never sent.
+- The counts are sent once the tools start, so a command that fails before has
+  none. Folder names and paths are never sent.
 - The command _name_ is captured (e.g. `project.create`), but **not** its
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not
