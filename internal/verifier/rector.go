@@ -110,6 +110,8 @@ func (r Rector) getConfigPath(config ToolConfig) (string, error) {
 	), nil
 }
 
+// fixSources runs Rector on each source directory. It also reports whether
+// every run produced a complete report.
 func (r Rector) fixSources(
 	ctx context.Context,
 	config ToolConfig,
