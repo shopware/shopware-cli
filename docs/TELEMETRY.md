@@ -116,6 +116,7 @@ respects `DO_NOT_TRACK`.
 | `stdout_bytes` | Number of bytes captured from stdout                                                                       |
 | `stderr_bytes` | Number of bytes captured from stderr                                                                       |
 | `duration_ms`  | Elapsed wall-clock milliseconds around command execution, including startup; may be zero for fast attempts |
+| `cpu_ms`       | CPU milliseconds the process used, including child processes; omitted for failed starts and on Windows     |
 | `started`      | `"true"` if the process started, `"false"` if it failed to start                                           |
 | `exit_code`    | Exit code when available; omitted for failed starts and signal termination                                 |
 
@@ -126,7 +127,7 @@ arguments, paths, or package names. They are included for failed starts too.
 | ----------------------------- | ------------------------------------- |
 | PHPStan or Rector preparation | `composer_require`, `composer_update` |
 | PHPStan                       | `analyse`                             |
-| Rector                        | `fix`                                 |
+| Rector                        | `check` (dry run), `fix`               |
 | ESLint, Stylelint             | `check`, `fix`                        |
 | Prettier, PHP-CS-Fixer        | `check` (dry run), `format`           |
 
@@ -167,6 +168,8 @@ overall CLI usage.
 | `storefront_dir_count` | How many Storefront folders the tools work on; on the same commands | `2` |
 | `checked_shopware_version` | The Shopware version `extension validate` checked against, as installed for PHPStan. Accepts a release, a release candidate or `dev-trunk`; omitted otherwise and when PHPStan does not complete its analysis | `6.6.0.0` |
 | `check_against` | Which end of the extension's Shopware constraint was checked; only with `checked_shopware_version` | `highest` / `lowest` |
+| `cpu_ms` | CPU time the tools used, in milliseconds, including the Composer setup for PHPStan and Rector; on the same commands, except on Windows. Checks that run inside the CLI, such as `builtin`, are not included | `48210` |
+| `cpu_count` | How many logical CPU cores the CLI can run on; on the same commands. Container CPU limits are not reflected | `8` |
 
 Notes:
 
@@ -182,8 +185,12 @@ Notes:
   run inside the CLI and send no such event. A command that fails before its
   tools run, for example because Node.js is too old, has neither tag. Findings,
   rule identifiers, paths and tool output are never sent.
-- The counts are sent once the tools start, so a command that fails before has
-  none. Folder names and paths are never sent.
+- The counts and CPU tags are sent once the tools start, so a command that
+  fails before has none. Folder names and paths are never sent.
+- `cpu_ms` is not sent on Windows, where the CPU time of the processes a tool
+  starts cannot be counted.
+- Comparing `cpu_ms` with `duration_ms` shows whether a run kept the CPU busy
+  or mostly waited, for example on downloads.
 - The command _name_ is captured (e.g. `project.create`), but **not** its
   arguments, flags, paths, or any free-text input. `checked_shopware_version`
   and `check_against` are the version and mode validation actually used, not

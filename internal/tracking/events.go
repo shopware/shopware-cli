@@ -75,6 +75,10 @@ const (
 	// --check-against mode, set by PHPStan with SetCommandTag.
 	TagCheckedShopwareVersion = "checked_shopware_version"
 	TagCheckAgainst           = "check_against"
+	// CPU use of the same runs: the tool subprocesses' CPU time and the logical CPUs the CLI can run on.
+	// TagCPUMS is also on EventToolSubprocess, for that one subprocess, and is not sent on Windows.
+	TagCPUMS    = "cpu_ms"
+	TagCPUCount = "cpu_count"
 
 	// EventProjectCreate
 	TagVersion           = "version"
