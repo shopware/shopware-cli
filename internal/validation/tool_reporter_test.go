@@ -66,6 +66,7 @@ func TestToolReportOutcomes(t *testing.T) {
 				]`, string(report["tools"]))
 				assert.Empty(t, stderr, "JSON already contains execution errors")
 			case "gitlab":
+				assert.Contains(t, stderr, tools[0].Note)
 				var issues []GitLabCodeQualityIssue
 				require.NoError(t, json.Unmarshal([]byte(stdout), &issues))
 				require.Len(t, issues, 2)
@@ -74,6 +75,7 @@ func TestToolReportOutcomes(t *testing.T) {
 				assert.Contains(t, stderr, "cannot parse output")
 				assert.Contains(t, stderr, "process diagnostic")
 			case "junit":
+				assert.Contains(t, stderr, tools[0].Note)
 				var suite JUnitTestSuite
 				require.NoError(t, xml.Unmarshal([]byte(stdout), &suite))
 				assert.Equal(t, 4, suite.Tests)

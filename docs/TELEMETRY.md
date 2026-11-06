@@ -96,7 +96,9 @@ All events share a common envelope:
 | `tags`      | Event-specific key/value pairs (all string values), described below |
 
 Every event's `tags` also carry `cli_version`, the version of `shopware-cli`
-that sent it, so dev builds can be excluded for every event.
+that sent it, so dev builds can be excluded for every event. They also carry
+`session_id`, a random ID for one run of the CLI that is not saved on the
+machine, so the events of the same run can be linked.
 
 There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
@@ -158,6 +160,7 @@ overall CLI usage.
 | `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` unless `--docker` was passed explicitly | `compose_plugin_missing,docker_not_running` |
 | `failed_tools` | Tools that failed, sorted and comma-separated; only with `result=failure` on commands that report tool results (`validate`, `fix`, `format`). A tool fails when it cannot run or breaks while running, and on `fix` also when ESLint or Stylelint leave problems they cannot fix | `eslint` |
 | `tools_with_error_findings` | Tools that reported error findings, sorted and comma-separated; only with `result=failure` on the same commands. Warnings and ignored findings do not count | `builtin,phpstan` |
+| `failed_step` | The step a failed or cancelled `project create` stopped at; only with `result=failure` or `result=cancelled`. Absent when the run failed before the first step, for example on an unknown flag. Values are listed below | `composer_install` |
 
 Notes:
 
@@ -182,6 +185,31 @@ Notes:
   `command_name` values that start with `extension.add.` — for example
   `extension.add.admin_module` and `extension.add.store_api_route`. Entity
   names and other generator arguments are never sent.
+
+`failed_step` values for `project create`, in the order the steps run:
+
+| Value | The step that failed |
+| --- | --- |
+| `validate_compose_project_name` | Checking the `--compose-project-name` value |
+| `validate_docker` | Checking that Docker is available, when `--docker` was passed |
+| `validate_php_version` | Checking that `--php-version` is a supported PHP version |
+| `packagist_fetch_versions` | Fetching the available Shopware versions from Packagist |
+| `wizard_questions` | Running the interactive questions |
+| `wizard_docker_check` | Re-checking Docker after the questions, when `--docker` was passed |
+| `wizard_confirm` | Running the final confirmation prompt |
+| `preflight_resolve_version` | Resolving the requested Shopware version |
+| `preflight_validate_project_settings` | Checking the project folder, deployment method, CI system and Compose project name |
+| `preflight_php_version` | Checking or finding a PHP version that the selected Shopware version supports |
+| `preflight_dependencies` | Checking the required dependencies, such as Docker or PHP |
+| `preflight_security_advisories` | Checking the selected Shopware version for known security advisories |
+| `preflight_incompatibilities` | Asking whether to continue despite a known incompatibility of the system |
+| `scaffold` | Creating the project folder and writing `composer.json`, `.env` and the other initial files |
+| `composer_install` | Installing the Composer dependencies |
+| `composer_security_advisories` | Handling a Composer install blocked by security advisories |
+| `docker_setup` | Preparing the Docker environment from the installed project |
+| `docker_setup_write_compose` | Writing the Docker Compose file |
+| `write_config` | Writing `.config/shopware-project.yml` |
+| `git_init` | Initializing the Git repository |
 
 ### `shopware_cli.project.create` — project scaffolding
 
@@ -353,20 +381,34 @@ the check's level is sent, never the underlying values.
 | `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker`             |
 | `result` | The check's level                                                                         | `ok` / `warn` / `critical` |
 
+### `shopware_cli.project.dev.session_start` — dashboard opened
+
+Sent when the dashboard opens. The `shopware_cli.project.dev.session` event
+that ends the session carries the same `session_id`, so we can tell sessions
+that ended normally from those that crashed or were closed abruptly.
+
+| Tag        | Meaning                         | Example            |
+| ---------- | ------------------------------- | ------------------ |
+| `executor` | Environment the project runs in | `docker` / `local` |
+
 ### `shopware_cli.project.dev.session` — dashboard session shape
 
-Sent when the user leaves the dashboard (the overall command duration is
-already covered by `shopware_cli.command`; this event adds what happened
-inside the TUI).
+Sent when the user leaves the dashboard, and in most cases also when it is
+stopped from outside or crashes (the overall command duration is already
+covered by `shopware_cli.command`; this event adds what happened inside the
+TUI).
 
 | Tag             | Meaning                                                                  | Example                                     |
 | --------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
 | `executor`      | Environment the project runs in                                          | `docker` / `local`                          |
-| `duration_ms`   | TUI session length                                                       | `1912734`                                   |
+| `duration_ms`   | Time since the TUI launched, including container start and install       | `1912734`                                   |
 | `tabs_visited`  | Which tabs were opened (sorted, comma-separated)                         | `config,instance,overview`                  |
 | `actions`       | Number of palette actions invoked                                        | `3`                                         |
 | `watchers_used` | Which watchers were started (omitted if none)                            | `admin,storefront`                          |
-| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` |
+| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` / `terminated` / `interrupted` / `panic` / `error` |
+
+If the dashboard is stopped from outside, for example with `kill`, or crashes,
+`result` is `terminated`, `interrupted`, `panic` or `error` instead.
 
 ## What we explicitly do **not** collect
 

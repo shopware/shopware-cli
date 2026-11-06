@@ -44,24 +44,19 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 }
 
 // prepareComposerAutoload returns the autoload file to analyse config.RootDir with.
-// An existing vendor/ is used as it is. A project must have one; for an
-// extension without vendor/ the dependencies are updated in its validation
+// A project must have an existing vendor/, which is used as it is. For an
+// extension the dependencies are always updated in its validation
 // cache on every run, so validation never touches vendor/, composer.json or
 // composer.lock.
 func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *ToolExecution) (string, *ToolError) {
-	_, err := os.Stat(path.Join(config.RootDir, "vendor"))
-	if err == nil {
-		if config.CheckAgainst == "lowest" {
-			logging.FromContext(ctx).Warnf("Using the existing vendor/ directory, --check-against lowest has no effect")
-		}
-
-		return path.Join(config.RootDir, "vendor", "autoload.php"), nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return "", &ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)}
-	}
-
 	if config.IsProject {
+		_, err := os.Stat(path.Join(config.RootDir, "vendor"))
+		if err == nil {
+			return path.Join(config.RootDir, "vendor", "autoload.php"), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", &ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)}
+		}
 		return "", &ToolError{Err: errors.New(`cannot run phpstan without vendor/: run "composer install" first (pass --exclude phpstan to skip it)`)}
 	}
 
@@ -70,7 +65,7 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 		return "", &ToolError{Err: fmt.Errorf("cannot read composer.json: %w", err)}
 	}
 
-	dependencies, err := validationComposerJSON(composerJSON, config.RootDir)
+	dependencies, err := validationComposerJSON(composerJSON, config.RootDir, config.CheckAgainst)
 	if err != nil {
 		return "", &ToolError{Err: err}
 	}
@@ -80,9 +75,9 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 		return "", &ToolError{Err: err}
 	}
 
-	mode := "highest"
-	if config.CheckAgainst == "lowest" {
-		mode = "lowest"
+	mode := CheckAgainstHighest
+	if config.CheckAgainst == CheckAgainstLowest {
+		mode = CheckAgainstLowest
 	}
 
 	// One directory per mode, so switching between them doesn't rewrite most
@@ -170,7 +165,7 @@ func ensureValidationCacheDir(rootDir string) (string, error) {
 // of the extension in rootDir. Autoload paths are relative to the extension
 // folder and would point nowhere from the cache, so they are dropped: PHPStan
 // discovers the extension's own classes in the analysed paths.
-func validationComposerJSON(composerJSON []byte, rootDir string) ([]byte, error) {
+func validationComposerJSON(composerJSON []byte, rootDir string, checkAgainst string) ([]byte, error) {
 	var data map[string]any
 	if err := json.Unmarshal(composerJSON, &data); err != nil {
 		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
@@ -178,6 +173,22 @@ func validationComposerJSON(composerJSON []byte, rootDir string) ([]byte, error)
 
 	delete(data, "autoload")
 	delete(data, "autoload-dev")
+
+	if checkAgainst == CheckAgainstLowest {
+		// Composer 2.9 uses this setting; newer versions are also covered by
+		// COMPOSER_POLICY_ADVISORIES_BLOCK below. Only the validation copy changes.
+		config, _ := data["config"].(map[string]any)
+		if config == nil {
+			config = map[string]any{}
+		}
+		audit, _ := config["audit"].(map[string]any)
+		if audit == nil {
+			audit = map[string]any{}
+		}
+		audit["block-insecure"] = false
+		config["audit"] = audit
+		data["config"] = config
+	}
 
 	// Path repositories are relative to composer.json as well, but local
 	// packages are still needed, so they point to the extension folder instead.
@@ -233,6 +244,11 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, suggets [
 	}
 
 	env := append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
+	if checkAgainst == CheckAgainstLowest {
+		// Historical compatibility analysis must include releases with advisories.
+		// Keep audit reporting and other dependency policies enabled.
+		env = append(env, "COMPOSER_POLICY_ADVISORIES_BLOCK=0")
+	}
 
 	if len(suggets) > 0 {
 		additionalParams := []string{"require", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
@@ -252,7 +268,7 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, suggets [
 
 	additionalParams := []string{"update", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
 
-	if checkAgainst == "lowest" {
+	if checkAgainst == CheckAgainstLowest {
 		additionalParams = append(additionalParams, "--prefer-lowest")
 	}
 

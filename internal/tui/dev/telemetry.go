@@ -37,6 +37,11 @@ const (
 	exitStopContainers = "stop_containers"
 	exitKeepRunning    = "keep_running"
 	exitQuit           = "quit"
+	// An open dashboard that ended without its quit paths.
+	exitTerminated  = "terminated"
+	exitInterrupted = "interrupted"
+	exitPanic       = "panic"
+	exitError       = "error"
 )
 
 // telemetryState accumulates anonymous usage data for one TUI session. It is
@@ -46,11 +51,12 @@ type telemetryState struct {
 	sessionStart time.Time
 	executor     string
 
-	tabsVisited  map[string]struct{}
-	watchersUsed map[string]struct{}
-	actionCount  int
-	exitChoice   string
-	sessionSent  bool
+	tabsVisited      map[string]struct{}
+	watchersUsed     map[string]struct{}
+	actionCount      int
+	exitChoice       string
+	sessionSent      bool
+	sessionStartSent bool
 
 	installStart    time.Time
 	installReported bool
@@ -86,9 +92,7 @@ type watcherRun struct {
 // trackEvent sends one anonymous usage event without blocking the UI: the
 // send (including DNS resolution) runs in a goroutine with a short timeout.
 var trackEvent = func(name string, tags map[string]string) {
-	go func() {
-		trackEventNow(name, tags)
-	}()
+	go trackEventNow(name, tags)
 }
 
 // trackEventNow sends synchronously. Quit paths must use it — a goroutine
@@ -122,6 +126,19 @@ func (t *telemetryState) setExitChoice(choice string) {
 	t.exitChoice = choice
 }
 
+// sessionStartTags builds the project.dev.session_start event and marks it
+// sent, so the event fires at most once per session and never after the
+// session ended, for example when a slow install check lands after quitting.
+func (t *telemetryState) sessionStartTags() (map[string]string, bool) {
+	if t == nil || t.sessionStartSent || t.sessionSent {
+		return nil, false
+	}
+	t.sessionStartSent = true
+	return map[string]string{
+		tracking.TagExecutor: t.executor,
+	}, true
+}
+
 // sessionTags builds the project.dev.session event and marks it sent, so the
 // event fires at most once even when several quit paths run.
 func (t *telemetryState) sessionTags() (map[string]string, bool) {
@@ -145,6 +162,18 @@ func (t *telemetryState) sessionTags() (map[string]string, bool) {
 		tags[tracking.TagWatchersUsed] = joinSet(t.watchersUsed)
 	}
 	return tags, true
+}
+
+// exitTags builds the session event for an open dashboard that ended without
+// its quit paths. A normal quit before the dashboard opens also ends the
+// program cleanly, so only a started session that has not ended yet is
+// reported.
+func (t *telemetryState) exitTags(result string) (map[string]string, bool) {
+	if t == nil || !t.sessionStartSent || t.sessionSent {
+		return nil, false
+	}
+	t.exitChoice = result
+	return t.sessionTags()
 }
 
 func (t *telemetryState) beginInstall() {

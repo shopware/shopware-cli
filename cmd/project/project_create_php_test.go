@@ -9,9 +9,11 @@ import (
 	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 // stubDiscovery replaces the PHP discovery for the duration of the test so
@@ -348,5 +350,8 @@ func TestValidateAndPreflightDockerAcceptsRequestedPHPVersion(t *testing.T) {
 		_, _, err := validateAndPreflight(t.Context(), &opts, releases, filteredVersions)
 		assert.ErrorContains(t, err, "8.2")
 		assert.ErrorContains(t, err, "--php-version")
+		var failed *tracking.FailedStepError
+		require.ErrorAs(t, err, &failed)
+		assert.Equal(t, createStepPreflightPHPVersion, failed.Step)
 	})
 }

@@ -56,11 +56,11 @@ func validateExtensionIcon(ext Extension, check validation.Check) {
 					Severity:   validation.SeverityError,
 				})
 			} else {
-				if config.Width < 112 || config.Height < 112 {
+				if config.Width < 84 || config.Height < 84 {
 					check.AddResult(validation.CheckResult{
 						Path:       relPath,
 						Identifier: "metadata.icon.size",
-						Message:    fmt.Sprintf("The extension icon %s dimensions (%dx%d) are smaller than required 112x112 and maximum 256x256 pixels with max file size 30kb and 72dpi", relPath, config.Width, config.Height),
+						Message:    fmt.Sprintf("The extension icon %s dimensions (%dx%d) are smaller than required 84x84 and maximum 256x256 pixels with max file size 30kb and 72dpi", relPath, config.Width, config.Height),
 						Severity:   validation.SeverityError,
 					})
 				} else if config.Width > 256 || config.Height > 256 {
