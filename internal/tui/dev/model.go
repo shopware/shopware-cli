@@ -106,7 +106,10 @@ type Model struct {
 
 type dockerAlreadyRunningMsg struct{}
 type dockerNeedStartMsg struct{}
-type dockerStartedMsg struct{ err error }
+type dockerStartedMsg struct {
+	err    error
+	output []string
+}
 type dockerStoppedMsg struct{ err error }
 type dockerOutputLineMsg struct {
 	source <-chan string
@@ -124,7 +127,10 @@ type shopwareInstallDoneMsg struct {
 	err    error
 }
 
-type configRestartDoneMsg struct{ err error }
+type configRestartDoneMsg struct {
+	err    error
+	output []string
+}
 
 type portConflictMsg struct{ conflicts []dockerpkg.PortConflict }
 type portFixDoneMsg struct {
@@ -344,7 +350,7 @@ func (m Model) trackOpenRunEnds() {
 	}
 	// A config-change container restart may still be in flight when the
 	// session ends; report it as cancelled instead of dropping it.
-	if tags, ok := m.telemetry.configRestartTags(nil); ok {
+	if tags, ok := m.telemetry.configRestartTags(nil, nil); ok {
 		tags[tracking.TagResult] = tracking.ResultCancelled
 		trackEventNow(tracking.EventDevDockerStart, tags)
 	}
@@ -417,6 +423,7 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// The program resumes after the interactive setup; refresh the Domains
 		// status and the setup-health checks it affects.
 		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
+		m.overview.certTrusted = overviewCertTrusted(m.projectRoot)
 		m.overview.healthLoading = true
 		return m, loadSetupHealth(m.commandContext(), m.projectRoot, m.executor)
 
@@ -744,7 +751,7 @@ func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (app.Content, t
 	// The config changed, so the environment snapshot the overview holds is
 	// stale; refresh it before the overview rediscovers the services.
 	m.overview.setEnvironment(m.dockerEnvironment())
-	if tags, ok := m.telemetry.configRestartTags(msg.err); ok {
+	if tags, ok := m.telemetry.configRestartTags(msg.err, msg.output); ok {
 		trackEvent(tracking.EventDevDockerStart, tags)
 	}
 	m.configTab.restarting = false

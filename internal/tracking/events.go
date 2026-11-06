@@ -62,6 +62,15 @@ const (
 	// Tools behind a failed tool report (validate, fix, format), sorted and comma-separated.
 	TagFailedTools            = "failed_tools"
 	TagToolsWithErrorFindings = "tools_with_error_findings"
+	// TagFailedStep is the step a failed or cancelled run stopped at, from FailedAt here.
+	// Also on EventProjectUpgrade, EventDevInstall and EventDevWatcher.
+	TagFailedStep = "failed_step"
+	// Input counts of validate, fix and format, set by RunTools with SetCommandTag.
+	// Configured bundles are not extensions, so they only count as directories.
+	TagExtensionCount     = "extension_count"
+	TagSourceDirCount     = "source_dir_count"
+	TagAdminDirCount      = "admin_dir_count"
+	TagStorefrontDirCount = "storefront_dir_count"
 
 	// EventProjectCreate
 	TagVersion           = "version"
@@ -72,7 +81,7 @@ const (
 	TagWithAMQP          = "with_amqp"
 	TagInteractive       = "interactive"
 
-	// EventProjectUpgrade
+	// EventProjectUpgrade (reuses TagFailedStep)
 	TagFromVersion    = "from_version"
 	TagTargetVersion  = "target_version"
 	TagBlockingChecks = "blocking_checks"
@@ -86,9 +95,8 @@ const (
 	TagDryRun      = "dry_run"     // preview run; nothing changed on disk
 	TagRemoved     = "removed"     // remove only: the integration was actually present
 
-	// EventDevInstall
+	// EventDevInstall (reuses TagFailedStep)
 	TagAbandonedAt       = "abandoned_at"
-	TagFailedStep        = "failed_step"
 	TagFailureCategory   = "failure_category"
 	TagLanguage          = "language"
 	TagCurrency          = "currency"
@@ -98,13 +106,13 @@ const (
 	TagPHPVersion            = "php_version"
 	TagDeploymentHelperAdded = "deployment_helper_added"
 
-	// EventDevDockerStart
+	// EventDevDockerStart (reuses TagFailureCategory)
 	TagTrigger = "trigger"
 
 	// EventDevAction
 	TagAction = "action"
 
-	// EventDevWatcher
+	// EventDevWatcher (reuses TagFailedStep)
 	TagWatcher = "watcher"
 	TagProxied = "proxied"
 	TagPhase   = "phase"

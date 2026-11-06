@@ -13,6 +13,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -20,7 +21,7 @@ import (
 func validateAndPreflight(ctx context.Context, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) (string, *shop.PHPConstraint, error) {
 	chosenVersion, err := shop.ResolveInstallVersion(opts.selectedVersion, filteredVersions)
 	if err != nil {
-		return "", nil, err
+		return "", nil, tracking.FailedAt(createStepPreflightResolveVersion, err)
 	}
 
 	phpConstraint := shop.PHPConstraintForShopwareVersion(releases, chosenVersion)
@@ -28,7 +29,7 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 	scaffold := newShopwareProjectScaffold(opts, chosenVersion)
 	scaffold.Normalize()
 	if err := scaffold.Validate(); err != nil {
-		return "", nil, err
+		return "", nil, tracking.FailedAt(createStepPreflightValidateProjectSettings, err)
 	}
 	opts.selectedDeployment = scaffold.DeploymentMethod
 	opts.selectedCI = scaffold.CISystem
@@ -38,26 +39,26 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 		// Docker takes its PHP from the image, so there is no local executable to
 		// resolve, only the requested version to check.
 		if opts.phpVersionExplicit && phpConstraint != nil && !phpConstraint.Check(opts.phpVersion+".0") {
-			return "", nil, fmt.Errorf("the requested PHP %s does not satisfy the PHP constraint %s of the selected Shopware version; pass --php-version with a matching version", opts.phpVersion, phpConstraint)
+			return "", nil, tracking.FailedAt(createStepPreflightPHPVersion, fmt.Errorf("the requested PHP %s does not satisfy the PHP constraint %s of the selected Shopware version; pass --php-version with a matching version", opts.phpVersion, phpConstraint))
 		}
 		if opts.phpVersion == "" {
 			opts.phpVersion = phpConstraint.HighestSupported()
 		}
 	} else if err := resolveLocalPHP(ctx, opts, phpConstraint); err != nil {
-		return "", nil, err
+		return "", nil, tracking.FailedAt(createStepPreflightPHPVersion, err)
 	}
 
 	dockerHint := "re-run with " + tui.BoldText.Render("--docker")
 	if err := system.ValidateProjectDependencies(ctx, opts.useDocker, phpConstraint, "create a Shopware project", dockerHint, opts.phpBinary); err != nil {
-		return "", nil, err
+		return "", nil, tracking.FailedAt(createStepPreflightDependencies, err)
 	}
 
 	if err := checkSecurityAdvisories(ctx, opts, chosenVersion); err != nil {
-		return "", nil, err
+		return "", nil, tracking.FailedAt(createStepPreflightSecurityAdvisories, err)
 	}
 
 	if err := checkIncompatibilities(ctx, opts); err != nil {
-		return "", nil, err
+		return "", nil, tracking.FailedAt(createStepPreflightIncompatibilities, err)
 	}
 
 	return chosenVersion, phpConstraint, nil

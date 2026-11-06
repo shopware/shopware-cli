@@ -42,7 +42,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 			m.dockerShowLogs = !m.dockerShowLogs
 		case "q", tui.KeyCtrlC:
 			if m.phase == phaseStarting {
-				if tags, ok := m.telemetry.dockerStartTags(nil); ok {
+				if tags, ok := m.telemetry.dockerStartTags(nil, nil); ok {
 					tags[tracking.TagResult] = tracking.ResultCancelled
 					trackEventNow(tracking.EventDevDockerStart, tags)
 				}

@@ -126,7 +126,7 @@ arguments, paths, or package names. They are included for failed starts too.
 | ----------------------------- | ------------------------------------- |
 | PHPStan or Rector preparation | `composer_require`, `composer_update` |
 | PHPStan                       | `analyse`                             |
-| Rector                        | `fix`                                 |
+| Rector                        | `check` (dry run), `fix`               |
 | ESLint, Stylelint             | `check`, `fix`                        |
 | Prettier, PHP-CS-Fixer        | `check` (dry run), `format`           |
 
@@ -160,6 +160,11 @@ overall CLI usage.
 | `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` unless `--docker` was passed explicitly | `compose_plugin_missing,docker_not_running` |
 | `failed_tools` | Tools that failed, sorted and comma-separated; only with `result=failure` on commands that report tool results (`validate`, `fix`, `format`). A tool fails when it cannot run or breaks while running, and on `fix` also when ESLint or Stylelint leave problems they cannot fix | `eslint` |
 | `tools_with_error_findings` | Tools that reported error findings, sorted and comma-separated; only with `result=failure` on the same commands. Warnings and ignored findings do not count | `builtin,phpstan` |
+| `failed_step` | The step a failed or cancelled `project create` stopped at; only with `result=failure` or `result=cancelled`. Absent when the run failed before the first step, for example on an unknown flag. Values are listed below | `composer_install` |
+| `extension_count` | How many extensions the tools work on, on commands that report tool results (`validate`, `fix`, `format`). Bundles configured in the project are not counted, and extension names are never sent | `12` |
+| `source_dir_count` | How many source folders the tools work on, including those of configured bundles; on the same commands | `14` |
+| `admin_dir_count` | How many Administration folders the tools work on; on the same commands | `3` |
+| `storefront_dir_count` | How many Storefront folders the tools work on; on the same commands | `2` |
 
 Notes:
 
@@ -175,6 +180,8 @@ Notes:
   run inside the CLI and send no such event. A command that fails before its
   tools run, for example because Node.js is too old, has neither tag. Findings,
   rule identifiers, paths and tool output are never sent.
+- The counts are sent once the tools start, so a command that fails before has
+  none. Folder names and paths are never sent.
 - The command _name_ is captured (e.g. `project.create`), but **not** its
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not
@@ -184,6 +191,31 @@ Notes:
   `command_name` values that start with `extension.add.` — for example
   `extension.add.admin_module` and `extension.add.store_api_route`. Entity
   names and other generator arguments are never sent.
+
+`failed_step` values for `project create`, in the order the steps run:
+
+| Value | The step that failed |
+| --- | --- |
+| `validate_compose_project_name` | Checking the `--compose-project-name` value |
+| `validate_docker` | Checking that Docker is available, when `--docker` was passed |
+| `validate_php_version` | Checking that `--php-version` is a supported PHP version |
+| `packagist_fetch_versions` | Fetching the available Shopware versions from Packagist |
+| `wizard_questions` | Running the interactive questions |
+| `wizard_docker_check` | Re-checking Docker after the questions, when `--docker` was passed |
+| `wizard_confirm` | Running the final confirmation prompt |
+| `preflight_resolve_version` | Resolving the requested Shopware version |
+| `preflight_validate_project_settings` | Checking the project folder, deployment method, CI system and Compose project name |
+| `preflight_php_version` | Checking or finding a PHP version that the selected Shopware version supports |
+| `preflight_dependencies` | Checking the required dependencies, such as Docker or PHP |
+| `preflight_security_advisories` | Checking the selected Shopware version for known security advisories |
+| `preflight_incompatibilities` | Asking whether to continue despite a known incompatibility of the system |
+| `scaffold` | Creating the project folder and writing `composer.json`, `.env` and the other initial files |
+| `composer_install` | Installing the Composer dependencies |
+| `composer_security_advisories` | Handling a Composer install blocked by security advisories |
+| `docker_setup` | Preparing the Docker environment from the installed project |
+| `docker_setup_write_compose` | Writing the Docker Compose file |
+| `write_config` | Writing `.config/shopware-project.yml` |
+| `git_init` | Initializing the Git repository |
 
 ### `shopware_cli.project.create` — project scaffolding
 
@@ -315,6 +347,7 @@ Sent when a `docker compose up -d` run by the TUI finishes.
 | `trigger`     | Why the containers were (re)started                    | `initial` / `config_change`         |
 | `result`      | Outcome (`cancelled` when the user quit while waiting) | `success` / `failure` / `cancelled` |
 | `duration_ms` | How long the startup took                              | `12894`                             |
+| `failure_category` | Classified reason the startup failed (only for `failure`), from the `docker compose` output. Closed enum — the output itself is **never** sent | `port_in_use` / `disk_full` / `image_pull` / `mount` / `permission` / `unknown` |
 
 ### `shopware_cli.project.dev.action` — dashboard actions
 
@@ -352,8 +385,12 @@ the check's level is sent, never the underlying values.
 
 | Tag      | Meaning                                                                                   | Example                    |
 | -------- | ----------------------------------------------------------------------------------------- | -------------------------- |
-| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker`             |
+| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`, plus `proxy` and `hostname_resolves` for proxy projects) | `admin_worker`             |
 | `result` | The check's level                                                                         | `ok` / `warn` / `critical` |
+
+`hostname_resolves` looks up the project's hostname through the system
+resolver. Earlier CLI versions only checked that the resolver configuration
+existed, so compare this check by `cli_version`.
 
 ### `shopware_cli.project.dev.session_start` — dashboard opened
 

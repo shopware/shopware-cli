@@ -71,6 +71,13 @@ func TestIsComposerSecurityBlocked(t *testing.T) {
 		assert.True(t, isComposerSecurityBlocked(output))
 	})
 
+	t.Run("ignores advisories mentioned beside another failure", func(t *testing.T) {
+		t.Parallel()
+		output := `- shopware/core v6.7.16.0 requires ext-gd * -> it is missing from your system. Install or enable PHP's gd extension.
+    - shopware/administration[v6.4.0.0, ..., v6.4.20.2] match the requirements and are not excluded by the conflicts above, but were not loaded, because they are affected by security advisories ("PKSA-1234-abcd-1234")`
+		assert.False(t, isComposerSecurityBlocked(output))
+	})
+
 	t.Run("ignores regular resolution conflicts", func(t *testing.T) {
 		t.Parallel()
 		output := `- shopware/administration v6.7.6.0 requires shopware/core v6.7.6.0 -> found shopware/core[v6.7.6.0] but it conflicts with your root composer.json require (6.7.12.1).`

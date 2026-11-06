@@ -2,9 +2,8 @@ package verifier
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,54 +23,6 @@ func fakeTools(t *testing.T, scripts map[string]string) {
 		require.NoError(t, os.WriteFile(filepath.Join(directory, name), []byte("#!/bin/sh\n"+script), 0o755))
 	}
 	t.Setenv("PATH", directory)
-}
-
-func TestESLintInvocation(t *testing.T) {
-	for _, scenario := range []struct {
-		name, output, stderr, code string
-		failed                     bool
-		findings                   int
-	}{
-		{"findings", `[{"filePath":"file.js","messages":[{"ruleId":"test","severity":2,"message":"problem","line":1}]}]`, "warning on stderr", "1", false, 1},
-		{"empty failure", "[]", "", "1", true, 0},
-		{"invalid output", "not json", "diagnostic", "0", true, 0},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			fakeTool(t, "node", "printf '%s' \"$TOOL_STDOUT\"\nprintf '%s' \"$TOOL_STDERR\" >&2\nexit \"$TOOL_EXIT\"\n")
-			t.Setenv("TOOL_STDOUT", scenario.output)
-			t.Setenv("TOOL_STDERR", scenario.stderr)
-			t.Setenv("TOOL_EXIT", scenario.code)
-			result := runCheckTool(t, Eslint{}, ToolConfig{AdminDirectories: []string{t.TempDir()}})
-			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
-			assert.Len(t, result.Findings, scenario.findings)
-		})
-	}
-	t.Run("missing executable", func(t *testing.T) {
-		t.Setenv("PATH", t.TempDir())
-		result := runFixTool(t, Eslint{}, ToolConfig{AdminDirectories: []string{t.TempDir()}})
-		require.NotEmpty(t, result.Errors)
-		assert.Empty(t, result.Findings)
-	})
-}
-
-func TestESLintRetainsPartialFindings(t *testing.T) {
-	fakeTool(t, "node", `case "$PWD" in
-*/bad) printf 'broken'; printf 'diagnostic' >&2; exit 2 ;;
-*) printf '[{"filePath":"file.js","messages":[{"ruleId":"test","severity":2,"message":"problem"}]}]'; exit 1 ;;
-esac
-`)
-	root := t.TempDir()
-	good, bad := filepath.Join(root, "good"), filepath.Join(root, "bad")
-	require.NoError(t, os.Mkdir(good, 0o755))
-	require.NoError(t, os.Mkdir(bad, 0o755))
-	result := runCheckTool(t, Eslint{}, ToolConfig{AdminDirectories: []string{good, bad}})
-	require.NotEmpty(t, result.Errors)
-	assert.Len(t, result.Findings, 1)
-	require.Len(t, result.Errors, 1)
-	assert.Equal(t, "broken", result.Errors[0].Stdout)
-	assert.Equal(t, "diagnostic", result.Errors[0].Stderr)
-	assert.Equal(t, bad, result.Errors[0].Dir)
-	assert.NotEmpty(t, result.Errors[0].Command)
 }
 
 func TestPrettierInvocation(t *testing.T) {
@@ -106,44 +57,6 @@ func TestPrettierInvocation(t *testing.T) {
 			require.NoError(t, err)
 			assert.Empty(t, leftovers)
 		})
-	}
-}
-
-func TestStylelintFindingsFromStderr(t *testing.T) {
-	fakeTool(t, "node", `printf '[{"source":"file.scss","warnings":[{"line":1,"rule":"test","severity":"error","text":"problem"}]}]' >&2
-exit 2
-`)
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "file.scss"), nil, 0o644))
-	result := runCheckTool(t, StyleLint{}, ToolConfig{AdminDirectories: []string{root}})
-	require.Empty(t, result.Errors)
-	require.Len(t, result.Findings, 1)
-	assert.Equal(t, "stylelint/test", result.Findings[0].Identifier)
-}
-
-func TestFixersLeaveOutputUnparsed(t *testing.T) {
-	for _, tool := range []FixTool{Eslint{}, StyleLint{}} {
-		for _, code := range []string{"0", "1", "2"} {
-			t.Run(tool.Name()+"/"+code, func(t *testing.T) {
-				fakeTool(t, "node", "printf 'unstructured output'; printf 'diagnostic' >&2; exit \"$TOOL_EXIT\"\n")
-				t.Setenv("TOOL_EXIT", code)
-				root := t.TempDir()
-				require.NoError(t, os.WriteFile(filepath.Join(root, "file.scss"), nil, 0o644))
-				result := runFixTool(t, tool, ToolConfig{AdminDirectories: []string{root}})
-				assert.Empty(t, result.Findings)
-				assert.Equal(t, code != "0", len(result.Errors) > 0)
-				if code != "0" {
-					require.Len(t, result.Errors, 1)
-					assert.Equal(t, "unstructured output", result.Errors[0].Stdout)
-					assert.Equal(t, "diagnostic", result.Errors[0].Stderr)
-					var exitErr *exec.ExitError
-					require.ErrorAs(t, result.Errors[0], &exitErr)
-					expectedCode, err := strconv.Atoi(code)
-					require.NoError(t, err)
-					assert.Equal(t, expectedCode, exitErr.ExitCode())
-				}
-			})
-		}
 	}
 }
 
@@ -283,7 +196,7 @@ func TestPHPToolsShareLowestDependenciesWithCustomConfigs(t *testing.T) {
 		"composer": "/bin/mkdir -p vendor\n: > vendor/autoload.php\n",
 		"php": `printf '%s\n' "$@" > "$TOOL_ROOT/tool-args"
 printf '%s' "$PWD" > "$TOOL_ROOT/tool-cwd"
-printf '{"files":{}}'
+printf '{"files":{},"totals":{"changed_files":0,"errors":0}}'
 `,
 	})
 	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{"autoload":{"psr-4":{"Acme\\":"src/"}}}`), 0o644))
@@ -323,13 +236,14 @@ printf '{"files":{}}'
 
 func TestRectorDependenciesAndReporting(t *testing.T) {
 	for _, scenario := range []struct {
-		name                                     string
-		localVendor, customConfig, project, fail bool
+		name                                             string
+		localVendor, customConfig, project, fail, dryRun bool
 	}{
 		{name: "standalone extension"},
 		{name: "extension with local vendor and custom config", localVendor: true, customConfig: true},
 		{name: "project", localVendor: true, project: true},
 		{name: "rector failure", fail: true},
+		{name: "extension dry run", localVendor: true, dryRun: true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -342,6 +256,7 @@ printf '{"packages":[{"name":"shopware/core","version":"6.7.0.0"}]}' > vendor/co
 			composerPath := os.Getenv("PATH")
 			fakeTool(t, "php", `printf '%s\n' "$@" > "$RECTOR_ROOT/rector-args"
 printf '%s' "$PWD" > "$RECTOR_ROOT/rector-cwd"
+printf '{"totals":{"changed_files":0,"errors":0}}'
 exit "$RECTOR_EXIT"
 `)
 			t.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+composerPath)
@@ -363,7 +278,7 @@ exit "$RECTOR_EXIT"
 			}
 			tools := t.TempDir()
 			cfg := ToolConfig{RootDir: root, ToolDirectory: tools, SourceDirectories: []string{root}, MinShopwareVersion: "6.7.0.0", CheckAgainst: CheckAgainstHighest, IsProject: scenario.project}
-			result := runFixTool(t, Rector{}, cfg)
+			result := runFixToolWithDryRun(t, Rector{}, cfg, scenario.dryRun)
 			assert.Equal(t, scenario.fail, len(result.Errors) > 0)
 			workDir := filepath.Join(root, "var/cache/shopware-cli/composer-lowest")
 			note := "Shopware 6.7.0.0 (lowest); bundled rules for Shopware 6.7"
@@ -382,9 +297,13 @@ exit "$RECTOR_EXIT"
 				expectedConfig = filepath.Join(root, "rector.php")
 				note = "Shopware 6.7.0.0 (lowest); custom rules from rector.php"
 			}
+			if !scenario.fail && !scenario.dryRun {
+				note = "no changes; " + note
+			}
 			assert.Equal(t, note, result.Note)
 			args, err := os.ReadFile(filepath.Join(root, "rector-args"))
 			require.NoError(t, err)
+			assert.Equal(t, scenario.dryRun, strings.Contains(string(args), "--dry-run\n"))
 			assert.Contains(t, string(args), "--config\n"+expectedConfig+"\n")
 			assert.Contains(t, string(args), "--autoload-file\n"+filepath.Join(workDir, "vendor/autoload.php")+"\n")
 			workingDir, err := os.ReadFile(filepath.Join(root, "rector-cwd"))

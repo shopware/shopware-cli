@@ -19,6 +19,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -46,25 +47,25 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 
 	if output, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, opts.phpBinary); err != nil {
 		if ctx.Err() != nil || errors.Is(err, executor.ErrDockerCleanup) || !isComposerSecurityBlocked(output) || opts.noAudit {
-			return err
+			return tracking.FailedAt(createStepComposerInstall, err)
 		}
 
 		if err := handleSecurityBlockedInstall(ctx, opts, chosenVersion); err != nil {
-			return err
+			return tracking.FailedAt(createStepComposerSecurityAdvisories, err)
 		}
 
 		if _, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, opts.phpBinary); err != nil {
-			return err
+			return tracking.FailedAt(createStepComposerInstall, err)
 		}
 	}
 
 	if opts.useDocker {
 		env, err := dockerpkg.NewEnvironment(opts.projectFolder, dockerpkg.Options{PHP: dockerpkg.PHP{Version: composerInstallPHP}})
 		if err != nil {
-			return err
+			return tracking.FailedAt(createStepDockerSetup, err)
 		}
 		if err := env.WriteCompose(); err != nil {
-			return err
+			return tracking.FailedAt(createStepDockerSetupWriteCompose, err)
 		}
 	}
 
@@ -80,7 +81,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	}
 
 	if err := shop.WriteConfig(shopCfg, opts.projectFolder); err != nil {
-		return err
+		return tracking.FailedAt(createStepWriteConfig, err)
 	}
 
 	return ctx.Err()
@@ -170,8 +171,10 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 // isComposerSecurityBlocked reports whether composer output indicates that
 // dependency resolution failed because packages affected by security
 // advisories were blocked (composer >= 2.9 with audit blocking enabled).
+// Composer also mentions advisories as a side note when resolution fails for
+// another reason, such as a missing PHP extension; that does not count.
 func isComposerSecurityBlocked(output string) bool {
-	return strings.Contains(output, "affected by security advisories")
+	return strings.Contains(output, "but these were not loaded, because they are affected by security advisories")
 }
 
 // handleSecurityBlockedInstall is called when composer refused to install

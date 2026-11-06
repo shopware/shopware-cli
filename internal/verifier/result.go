@@ -31,6 +31,10 @@ func RunTools[T Tool](
 	progress *Progress,
 	run func(T, *ToolExecution) ToolSummary,
 ) []validation.ToolReport {
+	// The command event reports how much the tools work on.
+	for key, value := range configTelemetryTags(config) {
+		tracking.SetCommandTag(key, value)
+	}
 	results := make([]validation.ToolReport, len(tools), len(tools)+len(skipped))
 	sourceRoot := validation.ResolveSourceRoot(config.RootDir)
 	var stderrMu sync.Mutex
@@ -104,6 +108,15 @@ func subprocessTelemetryTags(tool string, subprocess SubprocessResult) map[strin
 		}
 	}
 	return tags
+}
+
+func configTelemetryTags(config ToolConfig) map[string]string {
+	return map[string]string{
+		tracking.TagExtensionCount:     strconv.Itoa(len(config.Extensions)),
+		tracking.TagSourceDirCount:     strconv.Itoa(len(config.SourceDirectories)),
+		tracking.TagAdminDirCount:      strconv.Itoa(len(config.AdminDirectories)),
+		tracking.TagStorefrontDirCount: strconv.Itoa(len(config.StorefrontDirectories)),
+	}
 }
 
 type Check struct {

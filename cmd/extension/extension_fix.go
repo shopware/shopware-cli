@@ -16,6 +16,7 @@ var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
 	Short: "Apply code-quality fixes to an extension",
 	Long: `Apply code-quality fixes to an extension.
+Use --dry-run to report findings and proposed changes without applying fixes.
 Rector resolves the lowest compatible dependencies in var/cache/shopware-cli,
 preserving the extension's vendor/, composer.json and composer.lock.
 A local rector.php takes precedence over the bundled Shopware rules.`,
@@ -31,6 +32,7 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 		progress := verifier.NewProgress("")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectExtensionFixTools(only, exclude)
@@ -54,15 +56,19 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
-		results := verifier.RunTools(cmd.Context(), tools, statuses, *toolCfg, progress, func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
-			return tool.Fix(cmd.Context(), *toolCfg, execution)
-		})
+		results := verifier.RunTools(
+			cmd.Context(), tools, statuses, *toolCfg, progress,
+			func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+				return tool.Fix(cmd.Context(), *toolCfg, execution, dryRun)
+			},
+		)
 		return validation.ReportTools(results, "summary", "Fixers")
 	},
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
+	extensionFixCmd.Flags().Bool("dry-run", false, "Report files that would change, without changing them")
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")

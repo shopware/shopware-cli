@@ -244,6 +244,11 @@ func checkOSResolution(ctx context.Context, probe string) error {
 	return err
 }
 
+// HostnameResolves reports whether the system resolver answers hostname with 127.0.0.1.
+func HostnameResolves(ctx context.Context, hostname string) bool {
+	return resolveViaOS(ctx, hostname) == nil
+}
+
 func checkTraefik(ctx context.Context) error {
 	if !ContainerIsRunning(ctx) {
 		if containerCrashLooping(ctx, ContainerName) {
