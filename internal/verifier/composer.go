@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,19 +31,6 @@ func preparePHPTool(config ToolConfig, execution *ToolExecution) (ToolSummary, b
 	return ToolSummary{}, true
 }
 
-// installComposerDeps installs the dependencies into rootDir itself when vendor/ is missing.
-func installComposerDeps(ctx context.Context, rootDir string, checkAgainst string, execution *ToolExecution) *ToolError {
-	_, err := os.Stat(path.Join(rootDir, "vendor"))
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return &ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)}
-	}
-
-	return runComposerDeps(ctx, rootDir, path.Join(rootDir, "auth.json"), getComposerSuggets(rootDir), checkAgainst, execution)
-}
-
 // prepareComposerAutoload returns the autoload file to analyse config.RootDir with.
 // A project must have an existing vendor/, which is used as it is. For an
 // extension the dependencies are always updated in its validation
@@ -57,7 +45,7 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", &ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)}
 		}
-		return "", &ToolError{Err: errors.New(`cannot run phpstan without vendor/: run "composer install" first (pass --exclude phpstan to skip it)`)}
+		return "", &ToolError{Err: errors.New(`cannot use project dependencies without vendor/: run "composer install" first`)}
 	}
 
 	composerJSON, err := os.ReadFile(path.Join(config.RootDir, "composer.json"))
@@ -101,7 +89,7 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 
 	// composer update changes vendor/ in place, so only changed packages are
 	// written again.
-	if toolErr := runComposerDeps(ctx, workDir, path.Join(config.RootDir, "auth.json"), nil, config.CheckAgainst, execution); toolErr != nil {
+	if toolErr := runComposerDeps(ctx, workDir, path.Join(config.RootDir, "auth.json"), config.CheckAgainst, execution); toolErr != nil {
 		return "", toolErr
 	}
 
@@ -163,16 +151,35 @@ func ensureValidationCacheDir(rootDir string) (string, error) {
 
 // validationComposerJSON returns the composer.json for the validation cache
 // of the extension in rootDir. Autoload paths are relative to the extension
-// folder and would point nowhere from the cache, so they are dropped: PHPStan
-// discovers the extension's own classes in the analysed paths.
+// folder, so they are rewritten for both PHPStan and Rector.
 func validationComposerJSON(composerJSON []byte, rootDir string, checkAgainst string) ([]byte, error) {
 	var data map[string]any
 	if err := json.Unmarshal(composerJSON, &data); err != nil {
 		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
 	}
 
-	delete(data, "autoload")
-	delete(data, "autoload-dev")
+	otherMode := CheckAgainstLowest
+	if checkAgainst == CheckAgainstLowest {
+		otherMode = CheckAgainstHighest
+	}
+	// Root classmaps can include local dependencies and the other validation
+	// baseline. Keep the selected cache available for dependency classmaps.
+	excludedPaths := []any{
+		resolveAutoloadPaths("/vendor/", rootDir, true),
+		resolveAutoloadPaths("/"+path.Join(extension.ValidationCacheDir, "composer-"+otherMode)+"/", rootDir, true),
+	}
+
+	// Keep extension classes and bootstrap files available to custom configs
+	// without loading the extension's locally installed dependencies.
+	for _, key := range []string{"autoload", "autoload-dev"} {
+		if autoload, ok := data[key].(map[string]any); ok {
+			for kind, paths := range autoload {
+				autoload[kind] = resolveAutoloadPaths(paths, rootDir, kind == "exclude-from-classmap")
+			}
+			excluded, _ := autoload["exclude-from-classmap"].([]any)
+			autoload["exclude-from-classmap"] = append(excluded, excludedPaths...)
+		}
+	}
 
 	if checkAgainst == CheckAgainstLowest {
 		// Composer 2.9 uses this setting; newer versions are also covered by
@@ -220,6 +227,31 @@ func validationComposerJSON(composerJSON []byte, rootDir string, checkAgainst st
 	return json.Marshal(data)
 }
 
+// resolveAutoloadPaths preserves namespace keys and rewrites their path values.
+func resolveAutoloadPaths(value any, rootDir string, exclude bool) any {
+	switch value := value.(type) {
+	case string:
+		if exclude {
+			// Composer anchors exclusions at the manifest, even with a leading slash.
+			// The cached manifest is four directories below the extension root.
+			return "../../../../" + strings.TrimPrefix(value, "/")
+		}
+		if path.IsAbs(value) {
+			return value
+		}
+		return path.Join(rootDir, value)
+	case []any:
+		for i, entry := range value {
+			value[i] = resolveAutoloadPaths(entry, rootDir, exclude)
+		}
+	case map[string]any:
+		for key, entry := range value {
+			value[key] = resolveAutoloadPaths(entry, rootDir, exclude)
+		}
+	}
+	return value
+}
+
 // resolvePathRepository makes the url of a relative path repository absolute.
 func resolvePathRepository(repository any, rootDir string) {
 	entry, ok := repository.(map[string]any)
@@ -232,7 +264,7 @@ func resolvePathRepository(repository any, rootDir string) {
 	}
 }
 
-func runComposerDeps(ctx context.Context, dir string, authFile string, suggets []string, checkAgainst string, execution *ToolExecution) *ToolError {
+func runComposerDeps(ctx context.Context, dir string, authFile string, checkAgainst string, execution *ToolExecution) *ToolError {
 	composerAuth, err := shop.ReadComposerAuth(authFile)
 	if err != nil {
 		return &ToolError{Err: fmt.Errorf("cannot read Composer auth file: %w", err)}
@@ -248,22 +280,6 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, suggets [
 		// Historical compatibility analysis must include releases with advisories.
 		// Keep audit reporting and other dependency policies enabled.
 		env = append(env, "COMPOSER_POLICY_ADVISORIES_BLOCK=0")
-	}
-
-	if len(suggets) > 0 {
-		additionalParams := []string{"require", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
-		for _, suggest := range suggets {
-			additionalParams = append(additionalParams, suggest+":*")
-		}
-
-		composerInstall := CommandContext(ctx, "composer", additionalParams...)
-		composerInstall.Env = env
-		composerInstall.Dir = dir
-
-		subprocess := execution.Run(OperationComposerRequire, composerInstall)
-		if subprocess.Err != nil {
-			return subprocess.ToolError(fmt.Errorf("cannot install Composer suggestions: %w", subprocess.Err))
-		}
 	}
 
 	additionalParams := []string{"update", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
@@ -286,27 +302,4 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, suggets [
 	logging.FromContext(ctx).Debugf("Composer dependencies installed in %s", time.Since(beforeStart).String())
 
 	return nil
-}
-
-func getComposerSuggets(rootDir string) []string {
-	composerJSON, err := os.ReadFile(path.Join(rootDir, "composer.json"))
-	if err != nil {
-		return []string{}
-	}
-
-	var composerJSONData map[string]interface{}
-	if err := json.Unmarshal(composerJSON, &composerJSONData); err != nil {
-		return []string{}
-	}
-
-	if composerJSONData["suggest"] == nil {
-		return []string{}
-	}
-
-	suggests := make([]string, 0, len(composerJSONData["suggest"].(map[string]interface{})))
-	for k := range composerJSONData["suggest"].(map[string]interface{}) {
-		suggests = append(suggests, k)
-	}
-
-	return suggests
 }

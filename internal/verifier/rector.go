@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
@@ -50,52 +51,13 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 		return result
 	}
 
-	_, err := os.Stat(path.Join(config.RootDir, "vendor"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		execution.Fail(&ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)})
+	// Fix against the minimum compatible dependency set, independently of the
+	// extension's locally installed dependencies. Projects keep their vendor/.
+	config.CheckAgainst = CheckAgainstLowest
+	autoloadFile, toolErr := prepareComposerAutoload(ctx, config, execution)
+	if toolErr != nil {
+		execution.Fail(toolErr)
 		return ToolSummary{}
-	}
-
-	if errors.Is(err, os.ErrNotExist) {
-		composerJSONPath := path.Join(config.RootDir, "composer.json")
-		backupData, err := os.ReadFile(composerJSONPath)
-		if err != nil {
-			execution.Fail(&ToolError{Err: fmt.Errorf("cannot back up composer.json: %w", err)})
-			return ToolSummary{}
-		}
-
-		composerLockPath := path.Join(config.RootDir, "composer.lock")
-		composerLockData, err := os.ReadFile(composerLockPath)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			execution.Fail(&ToolError{Err: fmt.Errorf("cannot back up composer.lock: %w", err)})
-			return ToolSummary{}
-		}
-
-		defer func() {
-			if err := os.WriteFile(composerJSONPath, backupData, 0o644); err != nil {
-				execution.Fail(&ToolError{Err: fmt.Errorf("cannot restore composer.json: %w", err)})
-			}
-
-			if composerLockData != nil {
-				if err := os.WriteFile(composerLockPath, composerLockData, 0o644); err != nil {
-					execution.Fail(&ToolError{Err: fmt.Errorf("cannot restore composer.lock: %w", err)})
-				}
-			} else if err := os.Remove(composerLockPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-				execution.Fail(&ToolError{Err: fmt.Errorf("cannot remove temporary Composer lock: %w", err)})
-			}
-		}()
-
-		if composerLockData != nil {
-			if err := os.Remove(composerLockPath); err != nil {
-				execution.Fail(&ToolError{Err: fmt.Errorf("cannot remove Composer lock: %w", err)})
-				return ToolSummary{}
-			}
-		}
-
-		if err := installComposerDeps(ctx, config.RootDir, CheckAgainstHighest, execution); err != nil {
-			execution.Fail(err)
-			return ToolSummary{}
-		}
 	}
 
 	configFile, err := r.getConfigPath(config)
@@ -104,7 +66,24 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 		return ToolSummary{}
 	}
 
-	return r.fixSources(ctx, config, execution, configFile, dryRun)
+	rulesNote := "custom rules from rector.php"
+	if configFile != path.Join(config.RootDir, "rector.php") {
+		rulesNote = "bundled rules for Shopware " + config.MinShopwareVersion[:3]
+	}
+	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
+		note := "Shopware " + installed
+		if !config.IsProject {
+			note += " (" + CheckAgainstLowest + ")"
+		}
+		rulesNote = note + "; " + rulesNote
+	}
+
+	result := r.fixSources(ctx, config, execution, configFile, autoloadFile, dryRun)
+	if result.Note != "" {
+		result.Note += "; "
+	}
+	result.Note += rulesNote
+	return result
 }
 
 func (r Rector) getConfigPath(config ToolConfig) (string, error) {
@@ -127,14 +106,15 @@ func (r Rector) fixSources(
 	ctx context.Context,
 	config ToolConfig,
 	execution *ToolExecution,
-	configFile string,
+	configFile,
+	autoloadFile string,
 	dryRun bool,
 ) ToolSummary {
 	changed := make(map[string]struct{})
 	reportsComplete := true
 
 	for _, sourceDirectory := range config.SourceDirectories {
-		report := r.process(ctx, config, execution, configFile, sourceDirectory, dryRun)
+		report := r.process(ctx, config, execution, configFile, autoloadFile, sourceDirectory, dryRun)
 		if dryRun {
 			for _, file := range report.FileDiffs {
 				execution.AddFindings(file.pendingFindings(config.RootDir)...)
@@ -166,12 +146,12 @@ func (r Rector) process(
 	ctx context.Context,
 	config ToolConfig,
 	execution *ToolExecution,
-	configFile, directory string,
+	configFile, autoloadFile, directory string,
 	dryRun bool,
 ) rectorOutput {
 	args := []string{
 		"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "rector"),
-		"process", "--config", configFile, "--autoload-file", path.Join("vendor", "autoload.php"),
+		"process", "--config", configFile, "--autoload-file", autoloadFile,
 		"--output-format", "json", "--no-ansi", "--no-progress-bar", directory,
 	}
 
@@ -184,7 +164,7 @@ func (r Rector) process(
 	}
 
 	cmd := CommandContext(ctx, "php", args...)
-	cmd.Dir = config.RootDir
+	cmd.Dir = path.Dir(path.Dir(autoloadFile))
 	subprocess := execution.Run(operation, cmd)
 
 	expectedStatus := expectedExit(subprocess.Err, 1) || (dryRun && expectedExit(subprocess.Err, 2))
@@ -199,6 +179,19 @@ func (r Rector) process(
 	if err != nil {
 		execution.Fail(subprocess.ToolError(fmt.Errorf("cannot parse rector output: %w", err)))
 		return rectorOutput{}
+	}
+
+	// Rector reports paths relative to its working directory, which is the
+	// dependency cache for extensions and the source root for projects.
+	for i := range report.FileDiffs {
+		if !filepath.IsAbs(report.FileDiffs[i].File) {
+			report.FileDiffs[i].File = filepath.Join(cmd.Dir, report.FileDiffs[i].File)
+		}
+	}
+	for i := range report.Errors {
+		if report.Errors[i].File != "" && !filepath.IsAbs(report.Errors[i].File) {
+			report.Errors[i].File = filepath.Join(cmd.Dir, report.Errors[i].File)
+		}
 	}
 
 	for _, issue := range report.Errors {

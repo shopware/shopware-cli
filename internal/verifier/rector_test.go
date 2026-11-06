@@ -47,10 +47,10 @@ func TestRectorFixReportsAppliedChangesWithoutVerification(t *testing.T) {
 	t.Setenv("RECTOR_DRY_RUN_OUTPUT", "unexpected verification")
 	t.Setenv("RECTOR_DRY_RUN_EXIT", "3")
 
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories})
+	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 	require.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "1 file fixed", result.Note)
+	assert.Equal(t, "1 file fixed; custom rules from rector.php", result.Note)
 	arguments, err := os.ReadFile(argsPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(arguments), "--output-format\njson")
@@ -60,7 +60,7 @@ func TestRectorFixReportsAppliedChangesWithoutVerification(t *testing.T) {
 	assert.NotContains(t, string(arguments), "--clear-cache")
 	assert.Equal(t, 1, strings.Count(string(arguments), "\nprocess\n"))
 	assert.Contains(t, string(arguments), "--config\n"+filepath.Join(root, "rector.php"))
-	assert.Contains(t, string(arguments), "--autoload-file\nvendor/autoload.php")
+	assert.Contains(t, string(arguments), "--autoload-file\n"+filepath.Join(root, "vendor/autoload.php"))
 }
 
 func TestRectorFixCleanInputRunsOnce(t *testing.T) {
@@ -72,10 +72,10 @@ func TestRectorFixCleanInputRunsOnce(t *testing.T) {
 	t.Setenv("RECTOR_DRY_RUN_OUTPUT", "unexpected verification")
 	t.Setenv("RECTOR_DRY_RUN_EXIT", "3")
 
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories})
+	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 	assert.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "no changes", result.Note)
+	assert.Equal(t, "no changes; custom rules from rector.php", result.Note)
 	arguments, err := os.ReadFile(argsPath)
 	require.NoError(t, err)
 	assert.Equal(t, 1, strings.Count(string(arguments), "\nprocess\n"))
@@ -103,8 +103,8 @@ exit 1`, "src")
 	broken := filepath.Join(root, "src", "broken.php")
 	require.NoError(t, os.WriteFile(fixed, []byte("<?php // old\n"), 0o600))
 	require.NoError(t, os.WriteFile(broken, []byte("<?php invalid\n"), 0o600))
-	config := ToolConfig{RootDir: root, SourceDirectories: directories}
-	for _, note := range []string{"1 file fixed", "no changes"} {
+	config := ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories}
+	for _, note := range []string{"1 file fixed; custom rules from rector.php", "no changes; custom rules from rector.php"} {
 		result := runFixTool(t, Rector{}, config)
 		assert.Empty(t, result.Errors)
 		assert.Equal(t, note, result.Note)
@@ -153,7 +153,7 @@ func TestRectorFixReportsErrorsAndRejectsInvalidReports(t *testing.T) {
 			t.Setenv("RECTOR_WRITE_OUTPUT", scenario.output)
 			t.Setenv("RECTOR_WRITE_EXIT", scenario.exit)
 			t.Setenv("RECTOR_STDERR", "diagnostic")
-			result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories})
+			result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 			require.NotEmpty(t, result.Errors)
 			assert.Empty(t, result.Findings)
 			assert.Equal(t, scenario.output, result.Errors[0].Stdout)
@@ -185,10 +185,10 @@ esac`)
 	require.NoError(t, os.WriteFile(filepath.Join(good, "broken.php"), []byte("<?php invalid\n"), 0o644))
 	argsPath := filepath.Join(t.TempDir(), "arguments")
 	t.Setenv("TOOL_ARGS", argsPath)
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{good, bad}})
+	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: []string{good, bad}})
 	require.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0].Stdout, "BadRector")
-	assert.Equal(t, "1 file fixed", result.Note)
+	assert.Equal(t, "1 file fixed; custom rules from rector.php", result.Note)
 	assert.ElementsMatch(t, []validation.CheckResult{{
 		Path: "good/broken.php", Line: 2, Message: "Syntax error",
 		Severity: validation.SeverityError, Identifier: "rector/error",
@@ -205,11 +205,11 @@ func TestRectorUnexplainedExitDoesNotClaimNoChanges(t *testing.T) {
 	t.Setenv("TOOL_ARGS", filepath.Join(t.TempDir(), "arguments"))
 	t.Setenv("RECTOR_WRITE_OUTPUT", output)
 	t.Setenv("RECTOR_WRITE_EXIT", "1")
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories})
+	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 	require.Len(t, result.Errors, 1)
 	assert.Equal(t, output, result.Errors[0].Stdout)
 	assert.Empty(t, result.Findings)
-	assert.Empty(t, result.Note)
+	assert.Equal(t, "custom rules from rector.php", result.Note)
 }
 
 func TestRectorFixReportsSourceErrors(t *testing.T) {
@@ -219,7 +219,7 @@ func TestRectorFixReportsSourceErrors(t *testing.T) {
 	t.Setenv("TOOL_ARGS", argsPath)
 	t.Setenv("RECTOR_WRITE_OUTPUT", `{"totals":{"changed_files":0,"errors":1},"errors":[{"file":"src/broken.php","line":8,"message":"Syntax error, unexpected ':'"}]}`)
 	t.Setenv("RECTOR_WRITE_EXIT", "1")
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories})
+	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 	require.Empty(t, result.Errors)
 	require.Len(t, result.Findings, 1)
 	assert.Equal(t, validation.CheckResult{
@@ -264,7 +264,7 @@ func TestRectorSourceErrorsThroughSymlinkedRoot(t *testing.T) {
 				t.Setenv("RECTOR_DRY_RUN_OUTPUT", report)
 				t.Setenv("RECTOR_DRY_RUN_EXIT", "1")
 				result := runFixToolWithDryRun(t, Rector{}, ToolConfig{
-					RootDir: alias, SourceDirectories: []string{filepath.Join(resolved, "src")},
+					IsProject: true, RootDir: alias, SourceDirectories: []string{filepath.Join(resolved, "src")},
 				}, dryRun)
 
 				if location == "outside sources" {
@@ -291,10 +291,10 @@ func TestRectorFixWithoutDiffs(t *testing.T) {
 	t.Setenv("RECTOR_WRITE_EXIT", "0")
 	t.Setenv("RECTOR_DRY_RUN_OUTPUT", `{"totals":{"changed_files":0,"errors":0}}`)
 	t.Setenv("RECTOR_DRY_RUN_EXIT", "0")
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories})
+	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 	require.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "1 file fixed", result.Note)
+	assert.Equal(t, "1 file fixed; custom rules from rector.php", result.Note)
 	arguments, err := os.ReadFile(argsPath)
 	require.NoError(t, err)
 	assert.NotContains(t, string(arguments), "--dry-run")
@@ -309,7 +309,7 @@ func TestRectorSyntaxErrorsOutsideSourcesRemainFailures(t *testing.T) {
 			t.Setenv("RECTOR_WRITE_OUTPUT", `{"totals":{"changed_files":0,"errors":1},"errors":[{"file":"`+file+`","line":8,"message":"Syntax error"}]}`)
 			t.Setenv("RECTOR_WRITE_EXIT", "1")
 			t.Setenv("RECTOR_STDERR", "diagnostic")
-			result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories})
+			result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 			require.Len(t, result.Errors, 1)
 			assert.Empty(t, result.Findings)
 			assert.Contains(t, result.Errors[0].Stdout, file)
@@ -318,7 +318,7 @@ func TestRectorSyntaxErrorsOutsideSourcesRemainFailures(t *testing.T) {
 	}
 }
 
-func TestRectorRestoresComposerFilesAfterFix(t *testing.T) {
+func TestRectorPreservesComposerFilesAfterFix(t *testing.T) {
 	for _, lockExists := range []bool{false, true} {
 		name := "without lock"
 		if lockExists {
@@ -328,7 +328,7 @@ func TestRectorRestoresComposerFilesAfterFix(t *testing.T) {
 			fakeTool(t, "php", `if [ ! -f composer.lock ]; then exit 3; fi
 printf '{"totals":{"changed_files":0,"errors":0}}'`)
 			composer := filepath.Join(os.Getenv("PATH"), "composer")
-			require.NoError(t, os.WriteFile(composer, []byte("#!/bin/sh\nprintf 'changed' > composer.json\nprintf 'generated' > composer.lock\n"), 0o755))
+			require.NoError(t, os.WriteFile(composer, []byte("#!/bin/sh\nprintf 'changed' > composer.json\nprintf 'generated' > composer.lock\n/bin/mkdir -p vendor\n: > vendor/autoload.php\n"), 0o755))
 			root := t.TempDir()
 			manifest := filepath.Join(root, "composer.json")
 			lock := filepath.Join(root, "composer.lock")
@@ -340,7 +340,7 @@ printf '{"totals":{"changed_files":0,"errors":0}}'`)
 			result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}})
 			assert.Empty(t, result.Errors)
 			assert.Empty(t, result.Findings)
-			assert.Equal(t, "no changes", result.Note)
+			assert.Equal(t, "no changes; custom rules from rector.php", result.Note)
 			contents, err := os.ReadFile(manifest)
 			require.NoError(t, err)
 			assert.Equal(t, "{}", string(contents))
@@ -363,7 +363,7 @@ func TestRectorDryRunPreservesOutsideRootPaths(t *testing.T) {
 	t.Setenv("RECTOR_WRITE_EXIT", "0")
 	t.Setenv("RECTOR_DRY_RUN_OUTPUT", `{"totals":{"changed_files":1,"errors":0},"changed_files":["../shared/file.php"]}`)
 	t.Setenv("RECTOR_DRY_RUN_EXIT", "2")
-	result := runFixToolWithDryRun(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories}, true)
+	result := runFixToolWithDryRun(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories}, true)
 	assert.Empty(t, result.Errors)
 	assert.ElementsMatch(t, []validation.CheckResult{{
 		Path: filepath.Join(filepath.Dir(root), "shared", "file.php"), Line: 1,
@@ -387,11 +387,11 @@ printf '{"totals":{"changed_files":1,"errors":0},"file_diffs":[{"file":"src/file
 exit 2`, "src")
 	file := filepath.Join(root, "src", "file.php")
 	require.NoError(t, os.WriteFile(file, []byte("<?php // unchanged\n"), 0o600))
-	config := ToolConfig{RootDir: root, SourceDirectories: directories}
+	config := ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories}
 	for range 2 {
 		result := runFixToolWithDryRun(t, Rector{}, config, true)
 		assert.Empty(t, result.Errors)
-		assert.Empty(t, result.Note)
+		assert.Equal(t, "custom rules from rector.php", result.Note)
 		assert.ElementsMatch(t, []validation.CheckResult{{
 			Path: "src/file.php", Line: 1,
 			Message:  "Rector changes are required. Run fix without dry-run to apply them.",
@@ -430,10 +430,10 @@ func TestRectorFixDryRunOutcomes(t *testing.T) {
 			t.Setenv("RECTOR_DRY_RUN_OUTPUT", scenario.output)
 			t.Setenv("RECTOR_DRY_RUN_EXIT", scenario.exit)
 			t.Setenv("RECTOR_STDERR", "diagnostic")
-			result := runFixToolWithDryRun(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: directories}, true)
+			result := runFixToolWithDryRun(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories}, true)
 			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 			assert.ElementsMatch(t, scenario.findings, result.Findings)
-			assert.Empty(t, result.Note)
+			assert.Equal(t, "custom rules from rector.php", result.Note)
 			if scenario.failed {
 				require.Len(t, result.Errors, 1)
 				assert.Equal(t, scenario.output, result.Errors[0].Stdout)
@@ -442,6 +442,158 @@ func TestRectorFixDryRunOutcomes(t *testing.T) {
 			invocations, err := os.ReadFile(args)
 			require.NoError(t, err)
 			assert.Equal(t, 1, strings.Count(string(invocations), "--dry-run"))
+		})
+	}
+}
+
+func TestRectorPreservesComposerFilesOnPreparationFailure(t *testing.T) {
+	fakeTool(t, "composer", "printf 'changed' > composer.json\nprintf 'generated' > composer.lock\nprintf 'installation failed' >&2\nexit 1\n")
+	root := t.TempDir()
+	manifest := []byte(`{"require":{"shopware/core":"*"}}`)
+	lock := []byte("original lock")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), manifest, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), lock, 0o644))
+	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, MinShopwareVersion: "6.7.0.0"})
+	require.NotEmpty(t, result.Errors)
+	assert.Equal(t, "installation failed", result.Errors[0].Stderr)
+	actualManifest, err := os.ReadFile(filepath.Join(root, "composer.json"))
+	require.NoError(t, err)
+	assert.Equal(t, manifest, actualManifest)
+	actualLock, err := os.ReadFile(filepath.Join(root, "composer.lock"))
+	require.NoError(t, err)
+	assert.Equal(t, lock, actualLock)
+}
+
+func TestRectorDependenciesAndReporting(t *testing.T) {
+	for _, scenario := range []struct {
+		name                                             string
+		localVendor, customConfig, project, fail, dryRun bool
+	}{
+		{name: "standalone extension"},
+		{name: "extension with local vendor and custom config", localVendor: true, customConfig: true},
+		{name: "project", localVendor: true, project: true},
+		{name: "rector failure", fail: true},
+		{name: "extension dry run", localVendor: true, dryRun: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("RECTOR_ROOT", root)
+			fakeTools(t, map[string]string{
+				"composer": `printf '%s' "$* advisories=$COMPOSER_POLICY_ADVISORIES_BLOCK" > "$RECTOR_ROOT/composer-args"
+/bin/mkdir -p vendor/composer
+printf '{"packages":[{"name":"shopware/core","version":"6.7.0.0"}]}' > vendor/composer/installed.json
+: > vendor/autoload.php
+`,
+				"php": `printf '%s\n' "$@" > "$RECTOR_ROOT/rector-args"
+printf '%s' "$PWD" > "$RECTOR_ROOT/rector-cwd"
+printf '{"totals":{"changed_files":0,"errors":0}}'
+exit "$RECTOR_EXIT"
+`,
+			})
+			t.Setenv("RECTOR_EXIT", "0")
+			if scenario.fail {
+				t.Setenv("RECTOR_EXIT", "1")
+			}
+			manifest := []byte(`{"require":{"shopware/core":"~6.7"}}`)
+			lock := []byte("original lockfile")
+			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), manifest, 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), lock, 0o644))
+			if scenario.localVendor {
+				require.NoError(t, os.MkdirAll(filepath.Join(root, "vendor/composer"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "vendor/autoload.php"), []byte("original autoloader"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "vendor/composer/installed.json"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.15.1"}]}`), 0o644))
+			}
+			if scenario.customConfig {
+				require.NoError(t, os.WriteFile(filepath.Join(root, "rector.php"), []byte("<?php"), 0o644))
+			}
+			tools := t.TempDir()
+			cfg := ToolConfig{RootDir: root, ToolDirectory: tools, SourceDirectories: []string{root}, MinShopwareVersion: "6.7.0.0", CheckAgainst: CheckAgainstHighest, IsProject: scenario.project}
+			result := runFixToolWithDryRun(t, Rector{}, cfg, scenario.dryRun)
+			assert.Equal(t, scenario.fail, len(result.Errors) > 0)
+			workDir := filepath.Join(root, "var/cache/shopware-cli/composer-lowest")
+			note := "Shopware 6.7.0.0 (lowest); bundled rules for Shopware 6.7"
+			expectedConfig := filepath.Join(tools, "php/vendor/frosh/shopware-rector/config/shopware-6.7.0.php")
+			if scenario.project {
+				workDir = root
+				note = "Shopware 6.7.15.1; bundled rules for Shopware 6.7"
+				assert.NoFileExists(t, filepath.Join(root, "composer-args"))
+			} else {
+				composerArgs, err := os.ReadFile(filepath.Join(root, "composer-args"))
+				require.NoError(t, err)
+				assert.Contains(t, string(composerArgs), "--prefer-lowest")
+				assert.Contains(t, string(composerArgs), "advisories=0")
+			}
+			if scenario.customConfig {
+				expectedConfig = filepath.Join(root, "rector.php")
+				note = "Shopware 6.7.0.0 (lowest); custom rules from rector.php"
+			}
+			if !scenario.fail && !scenario.dryRun {
+				note = "no changes; " + note
+			}
+			assert.Equal(t, note, result.Note)
+			args, err := os.ReadFile(filepath.Join(root, "rector-args"))
+			require.NoError(t, err)
+			assert.Equal(t, scenario.dryRun, strings.Contains(string(args), "--dry-run\n"))
+			assert.Contains(t, string(args), "--config\n"+expectedConfig+"\n")
+			assert.Contains(t, string(args), "--autoload-file\n"+filepath.Join(workDir, "vendor/autoload.php")+"\n")
+			workingDir, err := os.ReadFile(filepath.Join(root, "rector-cwd"))
+			require.NoError(t, err)
+			resolvedDir, err := filepath.EvalSymlinks(workDir)
+			require.NoError(t, err)
+			actualDir, err := filepath.EvalSymlinks(string(workingDir))
+			require.NoError(t, err)
+			assert.Equal(t, resolvedDir, actualDir)
+			for name, expected := range map[string][]byte{"composer.json": manifest, "composer.lock": lock} {
+				actual, err := os.ReadFile(filepath.Join(root, name))
+				require.NoError(t, err)
+				assert.Equal(t, expected, actual)
+			}
+			if scenario.localVendor {
+				autoload, err := os.ReadFile(filepath.Join(root, "vendor/autoload.php"))
+				require.NoError(t, err)
+				assert.Equal(t, "original autoloader", string(autoload))
+			} else {
+				assert.NoDirExists(t, filepath.Join(root, "vendor"))
+			}
+		})
+	}
+}
+
+func TestRectorExtensionReportsCachedPaths(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		name := "fix"
+		if dryRun {
+			name = "dry run"
+		}
+		t.Run(name, func(t *testing.T) {
+			fakeTools(t, map[string]string{
+				"composer": "/bin/mkdir -p vendor\n: > vendor/autoload.php\n",
+				"php": `printf '{"totals":{"changed_files":1,"errors":1},"changed_files":["../../../../src/changed.php"],"errors":[{"file":"../../../../src/broken.php","message":"Syntax error","line":2}]}'
+exit 1`,
+			})
+			root := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "rector.php"), []byte("<?php"), 0o644))
+			source := filepath.Join(root, "src")
+			require.NoError(t, os.Mkdir(source, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(source, "changed.php"), []byte("<?php"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(source, "broken.php"), []byte("<?php :"), 0o644))
+			result := runFixToolWithDryRun(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{source}}, dryRun)
+			require.Empty(t, result.Errors)
+			expected := []validation.CheckResult{{
+				Path: "src/broken.php", Line: 2, Message: "Syntax error",
+				Severity: validation.SeverityError, Identifier: "rector/error",
+			}}
+			if dryRun {
+				expected = append(expected, validation.CheckResult{
+					Path: "src/changed.php", Line: 1,
+					Message:  "Rector changes are required. Run fix without dry-run to apply them.",
+					Severity: validation.SeverityError, Identifier: "rector/change",
+				})
+			} else {
+				assert.Contains(t, result.Note, "1 file fixed")
+			}
+			assert.ElementsMatch(t, expected, result.Findings)
 		})
 	}
 }

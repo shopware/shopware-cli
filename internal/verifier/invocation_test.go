@@ -170,33 +170,47 @@ func TestPHPCSFixerInvocation(t *testing.T) {
 	}
 }
 
-func TestRectorRestoresComposerFilesOnPreparationFailure(t *testing.T) {
-	fakeTool(t, "composer", "printf 'changed' > composer.json\nprintf 'generated' > composer.lock\nprintf 'installation failed' >&2\nexit 1\n")
+func TestPHPToolsShareLowestDependenciesWithCustomConfigs(t *testing.T) {
 	root := t.TempDir()
-	manifest := []byte(`{"require":{"shopware/core":"*"}}`)
-	lock := []byte("original lock")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), manifest, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), lock, 0o644))
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, MinShopwareVersion: "6.7.0.0"})
-	require.NotEmpty(t, result.Errors)
-	assert.Equal(t, "installation failed", result.Errors[0].Stderr)
-	actualManifest, err := os.ReadFile(filepath.Join(root, "composer.json"))
-	require.NoError(t, err)
-	assert.Equal(t, manifest, actualManifest)
-	actualLock, err := os.ReadFile(filepath.Join(root, "composer.lock"))
-	require.NoError(t, err)
-	assert.Equal(t, lock, actualLock)
-}
-
-func TestRectorRetainsPreparationAndCleanupFailures(t *testing.T) {
-	fakeTool(t, "composer", "/bin/mkdir composer.lock\nprintf 'installation failed' >&2\nexit 1\n")
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), []byte("original lock"), 0o644))
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}})
-	require.Len(t, result.Errors, 2)
-	assert.Equal(t, "installation failed", result.Errors[0].Stderr)
-	var pathError *os.PathError
-	require.ErrorAs(t, result.Errors[1], &pathError)
-	assert.Equal(t, filepath.Join(root, "composer.lock"), pathError.Path)
+	t.Setenv("TOOL_ROOT", root)
+	fakeTools(t, map[string]string{
+		"composer": "/bin/mkdir -p vendor\n: > vendor/autoload.php\n",
+		"php": `printf '%s\n' "$@" > "$TOOL_ROOT/tool-args"
+printf '%s' "$PWD" > "$TOOL_ROOT/tool-cwd"
+printf '{"files":{},"totals":{"changed_files":0,"errors":0}}'
+`,
+	})
+	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{"autoload":{"psr-4":{"Acme\\":"src/"}}}`), 0o644))
+	for _, name := range []string{"rector.php", "phpstan.neon"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), nil, 0o644))
+	}
+	cfg := ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstLowest}
+	workDir := filepath.Join(root, "var/cache/shopware-cli/composer-lowest")
+	var previousManifest []byte
+	for _, name := range []string{"phpstan", "rector"} {
+		t.Run(name, func(t *testing.T) {
+			if name == "phpstan" {
+				require.Empty(t, runCheckTool(t, PhpStan{}, cfg).Errors)
+			} else {
+				require.Empty(t, runFixTool(t, Rector{}, cfg).Errors)
+			}
+			args, err := os.ReadFile(filepath.Join(root, "tool-args"))
+			require.NoError(t, err)
+			assert.Contains(t, string(args), "--autoload-file\n"+filepath.Join(workDir, "vendor/autoload.php")+"\n")
+			cwd, err := os.ReadFile(filepath.Join(root, "tool-cwd"))
+			require.NoError(t, err)
+			resolvedDir, err := filepath.EvalSymlinks(workDir)
+			require.NoError(t, err)
+			actualDir, err := filepath.EvalSymlinks(string(cwd))
+			require.NoError(t, err)
+			assert.Equal(t, resolvedDir, actualDir)
+			manifest, err := os.ReadFile(filepath.Join(workDir, "composer.json"))
+			require.NoError(t, err)
+			assert.Contains(t, string(manifest), filepath.Join(root, "src"))
+			if previousManifest != nil {
+				assert.JSONEq(t, string(previousManifest), string(manifest))
+			}
+			previousManifest = manifest
+		})
+	}
 }
