@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 // fakeTool runs without external tool installations or network access.
@@ -200,6 +202,8 @@ printf '{"files":{},"errors":[]}'
 
 	require.Empty(t, result.Errors)
 	assert.Equal(t, "Shopware 6.6.0.0 (lowest)", result.Note)
+	assert.Equal(t, "6.6.0.0", tracking.CommandTags()[tracking.TagCheckedShopwareVersion])
+	assert.Equal(t, CheckAgainstLowest, tracking.CommandTags()[tracking.TagCheckAgainst])
 	workDir := filepath.Join(root, "var/cache/shopware-cli", "composer-lowest")
 	arguments, err := os.ReadFile(filepath.Join(root, "php-args"))
 	require.NoError(t, err)

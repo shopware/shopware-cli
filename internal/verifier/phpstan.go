@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -68,6 +69,10 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 				mode = CheckAgainstLowest
 			}
 			result.Note += " (" + mode + ")"
+			if version := tracking.ReportableShopwareVersion(installed); version != "" {
+				tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
+				tracking.SetCommandTag(tracking.TagCheckAgainst, mode)
+			}
 		}
 	}
 	// All source directories go into one run, so PHPStan knows the classes of

@@ -41,14 +41,20 @@ func startShopwareVersion(commandName string, lookup func() string) ShopwareVers
 // Keep arbitrary development branch names out of telemetry.
 var shopwareVersionPattern = regexp.MustCompile(`^(\d+\.\d+\.\d+\.\d+(-rc\d+)?|dev-trunk)$`)
 
+// ReportableShopwareVersion returns version if it is a release, a release
+// candidate or dev-trunk, and "" for anything else, such as other development
+// branches.
+func ReportableShopwareVersion(version string) string {
+	if !shopwareVersionPattern.MatchString(version) {
+		return ""
+	}
+	return version
+}
+
 func projectShopwareVersion() string {
 	projectRoot, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return ""
 	}
-	version := shop.DetectShopwareVersion(projectRoot)
-	if !shopwareVersionPattern.MatchString(version) {
-		return ""
-	}
-	return version
+	return ReportableShopwareVersion(shop.DetectShopwareVersion(projectRoot))
 }

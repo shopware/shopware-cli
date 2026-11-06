@@ -71,6 +71,10 @@ const (
 	TagSourceDirCount     = "source_dir_count"
 	TagAdminDirCount      = "admin_dir_count"
 	TagStorefrontDirCount = "storefront_dir_count"
+	// The Shopware version extension validate checked against and its
+	// --check-against mode, set by PHPStan with SetCommandTag.
+	TagCheckedShopwareVersion = "checked_shopware_version"
+	TagCheckAgainst           = "check_against"
 
 	// EventProjectCreate
 	TagVersion           = "version"

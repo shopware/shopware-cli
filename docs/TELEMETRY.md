@@ -165,6 +165,8 @@ overall CLI usage.
 | `source_dir_count` | How many source folders the tools work on, including those of configured bundles; on the same commands | `14` |
 | `admin_dir_count` | How many Administration folders the tools work on; on the same commands | `3` |
 | `storefront_dir_count` | How many Storefront folders the tools work on; on the same commands | `2` |
+| `checked_shopware_version` | The Shopware version `extension validate` checked against, as installed for PHPStan. Accepts a release, a release candidate or `dev-trunk`; omitted otherwise and when PHPStan does not run | `6.6.0.0` |
+| `check_against` | Which end of the extension's Shopware constraint was checked; only with `checked_shopware_version` | `highest` / `lowest` |
 
 Notes:
 
@@ -183,7 +185,9 @@ Notes:
 - The counts are sent once the tools start, so a command that fails before has
   none. Folder names and paths are never sent.
 - The command _name_ is captured (e.g. `project.create`), but **not** its
-  arguments, flags, paths, or any free-text input.
+  arguments, flags, paths, or any free-text input. `checked_shopware_version`
+  and `check_against` are the version and mode validation actually used, not
+  the flag as typed.
 - The root command alone (running `shopware-cli` with no sub-command) is not
   tracked.
 - Plugin generators (`shopware-cli extension add <generator>`) are measured
