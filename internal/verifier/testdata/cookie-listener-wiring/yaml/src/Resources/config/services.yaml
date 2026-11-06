@@ -1,0 +1,20 @@
+services:
+    # Adds the tracking cookie
+    Test\TestPlugin\Cookie\MigratedCookieProvider:
+        decorates: Shopware\Storefront\Framework\Cookie\CookieProviderInterface
+        arguments:
+            - '@Test\TestPlugin\Cookie\MigratedCookieProvider.inner'
+            - '@logger'
+
+    test.autowired_cookie_provider:
+        class: Test\TestPlugin\Cookie\AutowiredCookieProvider
+        decorates: Shopware\Storefront\Framework\Cookie\CookieProviderInterface
+        autowire: true
+        arguments:
+            $inner: '@.inner'
+        tags:
+            - { name: test.tag }
+
+    Test\TestPlugin\Cookie\LegacyCookieProvider:
+        decorates: Shopware\Storefront\Framework\Cookie\CookieProviderInterface
+        arguments: ['@.inner']
