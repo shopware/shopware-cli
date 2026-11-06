@@ -129,3 +129,19 @@ func runFormatTool(t *testing.T, tool FormatTool, config ToolConfig, dryRun bool
 		return tool.Format(t.Context(), config, execution, dryRun)
 	})[0]
 }
+
+func TestToolExecutionRunTelemetryWithoutChildCPUTime(t *testing.T) {
+	original := cpuTimeCoversChildren
+	t.Cleanup(func() { cpuTimeCoversChildren = original })
+	cpuTimeCoversChildren = false
+
+	execution := NewToolExecution(func([]validation.CheckResult) bool { return false })
+	var tags map[string]string
+	execution.onSubprocess = func(result SubprocessResult) {
+		tags = subprocessTelemetryTags("test", result)
+	}
+	execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/bin/sh", "-c", "exit 0"))
+
+	assert.Equal(t, "true", tags[tracking.TagStarted])
+	assert.NotContains(t, tags, tracking.TagCPUMS)
+}

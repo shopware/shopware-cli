@@ -38,7 +38,7 @@ func RunTools[T Tool](
 	for key, value := range configTelemetryTags(config) {
 		tracking.SetCommandTag(key, value)
 	}
-	tracking.SetCommandTag(tracking.TagCPUCount, strconv.Itoa(runtime.NumCPU()))
+	tracking.SetCommandTag(tracking.TagCPUCount, strconv.Itoa(runtime.GOMAXPROCS(0)))
 	var cpuTime atomic.Int64
 	results := make([]validation.ToolReport, len(tools), len(tools)+len(skipped))
 	sourceRoot := validation.ResolveSourceRoot(config.RootDir)
@@ -93,7 +93,9 @@ func RunTools[T Tool](
 		})
 	}
 	group.Wait()
-	tracking.SetCommandTag(tracking.TagCPUMS, strconv.FormatInt(time.Duration(cpuTime.Load()).Milliseconds(), 10))
+	if cpuTimeCoversChildren {
+		tracking.SetCommandTag(tracking.TagCPUMS, strconv.FormatInt(time.Duration(cpuTime.Load()).Milliseconds(), 10))
+	}
 	for _, result := range skipped {
 		results = append(results, validation.ToolReport{ToolResult: result})
 	}
@@ -110,7 +112,9 @@ func subprocessTelemetryTags(tool string, subprocess SubprocessResult) map[strin
 		tracking.TagStarted:     strconv.FormatBool(subprocess.ProcessState != nil),
 	}
 	if subprocess.ProcessState != nil {
-		tags[tracking.TagCPUMS] = strconv.FormatInt(subprocess.cpuTime().Milliseconds(), 10)
+		if cpuTimeCoversChildren {
+			tags[tracking.TagCPUMS] = strconv.FormatInt(subprocess.cpuTime().Milliseconds(), 10)
+		}
 		if code := subprocess.ProcessState.ExitCode(); code >= 0 {
 			tags[tracking.TagExitCode] = strconv.Itoa(code)
 		}

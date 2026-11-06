@@ -71,8 +71,8 @@ const (
 	TagSourceDirCount     = "source_dir_count"
 	TagAdminDirCount      = "admin_dir_count"
 	TagStorefrontDirCount = "storefront_dir_count"
-	// CPU use of the same runs: the tool subprocesses' CPU time and the logical CPUs the CLI can use.
-	// TagCPUMS is also on EventToolSubprocess, for that one subprocess.
+	// CPU use of the same runs: the tool subprocesses' CPU time and the CPUs the CLI can use, within container limits.
+	// TagCPUMS is also on EventToolSubprocess, for that one subprocess, and is not sent on Windows.
 	TagCPUMS    = "cpu_ms"
 	TagCPUCount = "cpu_count"
 
