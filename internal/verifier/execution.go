@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"runtime"
 	"slices"
 	"sync"
 	"time"
@@ -38,6 +39,18 @@ type SubprocessResult struct {
 
 func (r SubprocessResult) ToolError(err error) *ToolError {
 	return &ToolError{Err: err, Command: r.Command, Dir: r.Dir, Stdout: r.Stdout, Stderr: r.Stderr}
+}
+
+// cpuTimeCoversChildren is false on Windows, where a process's CPU time leaves out the processes it starts,
+// so cpu_ms is not sent there. It is a variable so tests can cover both cases.
+var cpuTimeCoversChildren = runtime.GOOS != "windows"
+
+// cpuTime is the user and system CPU time of the process and the children it waited for.
+func (r SubprocessResult) cpuTime() time.Duration {
+	if r.ProcessState == nil {
+		return 0
+	}
+	return r.ProcessState.UserTime() + r.ProcessState.SystemTime()
 }
 
 // ToolExecution delivers findings synchronously and keeps execution failures.

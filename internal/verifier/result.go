@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -31,10 +34,13 @@ func RunTools[T Tool](
 	progress *Progress,
 	run func(T, *ToolExecution) ToolSummary,
 ) []validation.ToolReport {
-	// The command event reports how much the tools work on.
+	// The command event reports how much the tools work on and how much CPU time they use.
 	for key, value := range configTelemetryTags(config) {
 		tracking.SetCommandTag(key, value)
 	}
+	// Logical CPUs, not GOMAXPROCS: that is a scheduler setting, which rounds container limits up.
+	tracking.SetCommandTag(tracking.TagCPUCount, strconv.Itoa(runtime.NumCPU()))
+	var cpuTime atomic.Int64
 	results := make([]validation.ToolReport, len(tools), len(tools)+len(skipped))
 	sourceRoot := validation.ResolveSourceRoot(config.RootDir)
 	var stderrMu sync.Mutex
@@ -51,6 +57,7 @@ func RunTools[T Tool](
 				return len(retained) > 0
 			})
 			execution.onSubprocess = func(subprocess SubprocessResult) {
+				cpuTime.Add(int64(subprocess.cpuTime()))
 				tracking.Track(ctx, tracking.EventToolSubprocess, subprocessTelemetryTags(tool.Name(), subprocess))
 				if logging.IsVerbose(ctx) {
 					stderrMu.Lock()
@@ -87,6 +94,9 @@ func RunTools[T Tool](
 		})
 	}
 	group.Wait()
+	if cpuTimeCoversChildren {
+		tracking.SetCommandTag(tracking.TagCPUMS, strconv.FormatInt(time.Duration(cpuTime.Load()).Milliseconds(), 10))
+	}
 	for _, result := range skipped {
 		results = append(results, validation.ToolReport{ToolResult: result})
 	}
@@ -103,6 +113,9 @@ func subprocessTelemetryTags(tool string, subprocess SubprocessResult) map[strin
 		tracking.TagStarted:     strconv.FormatBool(subprocess.ProcessState != nil),
 	}
 	if subprocess.ProcessState != nil {
+		if cpuTimeCoversChildren {
+			tags[tracking.TagCPUMS] = strconv.FormatInt(subprocess.cpuTime().Milliseconds(), 10)
+		}
 		if code := subprocess.ProcessState.ExitCode(); code >= 0 {
 			tags[tracking.TagExitCode] = strconv.Itoa(code)
 		}
