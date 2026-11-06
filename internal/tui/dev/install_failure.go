@@ -12,21 +12,23 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop/install"
 )
 
-type installFailureCategory string
+// failureCategory is the failure_category telemetry value of a classified
+// install or Docker start failure.
+type failureCategory string
 
 const (
-	installFailurePHP                 installFailureCategory = "php"
-	installFailureEnvironmentConfig   installFailureCategory = "env_config"
-	installFailureDatabaseVersion     installFailureCategory = "db_version"
-	installFailureDatabaseConnection  installFailureCategory = "db_connection"
-	installFailureMigration           installFailureCategory = "migration"
-	installFailureAlreadyExists       installFailureCategory = "already_exists"
-	installFailurePermission          installFailureCategory = "permission"
-	installFailureInvalidInput        installFailureCategory = "invalid_input"
-	installFailureMissingPrerequisite installFailureCategory = "missing_prerequisite"
-	installFailureThemeCompile        installFailureCategory = "theme_compile"
-	installFailureTransport           installFailureCategory = "transport"
-	installFailureUnknown             installFailureCategory = "unknown"
+	installFailurePHP                 failureCategory = "php"
+	installFailureEnvironmentConfig   failureCategory = "env_config"
+	installFailureDatabaseVersion     failureCategory = "db_version"
+	installFailureDatabaseConnection  failureCategory = "db_connection"
+	installFailureMigration           failureCategory = "migration"
+	installFailureAlreadyExists       failureCategory = "already_exists"
+	installFailurePermission          failureCategory = "permission"
+	installFailureInvalidInput        failureCategory = "invalid_input"
+	installFailureMissingPrerequisite failureCategory = "missing_prerequisite"
+	installFailureThemeCompile        failureCategory = "theme_compile"
+	installFailureTransport           failureCategory = "transport"
+	installFailureUnknown             failureCategory = "unknown"
 
 	installStartStep = "install_start"
 
@@ -41,21 +43,19 @@ const (
 // as a telemetry tag.
 type installFailure struct {
 	failingStep string
-	category    installFailureCategory
+	category    failureCategory
 	detail      string
 }
 
 // failureRule maps output patterns to a failure category.
-type failureRule[C ~string] struct {
-	category C
+type failureRule struct {
+	category failureCategory
 	patterns []*regexp.Regexp
 }
 
-type installFailureRule = failureRule[installFailureCategory]
-
 // installFailureRules lists known failure patterns. Output lines are checked
 // from the end, so a terminal error wins over an earlier warning.
-var installFailureRules = []installFailureRule{
+var installFailureRules = []failureRule{
 	{
 		category: installFailurePHP,
 		patterns: failurePatterns(
@@ -156,7 +156,7 @@ func failurePatterns(patterns ...string) []*regexp.Regexp {
 // matchFailure scans lines from the end, so the error that stopped the process
 // wins over earlier warnings, and returns the category of the first rule that
 // matches, with the index of the matching line.
-func matchFailure[C ~string](lines []string, rules []failureRule[C]) (category C, line int, ok bool) {
+func matchFailure(lines []string, rules []failureRule) (category failureCategory, line int, ok bool) {
 	for i := len(lines) - 1; i >= 0; i-- {
 		for _, rule := range rules {
 			for _, pattern := range rule.patterns {

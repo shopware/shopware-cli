@@ -320,7 +320,7 @@ func dockerStartEventTags(trigger string, started time.Time, err error, output [
 		tracking.TagDurationMS: durationMS(time.Since(started)),
 	}
 	if err != nil {
-		tags[tracking.TagFailureCategory] = classifyDockerStartFailure(output)
+		tags[tracking.TagFailureCategory] = string(classifyDockerStartFailure(output))
 	}
 	return tags
 }

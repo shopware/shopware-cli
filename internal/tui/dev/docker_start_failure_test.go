@@ -11,7 +11,7 @@ func TestClassifyDockerStartFailure(t *testing.T) {
 
 	tests := map[string]struct {
 		output []string
-		want   string
+		want   failureCategory
 	}{
 		"port in use": {
 			output: []string{"Error response from daemon: driver failed programming external connectivity on endpoint shop-web-1: Bind for 0.0.0.0:8000 failed: port is already allocated"},
