@@ -532,8 +532,12 @@ exit "$RECTOR_EXIT"
 				note = "no changes; " + note
 			}
 			assert.Equal(t, note, result.Note)
+			checkedVersion := "6.7.0.0"
+			if scenario.project {
+				checkedVersion = "6.7.15.1"
+			}
+			assert.Equal(t, checkedVersion, tracking.CommandTags()[tracking.TagCheckedShopwareVersion])
 			if !scenario.project {
-				assert.Equal(t, "6.7.0.0", tracking.CommandTags()[tracking.TagCheckedShopwareVersion])
 				assert.Equal(t, CheckAgainstLowest, tracking.CommandTags()[tracking.TagCheckAgainst])
 			}
 			args, err := os.ReadFile(filepath.Join(root, "rector-args"))

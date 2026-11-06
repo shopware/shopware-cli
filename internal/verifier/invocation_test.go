@@ -86,6 +86,7 @@ func TestPHPStanInvocation(t *testing.T) {
 			assert.Equal(t, scenario.skipped, result.SkipReason != "")
 			assert.Len(t, result.Findings, scenario.findings)
 			assert.Equal(t, "Shopware 6.7.1.0", result.Note)
+			assert.Equal(t, "6.7.1.0", tracking.CommandTags()[tracking.TagCheckedShopwareVersion])
 		})
 	}
 }

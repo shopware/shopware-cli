@@ -166,8 +166,8 @@ overall CLI usage.
 | `source_dir_count` | How many source folders the tools work on, including those of configured bundles; on the same commands | `14` |
 | `admin_dir_count` | How many Administration folders the tools work on; on the same commands | `3` |
 | `storefront_dir_count` | How many Storefront folders the tools work on; on the same commands | `2` |
-| `checked_shopware_version` | The Shopware version `extension validate` or `extension fix` ran against, as installed for PHPStan or Rector. Accepts a release, a release candidate or `dev-trunk`; omitted otherwise. Sent once the dependencies are installed, also when the tool fails afterwards | `6.6.0.0` |
-| `check_against` | Which end of the extension's Shopware constraint was used; only with `checked_shopware_version`. Always `lowest` for `extension fix` | `highest` / `lowest` |
+| `checked_shopware_version` | The Shopware version PHPStan or Rector ran against in `validate` or `fix`: for an extension as installed for the tool, for a project from its `vendor/`. Accepts a release, a release candidate or `dev-trunk`; omitted otherwise. Sent once the dependencies are installed, also when the tool fails afterwards | `6.6.0.0` |
+| `check_against` | Which end of the extension's Shopware constraint was used; on extensions only. Always `lowest` for `extension fix` | `highest` / `lowest` |
 | `cpu_ms` | CPU time the tools used, in milliseconds, including the Composer setup for PHPStan and Rector; on the same commands, except on Windows. Checks that run inside the CLI, such as `builtin`, are not included | `48210` |
 | `cpu_count` | How many logical CPU cores the CLI can run on; on the same commands. Container CPU limits are not reflected | `8` |
 

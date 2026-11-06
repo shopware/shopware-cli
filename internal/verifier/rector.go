@@ -73,12 +73,12 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 	}
 	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
 		note := "Shopware " + installed
+		if version := tracking.ReportableShopwareVersion(installed); version != "" {
+			tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
+		}
 		if !config.IsProject {
 			note += " (" + CheckAgainstLowest + ")"
-			if version := tracking.ReportableShopwareVersion(installed); version != "" {
-				tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
-				tracking.SetCommandTag(tracking.TagCheckAgainst, CheckAgainstLowest)
-			}
+			tracking.SetCommandTag(tracking.TagCheckAgainst, CheckAgainstLowest)
 		}
 		rulesNote = note + "; " + rulesNote
 	}
