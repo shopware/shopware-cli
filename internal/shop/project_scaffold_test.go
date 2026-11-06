@@ -453,4 +453,5 @@ func TestSupportsDedicatedWorker(t *testing.T) {
 	assert.True(t, supportsDedicatedWorker("6.6.4.0"))
 	assert.True(t, supportsDedicatedWorker("6.7.12.1"))
 	assert.True(t, supportsDedicatedWorker("dev-trunk"))
+	assert.False(t, supportsDedicatedWorker("dev-6.5.x"))
 }

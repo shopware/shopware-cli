@@ -225,11 +225,12 @@ func (s *ShopwareProjectScaffold) WriteComposerJson(ctx context.Context) error {
 var dedicatedWorkerConstraint = version.MustConstraints(version.NewConstraint(">=6.6.4.0"))
 
 // supportsDedicatedWorker reports whether the Docker queue worker works with the
-// given Shopware version. Dev branches (e.g. dev-trunk) are recent enough.
+// given Shopware version. Of the dev branches, only dev-trunk is known to be
+// recent enough; the others keep the admin worker.
 func supportsDedicatedWorker(rawVersion string) bool {
 	v, err := version.NewVersion(rawVersion)
 	if err != nil {
-		return strings.HasPrefix(rawVersion, "dev-")
+		return rawVersion == VersionTrunk
 	}
 
 	return dedicatedWorkerConstraint.Check(v)
