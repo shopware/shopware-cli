@@ -10,10 +10,6 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 permissions:
   contents: read
 
@@ -167,8 +163,8 @@ jobs:
         working-directory: shop
         run: shopware-cli project dev stop --remove-data
 
-  composer:
-    name: Composer ${{ matrix.line }}
+  ci:
+    name: Project CI ${{ matrix.line }}
     if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -233,11 +229,11 @@ jobs:
 
   report:
     name: Retry or report failure
-    needs: [docker, composer]
+    needs: [docker, ci]
     # A failed scheduled run is retried once; only a failure of that retry reaches Slack.
-    if: always() && (needs.docker.result == 'failure' || needs.composer.result == 'failure') && (github.event_name == 'schedule' || inputs.retry == true)
+    if: always() && (needs.docker.result == 'failure' || needs.ci.result == 'failure') && (github.event_name == 'schedule' || inputs.retry == true)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     permissions:
       contents: read
       actions: write
@@ -247,15 +243,12 @@ jobs:
         with:
           egress-policy: audit
 
-      # The wait lets a short outage of GitHub, a registry or Packagist pass before the second run.
       - name: Retry the scheduled run once
         if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          sleep 900
-          gh workflow run nightly-smoke.yml --ref "$GITHUB_REF_NAME" -f retry=true
+        run: gh workflow run nightly-smoke.yml --ref "$GITHUB_REF_NAME" -f retry=true
 
       - name: Report the failure to Slack
         if: github.event_name == 'workflow_dispatch'
