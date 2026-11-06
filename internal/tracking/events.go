@@ -100,7 +100,7 @@ const (
 	TagPHPVersion            = "php_version"
 	TagDeploymentHelperAdded = "deployment_helper_added"
 
-	// EventDevDockerStart
+	// EventDevDockerStart (reuses TagFailureCategory)
 	TagTrigger = "trigger"
 
 	// EventDevAction

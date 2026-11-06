@@ -288,17 +288,13 @@ func (t *telemetryState) beginDockerStart() {
 	t.dockerStart = time.Now()
 }
 
-func (t *telemetryState) dockerStartTags(err error) (map[string]string, bool) {
+func (t *telemetryState) dockerStartTags(err error, output []string) (map[string]string, bool) {
 	if t == nil || t.dockerStart.IsZero() {
 		return nil, false
 	}
 	started := t.dockerStart
 	t.dockerStart = time.Time{}
-	return map[string]string{
-		tracking.TagTrigger:    "initial",
-		tracking.TagResult:     resultTag(err),
-		tracking.TagDurationMS: durationMS(time.Since(started)),
-	}, true
+	return dockerStartEventTags("initial", started, err, output), true
 }
 
 func (t *telemetryState) beginConfigRestart() {
@@ -308,17 +304,25 @@ func (t *telemetryState) beginConfigRestart() {
 	t.restartStart = time.Now()
 }
 
-func (t *telemetryState) configRestartTags(err error) (map[string]string, bool) {
+func (t *telemetryState) configRestartTags(err error, output []string) (map[string]string, bool) {
 	if t == nil || t.restartStart.IsZero() {
 		return nil, false
 	}
 	started := t.restartStart
 	t.restartStart = time.Time{}
-	return map[string]string{
-		tracking.TagTrigger:    "config_change",
+	return dockerStartEventTags("config_change", started, err, output), true
+}
+
+func dockerStartEventTags(trigger string, started time.Time, err error, output []string) map[string]string {
+	tags := map[string]string{
+		tracking.TagTrigger:    trigger,
 		tracking.TagResult:     resultTag(err),
 		tracking.TagDurationMS: durationMS(time.Since(started)),
-	}, true
+	}
+	if err != nil {
+		tags[tracking.TagFailureCategory] = classifyDockerStartFailure(output)
+	}
+	return tags
 }
 
 func (t *telemetryState) beginTask(action string) {

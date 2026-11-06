@@ -45,17 +45,20 @@ type installFailure struct {
 	detail      string
 }
 
-type installFailureRule struct {
-	category installFailureCategory
+// failureRule maps output patterns to a failure category.
+type failureRule[C ~string] struct {
+	category C
 	patterns []*regexp.Regexp
 }
+
+type installFailureRule = failureRule[installFailureCategory]
 
 // installFailureRules lists known failure patterns. Output lines are checked
 // from the end, so a terminal error wins over an earlier warning.
 var installFailureRules = []installFailureRule{
 	{
 		category: installFailurePHP,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`allowed memory size`,
 			`outofmemoryerror`,
 			`php fatal error`,
@@ -64,21 +67,21 @@ var installFailureRules = []installFailureRule{
 	},
 	{
 		category: installFailureEnvironmentConfig,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`environment variable .* is not defined`,
 			`connection information is not valid\. missing parameter`,
 		),
 	},
 	{
 		category: installFailureDatabaseVersion,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`requires at least mysql`,
 			`failed to select database version`,
 		),
 	},
 	{
 		category: installFailureDatabaseConnection,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`sqlstate\[hy000\] \[2002\]`,
 			`sqlstate\[hy000\] \[1045\]`,
 			`sqlstate\[hy000\] \[1044\]`,
@@ -86,7 +89,7 @@ var installFailureRules = []installFailureRule{
 	},
 	{
 		category: installFailureMigration,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`\[42s01\]`,
 			`\[42s02\]`,
 			`\[42s22\]`,
@@ -95,27 +98,27 @@ var installFailureRules = []installFailureRule{
 	},
 	{
 		category: installFailureAlreadyExists,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`username .* already exists\.`,
 			`install\.lock already exists`,
 		),
 	},
 	{
 		category: installFailurePermission,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`permission denied`,
 			`could not create directory`,
 		),
 	},
 	{
 		category: installFailureInvalidInput,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`the password must have at least`,
 		),
 	},
 	{
 		category: installFailureMissingPrerequisite,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`snippet set with isocode`,
 			`could not get id of`,
 			`could not find theme with`,
@@ -124,7 +127,7 @@ var installFailureRules = []installFailureRule{
 	},
 	{
 		category: installFailureThemeCompile,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`unable to compile the theme`,
 			`error while trying to concatenate styles`,
 			`unable to .* theme\.json`,
@@ -135,14 +138,14 @@ var installFailureRules = []installFailureRule{
 	},
 	{
 		category: installFailureTransport,
-		patterns: installFailurePatterns(
+		patterns: failurePatterns(
 			`while setting up the .* transport`,
 			`transport does not exist`,
 		),
 	},
 }
 
-func installFailurePatterns(patterns ...string) []*regexp.Regexp {
+func failurePatterns(patterns ...string) []*regexp.Regexp {
 	compiled := make([]*regexp.Regexp, 0, len(patterns))
 	for _, pattern := range patterns {
 		compiled = append(compiled, regexp.MustCompile(`(?i)`+pattern))
@@ -150,8 +153,22 @@ func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 	return compiled
 }
 
-// Output is scanned from the end so the error that stopped the process wins
-// over earlier warnings.
+// matchFailure scans lines from the end, so the error that stopped the process
+// wins over earlier warnings, and returns the category of the first rule that
+// matches, with the index of the matching line.
+func matchFailure[C ~string](lines []string, rules []failureRule[C]) (category C, line int, ok bool) {
+	for i := len(lines) - 1; i >= 0; i-- {
+		for _, rule := range rules {
+			for _, pattern := range rule.patterns {
+				if pattern.MatchString(lines[i]) {
+					return rule.category, i, true
+				}
+			}
+		}
+	}
+	return category, -1, false
+}
+
 func classifyInstallFailure(output []string, processErr error) installFailure {
 	lines := cleanInstallOutput(output)
 
@@ -161,16 +178,9 @@ func classifyInstallFailure(output []string, processErr error) installFailure {
 		detail:      installFailureDetail(lines, processErr),
 	}
 
-	for i := len(lines) - 1; i >= 0; i-- {
-		for _, rule := range installFailureRules {
-			for _, pattern := range rule.patterns {
-				if pattern.MatchString(lines[i]) {
-					failure.category = rule.category
-					failure.detail = installFailureMessage(lines, i)
-					return failure
-				}
-			}
-		}
+	if category, i, ok := matchFailure(lines, installFailureRules); ok {
+		failure.category = category
+		failure.detail = installFailureMessage(lines, i)
 	}
 
 	return failure

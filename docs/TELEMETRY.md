@@ -341,6 +341,7 @@ Sent when a `docker compose up -d` run by the TUI finishes.
 | `trigger`     | Why the containers were (re)started                    | `initial` / `config_change`         |
 | `result`      | Outcome (`cancelled` when the user quit while waiting) | `success` / `failure` / `cancelled` |
 | `duration_ms` | How long the startup took                              | `12894`                             |
+| `failure_category` | Classified reason the startup failed (only for `failure`), from the `docker compose` output. Closed enum — the output itself is **never** sent | `port_in_use` / `disk_full` / `image_pull` / `mount` / `permission` / `unknown` |
 
 ### `shopware_cli.project.dev.action` — dashboard actions
 
