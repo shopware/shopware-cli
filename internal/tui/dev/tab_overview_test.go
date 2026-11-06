@@ -1,6 +1,7 @@
 package dev
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -294,4 +295,19 @@ func TestRenderDomains_CertificateRowFollowsTrust(t *testing.T) {
 
 	m.certTrusted = true
 	assert.Contains(t, ansi.Strip(m.renderDomains()), "[x] Local certificate trusted")
+}
+
+func TestProxyHealthChecks_OmittedWhenContextExpired(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	reg := proxy.Registry{}
+	reg.Upsert(proxy.ProjectEntry{ProjectRoot: proxy.CanonicalProjectRoot(dir), Hostname: "my-shop.shopware.local"})
+	require.NoError(t, reg.Save())
+	require.NotEmpty(t, registeredHostname(dir))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	assert.Empty(t, proxyHealthChecks(ctx, dir), "a timed-out check must not report the setup as broken")
 }

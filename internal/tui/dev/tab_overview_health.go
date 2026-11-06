@@ -88,8 +88,10 @@ func collectSetupHealth(ctx context.Context, projectRoot string, exec executor.E
 
 // proxyHealthChecks reports the local-domain (shared proxy) checks, shown only
 // for proxy projects: whether the shared Traefik container is running and
-// whether the OS resolves the project's hostname. Certificate-trust and
-// proxy-fallback checks are added once their backing state exists.
+// whether the OS resolves the project's hostname. They are omitted when ctx
+// expired before they finished, since a timed-out check says nothing about the
+// setup. Certificate-trust and proxy-fallback checks are added once their
+// backing state exists.
 func proxyHealthChecks(ctx context.Context, projectRoot string) []healthCheck {
 	hostname := registeredHostname(projectRoot)
 	if hostname == "" {
@@ -100,6 +102,9 @@ func proxyHealthChecks(ctx context.Context, projectRoot string) []healthCheck {
 	lookupCtx, cancel := context.WithTimeout(ctx, hostnameLookupTimeout)
 	defer cancel()
 	resolves := proxy.HostnameResolves(lookupCtx, hostname)
+	if ctx.Err() != nil {
+		return nil
+	}
 
 	return []healthCheck{
 		{

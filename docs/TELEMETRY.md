@@ -352,8 +352,12 @@ the check's level is sent, never the underlying values.
 
 | Tag      | Meaning                                                                                   | Example                    |
 | -------- | ----------------------------------------------------------------------------------------- | -------------------------- |
-| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`; for proxy projects also `proxy` and `hostname_resolves`, which looks up the project's hostname through the system resolver) | `admin_worker`             |
+| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`, plus `proxy` and `hostname_resolves` for proxy projects) | `admin_worker`             |
 | `result` | The check's level                                                                         | `ok` / `warn` / `critical` |
+
+`hostname_resolves` looks up the project's hostname through the system
+resolver. Earlier CLI versions only checked that the resolver configuration
+existed, so compare this check by `cli_version`.
 
 ### `shopware_cli.project.dev.session_start` — dashboard opened
 
