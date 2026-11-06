@@ -58,6 +58,19 @@ func TestShopwareVersionLookupRespectsDoNotTrack(t *testing.T) {
 	}
 }
 
+func TestShopwareVersionLookupRespectsUserConfig(t *testing.T) {
+	enableVersionLookup(t)
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("telemetry: false\n"), 0o600))
+	t.Setenv("SHOPWARE_CLI_CONFIG", configPath)
+
+	lookup := startShopwareVersion("project.console", func() string {
+		t.Error("unexpected lookup")
+		return ""
+	})
+	assert.Nil(t, lookup)
+}
+
 func TestProjectShopwareVersion(t *testing.T) {
 	enableVersionLookup(t)
 	root := t.TempDir()

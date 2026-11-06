@@ -14,7 +14,7 @@ opt out. It is accurate to the current implementation
 - Each install is identified by a **pseudonymous ID** (a random or hashed
   value), not by a person.
 - Telemetry can be **fully disabled** by setting the `DO_NOT_TRACK` environment
-  variable.
+  variable or `telemetry: false` in the user config file.
 - Events are sent over **UDP** (fire-and-forget). If the network is unavailable
   the CLI continues normally — telemetry never blocks or slows down a command in
   a way the user notices.
@@ -461,5 +461,15 @@ Telemetry honors the cross-tool
 export DO_NOT_TRACK=1
 ```
 
-When set, the `Track` function returns immediately and
-**no event is ever sent**.
+To opt out permanently without an environment variable, add this to the user
+config file, `shopware-cli/config.yaml` inside your user config directory (for
+example `~/.config/shopware-cli/config.yaml` on Linux, or the path in
+`SHOPWARE_CLI_CONFIG`):
+
+```yaml
+telemetry: false
+```
+
+When either is set, the `Track` function returns immediately and
+**no event is ever sent**. `DO_NOT_TRACK` always wins: it disables telemetry
+even when the config file sets `telemetry: true`.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/userconfig"
 )
 
 const (
@@ -159,16 +161,34 @@ func ShouldCheckForUpdate(version string, args []string) bool {
 		return false
 	}
 
-	if len(args) > 0 {
-		for _, arg := range args {
-			if arg == "--no-update-hint" || arg == "-n" {
-				return false
+	// An explicit --no-update-hint=false overrides the environment and user config.
+	flagEnabled := false
+	for _, arg := range args {
+		if arg == "--no-update-hint" || arg == "--no-interaction" || arg == "-n" {
+			return false
+		}
+		// Bool flags also accept an explicit value, e.g. --no-update-hint=true.
+		if value, ok := strings.CutPrefix(arg, "--no-update-hint="); ok {
+			if disabled, err := strconv.ParseBool(value); err == nil {
+				if disabled {
+					return false
+				}
+				flagEnabled = true
 			}
 		}
 	}
 
-	if os.Getenv(noUpdateNotificationEnv) == "true" {
-		return false
+	if !flagEnabled {
+		// An explicit environment value takes precedence over the user config file.
+		switch os.Getenv(noUpdateNotificationEnv) {
+		case "true":
+			return false
+		case "false":
+		default:
+			if cfg, _ := userconfig.Load(); cfg.NoUpdateHint {
+				return false
+			}
+		}
 	}
 
 	if version == "dev" {
