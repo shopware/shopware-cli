@@ -40,6 +40,14 @@ func (r SubprocessResult) ToolError(err error) *ToolError {
 	return &ToolError{Err: err, Command: r.Command, Dir: r.Dir, Stdout: r.Stdout, Stderr: r.Stderr}
 }
 
+// cpuTime is the user and system CPU time of the process and the children it waited for.
+func (r SubprocessResult) cpuTime() time.Duration {
+	if r.ProcessState == nil {
+		return 0
+	}
+	return r.ProcessState.UserTime() + r.ProcessState.SystemTime()
+}
+
 // ToolExecution delivers findings synchronously and keeps execution failures.
 // The callback must be safe for concurrent use.
 type ToolExecution struct {

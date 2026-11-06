@@ -74,6 +74,9 @@ func TestToolExecutionRunTelemetry(t *testing.T) {
 			duration, err := strconv.ParseInt(tags[tracking.TagDurationMS], 10, 64)
 			require.NoError(t, err)
 			assert.GreaterOrEqual(t, duration, int64(0))
+			cpu, err := strconv.ParseInt(tags[tracking.TagCPUMS], 10, 64)
+			require.NoError(t, err)
+			assert.GreaterOrEqual(t, cpu, int64(0))
 			assert.Equal(t, "0", tags[tracking.TagStderrBytes])
 			if tt.code == -1 {
 				assert.Equal(t, "partial", result.Stdout)
@@ -97,6 +100,7 @@ func TestToolExecutionRunTelemetry(t *testing.T) {
 	assert.Equal(t, "false", tags[tracking.TagStarted])
 	assert.Equal(t, "check", tags[tracking.TagOperation])
 	assert.NotContains(t, tags, tracking.TagExitCode)
+	assert.NotContains(t, tags, tracking.TagCPUMS)
 	assert.Contains(t, tags, tracking.TagDurationMS)
 	assert.Equal(t, "0", tags[tracking.TagStdoutBytes])
 	assert.Equal(t, "0", tags[tracking.TagStderrBytes])
