@@ -1,0 +1,70 @@
+name: Check command conventions
+
+on:
+  pull_request:
+    paths:
+      - 'cmd/**/*.go'
+      - 'sgconfig.yml'
+      - 'ast-grep/**'
+      - 'scripts/test-convention-fixes.sh'
+      - 'mise.toml'
+      - 'mise.lock'
+      - 'docs/COMMAND_CONVENTIONS.md'
+      - '.gitignore'
+      - '.github/workflows/conventions.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/**/*.go'
+      - 'sgconfig.yml'
+      - 'ast-grep/**'
+      - 'scripts/test-convention-fixes.sh'
+      - 'mise.toml'
+      - 'mise.lock'
+      - 'docs/COMMAND_CONVENTIONS.md'
+      - '.gitignore'
+      - '.github/workflows/conventions.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2.22.3
+        with:
+          egress-policy: block
+          disable-sudo: true
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            mise.jdx.dev:443
+            mise-versions.jdx.dev:443
+            objects.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up convention tools
+        uses: jdx/mise-action@v5.2.6
+        with:
+          install_args: --locked ast-grep
+
+      - name: Check command conventions
+        run: mise run --skip-tools lint-conventions
+
+      - name: Test convention rules and fixes
+        run: mise run --skip-tools test-conventions
