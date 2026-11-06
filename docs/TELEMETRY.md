@@ -165,7 +165,7 @@ overall CLI usage.
 | `source_dir_count` | How many source folders the tools work on, including those of configured bundles; on the same commands | `14` |
 | `admin_dir_count` | How many Administration folders the tools work on; on the same commands | `3` |
 | `storefront_dir_count` | How many Storefront folders the tools work on; on the same commands | `2` |
-| `checked_shopware_version` | The Shopware version `extension validate` checked against, as installed for PHPStan. Accepts a release, a release candidate or `dev-trunk`; omitted otherwise and when PHPStan does not run | `6.6.0.0` |
+| `checked_shopware_version` | The Shopware version `extension validate` checked against, as installed for PHPStan. Accepts a release, a release candidate or `dev-trunk`; omitted otherwise and when PHPStan does not complete its analysis | `6.6.0.0` |
 | `check_against` | Which end of the extension's Shopware constraint was checked; only with `checked_shopware_version` | `highest` / `lowest` |
 
 Notes:
