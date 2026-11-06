@@ -63,6 +63,10 @@ type setupHealthLoadedMsg struct {
 // so a stuck container cannot leave the report loading forever.
 const setupHealthTimeout = 15 * time.Second
 
+// hostnameLookupTimeout bounds the hostname lookup so a dead resolver cannot
+// hold up the whole report.
+const hostnameLookupTimeout = 3 * time.Second
+
 func loadSetupHealth(parent context.Context, projectRoot string, exec executor.Executor) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, setupHealthTimeout)
@@ -84,20 +88,23 @@ func collectSetupHealth(ctx context.Context, projectRoot string, exec executor.E
 
 // proxyHealthChecks reports the local-domain (shared proxy) checks, shown only
 // for proxy projects: whether the shared Traefik container is running and
-// whether the OS resolves the proxy domain. Certificate-trust and proxy-fallback
-// checks are added once their backing state exists.
+// whether the OS resolves the project's hostname. They are omitted when ctx
+// expired before they finished, since a timed-out check says nothing about the
+// setup. Certificate-trust and proxy-fallback checks are added once their
+// backing state exists.
 func proxyHealthChecks(ctx context.Context, projectRoot string) []healthCheck {
-	if registeredHostname(projectRoot) == "" {
+	hostname := registeredHostname(projectRoot)
+	if hostname == "" {
 		return nil
 	}
 
-	baseDomain := proxy.DefaultDomain
-	if settings, err := proxy.LoadSettings(); err == nil {
-		baseDomain = settings.BaseDomain()
-	}
-
 	running := proxy.ContainerIsRunning(ctx)
-	resolves := proxy.CheckResolverConfigured(baseDomain).Configured
+	lookupCtx, cancel := context.WithTimeout(ctx, hostnameLookupTimeout)
+	defer cancel()
+	resolves := proxy.HostnameResolves(lookupCtx, hostname)
+	if ctx.Err() != nil {
+		return nil
+	}
 
 	return []healthCheck{
 		{

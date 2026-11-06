@@ -71,14 +71,17 @@ type OverviewModel struct {
 	// proxy.RegisteredHostname (which reads registry.json and resolves
 	// symlinks) per render would block the render loop.
 	proxyHost string
-	// domainsSetupDone is whether the one-time machine setup (DNS + HTTPS
-	// trust, via `proxy setup`) is in place. Drives the Domains block's Setup
-	// status and whether the `s` action is offered.
+	// domainsSetupDone is whether the DNS resolver from the one-time
+	// `proxy setup` is configured. Drives the Domains block's domains row and
+	// whether the `s` action is offered.
 	domainsSetupDone bool
-	shopwareVersion  string
-	securityEnd      time.Time
-	health           []healthCheck
-	healthLoading    bool
+	// certTrusted is whether the system trusts the certificate the proxy serves
+	// for proxyHost. Drives the Domains block's certificate row.
+	certTrusted     bool
+	shopwareVersion string
+	securityEnd     time.Time
+	health          []healthCheck
+	healthLoading   bool
 	// Instances: the projects registered with the shared proxy, with per-instance
 	// status/memory/uptime and their combined memory. Shown only for proxy
 	// projects, under Setup health.
@@ -283,6 +286,7 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		sfWatchURL:       localStorefrontWatchURL,
 		proxyHost:        registeredHostname(projectRoot),
 		domainsSetupDone: overviewSetupDone(projectRoot),
+		certTrusted:      overviewCertTrusted(projectRoot),
 		instancesLoading: registeredHostname(projectRoot) != "",
 		loading:          true,
 		healthLoading:    true,
@@ -298,9 +302,9 @@ func registeredHostname(projectRoot string) string {
 	return host
 }
 
-// overviewSetupDone reports whether the machine's one-time proxy setup (DNS +
-// HTTPS trust) is in place for a proxy project. Non-proxy projects report
-// false (the Domains block is not shown for them anyway).
+// overviewSetupDone reports whether the DNS resolver from the machine's
+// one-time proxy setup is configured for a proxy project. Non-proxy projects
+// report false (the Domains block is not shown for them anyway).
 func overviewSetupDone(projectRoot string) bool {
 	if registeredHostname(projectRoot) == "" {
 		return false
@@ -312,6 +316,14 @@ func overviewSetupDone(projectRoot string) bool {
 	}
 
 	return proxy.CheckResolverConfigured(baseDomain).Configured
+}
+
+// overviewCertTrusted reports whether the system trusts the certificate the
+// proxy serves for the project's hostname.
+func overviewCertTrusted(projectRoot string) bool {
+	hostname := registeredHostname(projectRoot)
+	dir, err := proxy.StateDir()
+	return hostname != "" && err == nil && proxy.CertificateTrusted(dir, hostname)
 }
 
 // localStorefrontWatchURL is the classic local hot-proxy port of the
@@ -766,16 +778,22 @@ func (m OverviewModel) renderDomains() string {
 	s.WriteString("\n")
 
 	// The DNS resolver and the trusted certificate both come from the one-time
-	// `proxy setup`, tracked by a single flag. When done the row shows a green
-	// checkmark; while pending the whole row is dimmed with an empty checkbox, so
-	// it never reads as already configured. The `s` action runs the setup.
-	rows := []string{"Default domains configured", "Local certificate trusted"}
-	for _, label := range rows {
-		if m.domainsSetupDone {
+	// `proxy setup`. A done row shows a green checkmark; a pending row is dimmed
+	// with an empty checkbox, so it never reads as already configured. The `s`
+	// action runs the setup.
+	rows := []struct {
+		label string
+		done  bool
+	}{
+		{"Default domains configured", m.domainsSetupDone},
+		{"Local certificate trusted", m.certTrusted},
+	}
+	for _, row := range rows {
+		if row.done {
 			check := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("x")
-			fmt.Fprintf(&s, "  [%s] %s\n", check, label)
+			fmt.Fprintf(&s, "  [%s] %s\n", check, row.label)
 		} else {
-			fmt.Fprintf(&s, "  %s %s\n", tui.DimStyle.Render("[ ]"), tui.DimStyle.Render(label))
+			fmt.Fprintf(&s, "  %s %s\n", tui.DimStyle.Render("[ ]"), tui.DimStyle.Render(row.label))
 		}
 	}
 
