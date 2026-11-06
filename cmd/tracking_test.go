@@ -377,3 +377,31 @@ func TestTrackCommandExecution_FailedStep(t *testing.T) {
 	assert.Equal(t, "composer_install", (*events)[1][tracking.TagFailedStep], "a cancelled run keeps the step it stopped at")
 	assert.NotContains(t, (*events)[2], tracking.TagFailedStep)
 }
+
+func TestTrackCommandExecution_CommandTags(t *testing.T) {
+	originalTags := commandTags
+	t.Cleanup(func() { commandTags = originalTags })
+	commandTags = func() map[string]string {
+		return map[string]string{tracking.TagExtensionCount: "3", tracking.TagResult: "replaced"}
+	}
+
+	tests := []struct {
+		name   string
+		runErr error
+		result string
+	}{
+		{name: "success", result: tracking.ResultSuccess},
+		{name: "failure", runErr: errors.New("boom"), result: tracking.ResultFailure},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := useTrackingTestRoot(t, "shopware-cli")
+
+			trackCommandExecution(t.Context(), []string{"project", "console"}, 0, tt.runErr, "")
+
+			require.Len(t, *events, 1)
+			assert.Equal(t, "3", (*events)[0][tracking.TagExtensionCount])
+			assert.Equal(t, tt.result, (*events)[0][tracking.TagResult])
+		})
+	}
+}

@@ -65,6 +65,12 @@ const (
 	// TagFailedStep is the step a failed or cancelled run stopped at, from FailedAt here.
 	// Also on EventProjectUpgrade, EventDevInstall and EventDevWatcher.
 	TagFailedStep = "failed_step"
+	// Input counts of validate, fix and format, set by RunTools with SetCommandTag.
+	// Configured bundles are not extensions, so they only count as directories.
+	TagExtensionCount     = "extension_count"
+	TagSourceDirCount     = "source_dir_count"
+	TagAdminDirCount      = "admin_dir_count"
+	TagStorefrontDirCount = "storefront_dir_count"
 
 	// EventProjectCreate
 	TagVersion           = "version"

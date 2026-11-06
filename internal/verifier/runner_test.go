@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
@@ -140,4 +142,21 @@ func TestRunToolsIgnoresSkipReasonAfterFindingsOrFailures(t *testing.T) {
 	assert.False(t, results[1].HasFindings)
 	assert.Equal(t, "failed", results[2].Status())
 	assert.Empty(t, results[2].SkipReason)
+}
+
+func TestRunToolsSetsCommandTags(t *testing.T) {
+	// Only the counts matter here, so the extensions can stay empty.
+	RunTools(t.Context(), ToolList[Tool]{testTool{name: "test"}}, nil, ToolConfig{
+		Extensions:        make([]extension.Extension, 2),
+		SourceDirectories: []string{"a", "b", "c"},
+		AdminDirectories:  []string{"a"},
+	}, nil, func(_ Tool, _ *ToolExecution) ToolSummary {
+		return ToolSummary{}
+	})
+
+	tags := tracking.CommandTags()
+	assert.Equal(t, "2", tags[tracking.TagExtensionCount])
+	assert.Equal(t, "3", tags[tracking.TagSourceDirCount])
+	assert.Equal(t, "1", tags[tracking.TagAdminDirCount])
+	assert.Equal(t, "0", tags[tracking.TagStorefrontDirCount])
 }
