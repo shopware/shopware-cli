@@ -19,6 +19,8 @@ import (
 
 var trackEvent = tracking.Track
 
+var commandTags = tracking.CommandTags
+
 func trackCommandExecution(ctx context.Context, args []string, duration time.Duration, runErr error, shopwareVersion string) {
 	name, ok := commandEventName(args)
 	if !ok {
@@ -75,7 +77,7 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 		tags[tracking.TagShopwareVersion] = shopwareVersion
 	}
 	// Tags the command set itself never replace the ones above.
-	for key, value := range tracking.CommandTags(ctx) {
+	for key, value := range commandTags() {
 		if _, set := tags[key]; !set {
 			tags[key] = value
 		}

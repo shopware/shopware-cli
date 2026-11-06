@@ -63,7 +63,7 @@ var projectValidateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		tracking.SetCommandTag(ctx, tracking.TagExtensionCount, strconv.Itoa(len(toolCfg.Extensions)))
+		tracking.SetCommandTag(tracking.TagExtensionCount, strconv.Itoa(len(toolCfg.Extensions)))
 
 		finishSetup := progress.Start("preparing tools")
 		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)

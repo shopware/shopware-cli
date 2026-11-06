@@ -1,7 +1,6 @@
 package tracking
 
 import (
-	"context"
 	"strconv"
 	"sync"
 	"testing"
@@ -9,37 +8,41 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// resetCommandTags empties the collector before and after a test.
+func resetCommandTags(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		commandTagsMu.Lock()
+		defer commandTagsMu.Unlock()
+		clear(commandTags)
+	}
+	reset()
+	t.Cleanup(reset)
+}
+
 func TestCommandTags(t *testing.T) {
-	ctx := WithCommandTags(t.Context())
-	// Commands receive a context derived from the one the root command created.
-	commandCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	resetCommandTags(t)
 
-	SetCommandTag(commandCtx, TagExtensionCount, "3")
-	SetCommandTag(commandCtx, TagExtensionCount, "4")
+	SetCommandTag(TagExtensionCount, "3")
+	SetCommandTag(TagExtensionCount, "4")
 
-	tags := CommandTags(ctx)
+	tags := CommandTags()
 	assert.Equal(t, map[string]string{TagExtensionCount: "4"}, tags)
 
 	tags[TagExtensionCount] = "5"
-	assert.Equal(t, "4", CommandTags(ctx)[TagExtensionCount], "callers get a copy")
-}
-
-func TestCommandTagsWithoutCollector(t *testing.T) {
-	SetCommandTag(t.Context(), TagExtensionCount, "3")
-
-	assert.Empty(t, CommandTags(t.Context()))
+	assert.Equal(t, "4", CommandTags()[TagExtensionCount], "callers get a copy")
 }
 
 func TestSetCommandTagConcurrently(t *testing.T) {
-	ctx := WithCommandTags(t.Context())
+	resetCommandTags(t)
+
 	var group sync.WaitGroup
 	for i := range 3 {
 		group.Go(func() {
-			SetCommandTag(ctx, strconv.Itoa(i), "set")
+			SetCommandTag(strconv.Itoa(i), "set")
 		})
 	}
 	group.Wait()
 
-	assert.Len(t, CommandTags(ctx), 3)
+	assert.Len(t, CommandTags(), 3)
 }

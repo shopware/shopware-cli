@@ -379,6 +379,12 @@ func TestTrackCommandExecution_FailedStep(t *testing.T) {
 }
 
 func TestTrackCommandExecution_CommandTags(t *testing.T) {
+	originalTags := commandTags
+	t.Cleanup(func() { commandTags = originalTags })
+	commandTags = func() map[string]string {
+		return map[string]string{tracking.TagExtensionCount: "3", tracking.TagResult: "replaced"}
+	}
+
 	tests := []struct {
 		name   string
 		runErr error
@@ -390,11 +396,8 @@ func TestTrackCommandExecution_CommandTags(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			events := useTrackingTestRoot(t, "shopware-cli")
-			ctx := tracking.WithCommandTags(t.Context())
-			tracking.SetCommandTag(ctx, tracking.TagExtensionCount, "3")
-			tracking.SetCommandTag(ctx, tracking.TagResult, "replaced")
 
-			trackCommandExecution(ctx, []string{"project", "console"}, 0, tt.runErr, "")
+			trackCommandExecution(t.Context(), []string{"project", "console"}, 0, tt.runErr, "")
 
 			require.Len(t, *events, 1)
 			assert.Equal(t, "3", (*events)[0][tracking.TagExtensionCount])
