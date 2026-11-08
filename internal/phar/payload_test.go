@@ -33,7 +33,7 @@ func TestPayloadWithPHP(t *testing.T) {
 			dir := t.TempDir()
 			marker := filepath.Join(dir, "result.json")
 			args := []string{marker, mode, "--option", "quotes'\" and spaces", "$HOME; echo nope"}
-			cmd := exec.CommandContext(t.Context(), php, append([]string{"-n"}, payload.PHPArgs(args...)...)...)
+			cmd := exec.CommandContext(t.Context(), php, payload.PHPArgs(args...)...)
 			cmd.Dir = dir
 			cmd.Stdin = payload.Stdin()
 			output, err := cmd.CombinedOutput()
@@ -70,7 +70,7 @@ func TestPayloadWithPHP(t *testing.T) {
 		dir := t.TempDir()
 		invalid := &Payload{archive: append([]byte(nil), payload.archive...)}
 		invalid.archive[len(invalid.archive)-9] ^= 1 // Corrupt the signature.
-		cmd := exec.CommandContext(t.Context(), php, append([]string{"-n", "-d", "sys_temp_dir=" + dir}, invalid.PHPArgs()...)...)
+		cmd := exec.CommandContext(t.Context(), php, append([]string{"-d", "sys_temp_dir=" + dir}, invalid.PHPArgs()...)...)
 		cmd.Stdin = invalid.Stdin()
 		_, err := cmd.CombinedOutput()
 		require.Error(t, err)

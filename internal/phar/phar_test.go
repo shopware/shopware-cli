@@ -42,7 +42,7 @@ echo $archive['data.bin']->isCompressed() ? 'compressed' : 'plain';
 			require.NoError(t, Write(&archive, testStub+ending, files))
 			name := filepath.Join(t.TempDir(), "test.phar")
 			require.NoError(t, os.WriteFile(name, archive.Bytes(), 0o644))
-			output, err := exec.CommandContext(t.Context(), php, "-n", name).CombinedOutput()
+			output, err := exec.CommandContext(t.Context(), php, name).CombinedOutput()
 			require.NoError(t, err, "%s", output)
 			assert.Equal(t, "hello\x00\xff\x01\x800SHA-256plain", string(output))
 
@@ -50,7 +50,7 @@ echo $archive['data.bin']->isCompressed() ? 'compressed' : 'plain';
 			// the archive signature, so PHP must refuse to load it.
 			tampered := bytes.Replace(archive.Bytes(), []byte("<?php "), []byte("<?php  "), 1)
 			require.NoError(t, os.WriteFile(name, tampered, 0o644))
-			_, err = exec.CommandContext(t.Context(), php, "-n", name).CombinedOutput()
+			_, err = exec.CommandContext(t.Context(), php, name).CombinedOutput()
 			assert.Error(t, err)
 		})
 	}
