@@ -36,7 +36,7 @@ func (s *SSH) WriteDeploymentLogs(ctx context.Context, deployment Deployment, ou
 	if output == nil {
 		output = io.Discard
 	}
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentLogsScript, "<?php\n"), "--", string(payload)).Cmd
+	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentLogsScript, phpOpeningTag), "--", string(payload)).Cmd
 	cmd.Stdout = output
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

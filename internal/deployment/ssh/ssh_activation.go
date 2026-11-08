@@ -34,7 +34,7 @@ func (s *SSH) rollbackCandidates(ctx context.Context) ([]sshCandidate, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, "<?php\n"), "--", string(payload)).Cmd
+	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, phpOpeningTag), "--", string(payload)).Cmd
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()

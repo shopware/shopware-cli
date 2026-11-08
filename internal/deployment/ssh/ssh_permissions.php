@@ -53,8 +53,15 @@ function deploymentValidateCacheTree(string $path, bool $makeWritable = false): 
 
 function deploymentVerifyRuntimeCache(string $root, string $release, string $name): void
 {
-    foreach ([$root, "$root/runtime", "$root/runtime/$name", "$root/runtime/$name/cache",
-        $release, "$release/var"] as $directory) {
+    $directories = [
+        $root,
+        "$root/runtime",
+        "$root/runtime/$name",
+        "$root/runtime/$name/cache",
+        $release,
+        "$release/var",
+    ];
+    foreach ($directories as $directory) {
         deploymentPermissionDirectory($directory);
     }
     deploymentRuntimeDirectoryAccess("$root/runtime");

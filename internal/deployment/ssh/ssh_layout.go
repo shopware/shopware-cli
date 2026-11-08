@@ -8,12 +8,14 @@ import (
 	"strings"
 )
 
+const phpOpeningTag = "<?php\n"
+
 //go:embed ssh_layout.php
 var sshLayoutScript string
 
 // withSSHDeploymentLayout prepends shared layout validation to a remote PHP script.
 func withSSHDeploymentLayout(script string) string {
-	return sshLayoutScript + "\n" + strings.TrimPrefix(script, "<?php\n")
+	return sshLayoutScript + "\n" + strings.TrimPrefix(script, phpOpeningTag)
 }
 
 // The configured project directory is the active symlink. Its parent holds

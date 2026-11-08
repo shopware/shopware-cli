@@ -3,6 +3,13 @@ if (\PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+function deploymentHostRequiresPHPProcessRestart(string $hostname): bool
+{
+    // Profihost: restart the SSH user's PHP processes when CacheTool is unavailable.
+    $hostname = strtolower($hostname);
+    return $hostname === 'de-nserver.de' || str_ends_with($hostname, '.de-nserver.de');
+}
+
 // Provider-specific fallback when no CacheTool adapter is enabled.
 function deploymentRestartPHPProcesses(): void
 {
@@ -18,7 +25,7 @@ function deploymentRestartPHPProcesses(): void
     if ($hostname === '' || !preg_match('/\A[a-zA-Z0-9._-]+\z/', $hostname)) {
         throw new RuntimeException('Cannot determine the remote fully qualified hostname');
     }
-    if (stripos($hostname, 'de-nserver.de') === false) {
+    if (!deploymentHostRequiresPHPProcessRestart($hostname)) {
         deploymentReportReset("Skipping PHP process restart: $hostname does not match de-nserver.de");
         return;
     }

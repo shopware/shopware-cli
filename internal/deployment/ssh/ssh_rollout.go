@@ -32,9 +32,9 @@ var sshDeploymentMainScript string
 var sshCachetoolScript string
 
 var sshDeploymentScript = withSSHDeploymentLayout(sshCachetoolScript) + "\n" +
-	strings.TrimPrefix(sshPHPRestartScript, "<?php\n") + "\n" +
-	strings.TrimPrefix(sshPermissionsScript, "<?php\n") + "\n" +
-	strings.TrimPrefix(sshDeploymentMainScript, "<?php\n")
+	strings.TrimPrefix(sshPHPRestartScript, phpOpeningTag) + "\n" +
+	strings.TrimPrefix(sshPermissionsScript, phpOpeningTag) + "\n" +
+	strings.TrimPrefix(sshDeploymentMainScript, phpOpeningTag)
 
 //go:embed ssh_deployment_list.php
 var sshDeploymentListScript string
@@ -182,7 +182,7 @@ func (s *SSH) ListRollouts(ctx context.Context) ([]Rollout, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(withSSHDeploymentLayout(sshDeploymentListScript), "<?php\n"), "--", string(payload)).Cmd
+	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(withSSHDeploymentLayout(sshDeploymentListScript), phpOpeningTag), "--", string(payload)).Cmd
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
@@ -217,7 +217,7 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 		return Rollout{}, err
 	}
 	// current may not exist yet.
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, "<?php\n"), "--", string(payload)).Cmd
+	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, phpOpeningTag), "--", string(payload)).Cmd
 	cmd.Stderr = output
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

@@ -248,7 +248,8 @@ function deploymentCreationTimestamp(mixed $value): ?DateTimeImmutable
     }
     try {
         $time = new DateTimeImmutable($value);
-        return DateTimeImmutable::getLastErrors() === false ? $time : null;
+        $errors = DateTimeImmutable::getLastErrors();
+        return $errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0) ? $time : null;
     } catch (Throwable) {
         return null;
     }
@@ -299,7 +300,8 @@ function deploymentRetained(string $root, string $name): array
         throw new RuntimeException("Cannot establish successful retained release $name");
     }
     new DateTimeImmutable($state['deployed_at']);
-    if (DateTimeImmutable::getLastErrors() !== false) {
+    $errors = DateTimeImmutable::getLastErrors();
+    if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
         throw new RuntimeException("Invalid activation timestamp for release $name");
     }
     $event = deploymentReadMetadata("$root/.shopware-cli/rollouts/$reference.json");
@@ -378,8 +380,16 @@ try {
     $release = "$root/releases/$name";
     $sameActive = $action !== 'candidates' && is_link($current)
         && realpath($current) !== false && realpath($current) === realpath($release);
-    foreach ([$root, "$root/releases", "$root/shared", "$root/.shopware-cli", "$root/.shopware-cli/releases",
-        "$root/.shopware-cli/rollouts", "$root/.shopware-cli/artifacts"] as $directory) {
+    $directories = [
+        $root,
+        "$root/releases",
+        "$root/shared",
+        "$root/.shopware-cli",
+        "$root/.shopware-cli/releases",
+        "$root/.shopware-cli/rollouts",
+        "$root/.shopware-cli/artifacts",
+    ];
+    foreach ($directories as $directory) {
         if (is_link($directory) || (file_exists($directory) && !is_dir($directory))) {
             throw new RuntimeException("Expected a real directory: $directory");
         }
@@ -421,9 +431,6 @@ try {
         }
     } elseif (file_exists($current)) {
         throw new RuntimeException("cannot activate deployment: refusing to replace a real directory or file at $current");
-    }
-    if ($action !== '' && $previous !== null) {
-        deploymentRetained($root, basename($previous));
     }
     if ($action === 'candidates') {
         $candidates = [];
