@@ -35,7 +35,7 @@ require (
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
 	github.com/smallstep/truststore v0.13.0
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/stretchr/testify v1.12.1
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
 	github.com/vulcand/oxy/v2 v2.3.0
