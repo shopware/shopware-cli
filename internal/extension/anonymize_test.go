@@ -25,11 +25,11 @@ anonymize:
   tables:
     swag_example_token:
       access_token: "''"
-      email: faker.Internet.Email()
+      email: faker.Internet.SafeEmail()
   system_config:
     - " SwagExample.config.clientSecret "
     - key: SwagExample.config.merchantEmail
-      value: faker.Internet.Email()
+      value: faker.Internet.SafeEmail()
     - key: SwagExample.config.environment
       value: sandbox
     - key: SwagExample.config.enabled
@@ -43,7 +43,7 @@ anonymize:
 	assert.Equal(t, map[string]map[string]string{
 		"swag_example_token": {
 			"access_token": "''",
-			"email":        "faker.Internet.Email()",
+			"email":        "faker.Internet.SafeEmail()",
 		},
 	}, cfg.Anonymize.Tables)
 
@@ -55,7 +55,7 @@ anonymize:
 	}
 	assert.Equal(t, []shop.SystemConfigRule{
 		{Key: "SwagExample.config.clientSecret", Omit: true},
-		{Key: "SwagExample.config.merchantEmail", Faker: "faker.Internet.Email()"},
+		{Key: "SwagExample.config.merchantEmail", Faker: "faker.Internet.SafeEmail()"},
 		{Key: "SwagExample.config.environment", HasValue: true, Value: "sandbox"},
 		{Key: "SwagExample.config.enabled", HasValue: true, Value: false},
 		{Key: "SwagExample.config.optional", HasValue: true, Value: nil},
@@ -188,7 +188,7 @@ anonymize:
       secret: "'from-zzz'"
       extra: "NULL"
     zzz_customer:
-      email: faker.Internet.Email()
+      email: faker.Internet.SafeEmail()
   system_config:
     - Zzz.config.token
     - key: Aaa.config.secret
@@ -227,7 +227,7 @@ anonymize:
 			"access_token": "''",
 		},
 		"zzz_customer": {
-			"email": "faker.Internet.Email()",
+			"email": "faker.Internet.SafeEmail()",
 		},
 		"swag_vendor_token": {
 			"token": "NULL",
