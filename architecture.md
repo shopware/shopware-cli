@@ -7,19 +7,18 @@ tags: [boundaries, commands, patterns]
 
 ## 1. Summary
 
-`shopware-cli` is a Go/Cobra CLI with three command groups, registering from
-[cmd/root.go](cmd/root.go): `account`, `extension`, and `project`. Entry is
+`shopware-cli` is a Go/Cobra CLI with four command groups, registering from
+[cmd/root.go](cmd/root.go): `account`, `ai`, `extension`, and `project`. Entry is
 [main.go](main.go) → `cmd.Execute`.
 
-The CLI already runs every command in two modes from one code path:
-TUI-guided/interactive and headless (flags / CI / AI agent). That duality is a
-global invariant, not a per-command feature, and it is the contract that
-supports "rarely leave the IDE/TUI."
+The root command sets an interaction flag in the context based on stdin and
+`--no-interaction`. Commands use it to choose interactive or headless behavior;
+some commands also inspect whether stdin is a terminal directly. Interaction
+handling is therefore implemented by individual commands, not guaranteed by a
+single shared prompt mechanism.
 
 This summarizes current architecture, then sets a strategic direction across
-four main bets:
-
-- Providing a much larger diagnostics (`doctor`) surface
+three main bets:
 - Enabling an AI/agent to be a first-class consumer
 - Providing a richer dev-inner-loop (build/watch/preview)
 - Providing a guided-but-delegating deploy experience
@@ -35,10 +34,10 @@ limitations or friction.
 
 ### 2.1 Commands: adding new commands is low-friction
 
-A new command is just a new file: drop `cmd/<group>/<group><sub>.go`
-(`cmd/root.go`) and it wires itself in on startup. There's no centralized list
-to edit. The filename pattern/naming convention is the only rule/contract:
-`cmd/<group>/<group><subcommand>.go`.
+The root command registers command groups explicitly in `cmd/root.go`.
+Subcommands are generally defined in `cmd/<group>/<group>_<subcommand>.go`
+and added to their parent from an `init` function. The Go filename does not
+register a Cobra command by itself; the registration call is required.
 
 ### 2.2 Verifier tools: provides reproducible pattern for implementing other capabilities
 
@@ -50,7 +49,7 @@ command.
 
 `extension validate` runs all checkers by default. The deprecated `--full` flag
 remains accepted but has no effect; use `--only` or `--exclude` to select
-checkers. The format commands support `--dry-run`; the fix commands do not.
+checkers. The extension format and fix commands both support `--dry-run`.
 
 ```go
 type Tool interface {
@@ -58,15 +57,15 @@ type Tool interface {
 }
 type CheckTool interface {
     Tool
-    Check(ctx context.Context, check *Check, config ToolConfig) error
+    Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
 }
 type FixTool interface {
     Tool
-    Fix(ctx context.Context, config ToolConfig) error
+    Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
 }
 type FormatTool interface {
     Tool
-    Format(ctx context.Context, config ToolConfig, dryRun bool) error
+    Format(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
 }
 ```
 
@@ -82,9 +81,11 @@ built-in extension rules; the legacy name `sw-cli` is still accepted as an input
 alias. It does not validate per-extension metadata in a project context. There
 is no separate Composer verifier tool.
 
-Extension commands report selected tools as `invoked` and others as `skipped`.
-This describes selection and invocation, not whether a tool found applicable
-files or changed them.
+The shared runner collects findings and execution errors through `ToolExecution`
+and produces a result for each tool. Reports distinguish completed, failed and
+skipped tools; a selected tool can also skip itself when it does not apply.
+A completed tool may still report source findings. See
+[the tool-results ADR](docs/adr/2026-10-22-unified-tool-results.md).
 
 ### 2.3 Extension types: simple interface
 
@@ -134,9 +135,10 @@ container wired and compiled once—is generally stronger.
 
 ### 2.6 CLI-level hooks and middleware: main missing primitive for "platform" behavior
 
-There's no shared place in the CLI to run logic around every command (auth
-refresh, policy checks, telemetry, third-party commands). Telemetry is
-middleware-shaped; `Execute()` and other setup is repeated per group.
+The root command has a `PersistentPreRunE` hook and enables Cobra's traversal of
+run hooks. `Execute` also sets up context, logging, interaction and update
+checks, and records command execution after Cobra returns. Individual groups
+and commands can define their own hooks.
 ([cmd/root.go#L36](https://github.com/shopware/shopware-cli/blob/6ebf84df16147190a258d2aeadf91a4a15c707d7/cmd/root.go#L36))
 
 - Cleanup activity:
@@ -155,45 +157,31 @@ pre/post/preInstall/postInstall/preUpdate/postUpdate), each a config string run
 via `ProcessHelper::runAndTail`. Flexible, but the escape hatch: behavior can
 move into shell the PHP can't model.
 
-### 2.7 Diagnostics `doctor` vs. validation
+### 2.7 Project and extension validation
 
-`project doctor` is in place but is a fixed, project-scoped list of checks
-printed to the terminal (no severity, no `--fix`, no machine-readable output).
-Our workflow surfaces `doctor` in multiple areas: install/verify, dev loop,
-deploy preflight, operate. We need an implementation strategy for applying
-diagnostics across the journey as is possible.
+Both `extension validate` and `project validate` select registered checkers
+and pass their configuration to the shared verifier runner. An extension is
+discovered from the supplied path; project validation discovers project
+extensions and source directories, excluding vendor extensions and configured
+ignored extensions. Project validation also offers `--local-only`.
 
-In discussions we identified confusion opportunities around `doctor` vs.
-`validate`. Clarification:
+Both commands accept `--only` and `--exclude` to select tools, and
+`--format` to select a report. Supported report formats include summary, JSON,
+GitHub, GitLab, JUnit and Markdown. The older `--reporter` flag remains an
+accepted deprecated alias for `--format`.
 
-- `doctor`: "Is the world around my project/extension healthy?" Covers
-  environment, install, ports, deps, CLI version, account link. Things the user
-  didn't author.
-- `validate`: "Is the thing I authored correct?" Covers project/config/extension
-  checked against schema. Pass/fail orientation. Is a sub-command (like
-  `project code format`, `project code validate`) to make it more explicit what
-  is being validated.
-
-**To resolve**:
-
-- what "healthy" means at each key step (prerequisites at install,
-  env/connectivity in the dev loop, go-live checks before deploy, drift/compat
-  in maintain) so diagnostics are one consistent capability, not ad-hoc per
-  command.
-- if and how to apply checks at specific workflow points, gated by what's
-  actually knowable there: e.g. local-only checks vs ones needing a shop
-  connection, or checks that depend on env availability. Each point declares
-  which checks it can run and why others are skipped.
-- if and how to make checks pluggable by reusing the reproducible pattern
-  identified above, so the same checks can be invoked from different journey
-  steps rather than re-implemented every time
+The runner normalizes finding paths relative to the analysis root and filters
+findings according to configured ignores. A tool can report execution errors
+alongside findings; an execution error or remaining error-level finding makes
+the report fail. Tool outcomes describe whether the tool completed, failed or
+was skipped, rather than promising that source files were changed.
 
 ## 3. Scalability & performance
 
 ### 3.1 Where the CLI already does/runs things concurrently, for speed
 
 - **Validate / format / fix:** runs the selected capability-specific tools
-  concurrently via `errgroup.Group` and waits for them; an execution error makes
+  concurrently via the shared runner and waits for them; an execution error makes
   the command fail.
 - **npm installs:** installs dependencies for multiple extensions in parallel,
   with as many workers as you have CPU cores (`runtime.NumCPU()`,
@@ -259,9 +247,10 @@ rather than performing significant computation itself, profiling the Go process
 would provide limited value. The most useful metrics are command duration, step
 duration, time spent in external processes, and success/failure rates.
 
-The CLI does phone home a little after every command: `tracking.Track` records
-the command `name`, whether it succeeded, how long it took, the OS, and whether
-it ran in the TUI (cmd/root.go).
+The root command records command execution through the tracking package after
+Cobra returns. The verifier runner also records subprocess telemetry. Tracking
+is disabled when the `DO_NOT_TRACK` environment variable is present
+(`internal/tracking/tracking.go`).
 
 We can build on this signal.
 
@@ -270,8 +259,9 @@ We can build on this signal.
 shopware-cli is the tool you run locally and in CI to build, develop, and
 package. It writes the deploy config and pokes live shops over the API. The
 Deployment Helper is what runs on the server to actually carry out a deploy.
-They talk to each other only through config files the CLI writes, never by
-calling into each other.
+The CLI also invokes Deployment Helper in workflows such as headless local
+installation; generated deployment configuration and CI files form another
+boundary between the tools.
 
 In code, this boundary is maintained like so:
 
@@ -386,11 +376,12 @@ prerequisite for the machine-readable output below.
 
 ### 4.9 Version-upgrade workflow
 
-In the "deploy/release" stage of our user journey we propose a guided
-`project upgrade plan " run " status` for Shopware version upgrades, with the
-run/report executed via the Helper. Today only `upgrade-check` exists. The
-"upgrade report: upgraded/skipped/failed" it calls for is the structured
-step-result that the previous section notes is missing.
+`project upgrade` provides an interactive local upgrade wizard. In
+non-interactive mode it requires `--target`; `--dry-run` runs the
+read-only preflight, and `--no-audit` controls whether the workflow continues
+when dependencies are blocked by security advisories. The command resolves a
+project executor and delegates the headless workflow to the project upgrader in
+`internal/shop/upgrade`.
 
 ## 5. Supporting AI / agents as first-class consumers
 
@@ -417,19 +408,19 @@ promise:
   print human text only.
 - For agents and CI to consume any command, structured output needs to follow
   the `--format` convention everywhere it makes sense, not be bolted onto
-  individual commands. This is the same need behind the `doctor` command.
-- **Output isn't centralized.** Commands mix ~95 direct `fmt.Print*` calls with
-  ~296 `logging.FromContext` calls. Logging is structured (`zap`) and goes to
+  individual commands.
+- **Output isn't centralized.** Commands mix direct `fmt.Print*` calls with
+  `logging.FromContext` calls. Logging is structured (`zap`) and goes to
   stderr; the `fmt` calls go to stdout with no level, no format control, and no
   way to silence or serialize them. The situation is further complicated by
   native CI/CD output that is heavily used by commands such as `project ci`.
   That fragmentation is why a clean JSON mode is hard today. There's no single
   output path to switch. Routing result output through one channel (and
   reserving stderr for logs) is the prerequisite.
-- The interactive/non-interactive split is enforced per command, at the point of
-  prompting (`system.IsInteractionEnabled`), and only seven non-test files check
-  it. So headless mode holds by convention, not structurally. A new command can
-  forget the check and silently break it.
+- The interactive/non-interactive split is handled by individual commands.
+  Many use `system.IsInteractionEnabled` from the root context; some also
+  inspect the terminal directly. Headless behavior therefore depends on each
+  command's implementation.
 
 ## 6. Logging
 
@@ -440,8 +431,8 @@ centralized.
 
 ## 7. Parity between interactive/non-interactive
 
-The design depends on every command working in both contexts: interactive (the
-TUI prompts for input) and non-interactive (everything passed as flags, no
-prompts, the mode CI and agents use). Protect that with a CI gate: run every
-command with `--no-interaction` in tests, so a command can't quietly lose its
-non-interactive mode without a test catching it.
+Interactive behavior varies by command. The root context disables interaction
+when `--no-interaction` is supplied or stdin is not a terminal; commands that
+consult that context can use flags and defaults or fail when input is required.
+Some commands check the terminal directly, so the root flag alone does not
+establish parity across every command.
