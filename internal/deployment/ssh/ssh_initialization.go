@@ -101,7 +101,7 @@ func (s sshInitializationStore) run(ctx context.Context, input sshDeploymentInit
 	if err != nil {
 		return nil, err
 	}
-	cmd := s.ssh.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(withSSHDeploymentLayout(sshDeploymentInitScript), "<?php\n")).Cmd
+	cmd := s.ssh.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(withSSHDeploymentLayout(sshDeploymentInitScript), phpOpeningTag)).Cmd
 	cmd.Stdin = bytes.NewReader(payload)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
