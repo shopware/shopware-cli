@@ -29,14 +29,12 @@ func TestZipValidationUsesArchiveRelativePaths(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, ext.GetPath())
 
-	check := NewCheck()
-	check.SetSourceRoot(ext.GetPath())
-	require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
+	toolResult := runCheckTool(t, Builtin{}, ToolConfig{
 		Extensions: []extension.Extension{ext},
 		RootDir:    ext.GetPath(),
-	}))
-
-	results := check.GetResults()
+	})
+	require.Empty(t, toolResult.Errors)
+	results := toolResult.Findings
 	require.NotEmpty(t, results)
 
 	extractRoot := ext.GetPath()
@@ -75,16 +73,15 @@ func TestDirectoryValidationUsesExtensionRelativePaths(t *testing.T) {
 	ext, err := extension.GetExtensionByFolder(t.Context(), pluginDir)
 	require.NoError(t, err)
 
-	check := NewCheck()
-	check.SetSourceRoot(pluginDir)
-	require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
+	toolResult := runCheckTool(t, Builtin{}, ToolConfig{
 		Extensions:        []extension.Extension{ext},
 		RootDir:           pluginDir,
 		InputWasDirectory: true,
-	}))
+	})
+	require.Empty(t, toolResult.Errors)
 
 	foundXML := false
-	for _, result := range check.GetResults() {
+	for _, result := range toolResult.Findings {
 		assert.NotContains(t, result.Path, pluginDir)
 		assert.NotContains(t, result.Message, pluginDir)
 		if result.Identifier == "config.services_xml.deprecated" {

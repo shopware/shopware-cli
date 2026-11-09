@@ -1,6 +1,9 @@
 package dev
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,7 +17,9 @@ import (
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 	"github.com/shopware/shopware-cli/internal/tui/picker"
@@ -277,7 +282,9 @@ func TestUpdateKeyPress_PhaseInstallFailed_RestartRunsFullInstall(t *testing.T) 
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
+	events := captureDevEvents(t)
 	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
 	m.phase = phaseInstallFailed
 	m.overlayLines = []string{"output from failed attempt"}
 	m.installProg = installProgress{
@@ -295,6 +302,21 @@ func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
 	assert.Nil(t, final.installProg.failure)
 	assert.False(t, final.installProg.showLogs)
 	assert.NotNil(t, cmd)
+	assert.Equal(t, 1, sessionStarts(*events))
+}
+
+func TestUpdateInstallStepAsk_SkipOpensDashboard(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+	m.phase = phaseInstallPrompt
+	m.install.confirmYes = false
+
+	updated, cmd := m.updateInstallStepAsk(keySpecial(tea.KeyEnter))
+
+	assert.Equal(t, phaseDashboard, updated.(Model).phase)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, 1, sessionStarts(*events))
 }
 
 func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
@@ -912,4 +934,225 @@ func TestView_WindowTitlePerPhase(t *testing.T) {
 
 		assert.Equal(t, tc.wantTitle, m.windowTitle(), "phase %d", tc.phase)
 	}
+}
+
+type devEvent struct {
+	name string
+	tags map[string]string
+}
+
+// captureDevEvents replaces the tracking seam and returns the recorded events.
+func captureDevEvents(t *testing.T) *[]devEvent {
+	t.Helper()
+	original, originalNow := trackEvent, trackEventNow
+	t.Cleanup(func() { trackEvent, trackEventNow = original, originalNow })
+
+	events := &[]devEvent{}
+	record := func(name string, tags map[string]string) {
+		*events = append(*events, devEvent{name: name, tags: tags})
+	}
+	trackEvent, trackEventNow = record, record
+	return events
+}
+
+// sessionStarts returns how many session_start events were recorded.
+func sessionStarts(events []devEvent) int {
+	count := 0
+	for _, event := range events {
+		if event.name == tracking.EventDevSessionStart {
+			count++
+		}
+	}
+	return count
+}
+
+func TestDashboardSendsSessionStartAndEnd(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	m.startDashboard()
+	m.Update(keyRune('q'))
+
+	require.Len(t, *events, 2)
+	start, end := (*events)[0], (*events)[1]
+	assert.Equal(t, tracking.EventDevSessionStart, start.name)
+	assert.Equal(t, tracking.EventDevSession, end.name)
+}
+
+func TestExitResultNamesHowTheProgramEnded(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		runErr error
+		want   string
+	}{
+		{name: "sigterm", runErr: nil, want: "terminated"},
+		{name: "external sigint", runErr: fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrInterrupted), want: "interrupted"},
+		{name: "recovered panic", runErr: fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrProgramPanic), want: "panic"},
+		{name: "lost terminal", runErr: fmt.Errorf("%w: %w", tea.ErrProgramKilled, errors.New("read /dev/stdin: input/output error")), want: "error"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, exitResult(tt.runErr))
+		})
+	}
+}
+
+func TestReportExitEndsAnOpenSessionOnce(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	// SIGTERM ends the program without Update, so Run returns nil and quit paths never ran.
+	m.startDashboard()
+	m.reportExit(nil)
+	m.reportExit(nil)
+
+	require.Len(t, *events, 2)
+	end := (*events)[1]
+	assert.Equal(t, tracking.EventDevSession, end.name)
+	assert.Equal(t, "terminated", end.tags[tracking.TagResult])
+}
+
+func TestReportExitAlsoEndsTheRunningTask(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	m.startDashboard()
+	m.telemetry.beginTask("cache-clear")
+	m.reportExit(nil)
+
+	require.Len(t, *events, 3)
+	assert.Equal(t, tracking.EventDevAction, (*events)[1].name)
+	assert.Equal(t, tracking.ResultCancelled, (*events)[1].tags[tracking.TagResult])
+	assert.Equal(t, "terminated", (*events)[2].tags[tracking.TagResult])
+}
+
+func TestPanicWhileStoppingContainersSendsOneEnd(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.dockerMode = true
+	m.telemetry = newTelemetryState(true)
+
+	m.startDashboard()
+	updated, _ := m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmStop})
+	updated.(Model).reportExit(fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrProgramPanic))
+
+	require.Len(t, *events, 2)
+	assert.Equal(t, "stop_containers", (*events)[1].tags[tracking.TagResult])
+}
+
+func TestReportExitAfterANormalQuitSendsNothing(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	m.startDashboard()
+	m.Update(keyRune('q'))
+	m.reportExit(nil)
+
+	require.Len(t, *events, 2)
+	assert.Equal(t, "quit", (*events)[1].tags[tracking.TagResult])
+}
+
+func TestLateDashboardStartAfterQuitSendsNoStart(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	// The user quits while a slow install check is running; its result then opens the dashboard.
+	m.Update(keyRune('q'))
+	m.startDashboard()
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.EventDevSession, (*events)[0].name)
+}
+
+func TestWatcherPrepFailureReportsTheStep(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}, proxied: true})
+	m = updated.(Model)
+	stepErr := &extension.WatcherStepError{Step: extension.WatcherStepFeatureDump, Err: errors.New("exit status 1")}
+	updated, _ = m.updateWatcherMsg(watcherRunningMsg{name: watcherAdmin, err: fmt.Errorf("starting admin watcher: %w", stepErr)})
+	m = updated.(Model)
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.EventDevWatcher, (*events)[0].name)
+	tags := (*events)[0].tags
+	assert.Equal(t, "prep_failed", tags[tracking.TagResult])
+	assert.Equal(t, "feature_dump", tags[tracking.TagFailedStep])
+	assert.Equal(t, "preparing", tags[tracking.TagPhase])
+	assert.Equal(t, "true", tags[tracking.TagProxied])
+	assert.False(t, m.overview.adminWatchStarting)
+}
+
+func TestWatcherPhasesFollowTheLifecycle(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}})
+	m = updated.(Model)
+	updated, _ = m.updateWatcherMsg(watcherRunningMsg{name: watcherAdmin})
+	m = updated.(Model)
+	assert.Equal(t, "starting", m.telemetry.watcherRuns[watcherAdmin].phase)
+
+	updated, _ = m.updateWatcherMsg(watcherProbeMsg{name: watcherAdmin, url: "http://127.0.0.1:1", ready: true})
+	m = updated.(Model)
+	updated, _ = m.updateWatcherMsg(logDoneMsg{source: watcherAdmin})
+	m = updated.(Model)
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, "crashed", (*events)[0].tags[tracking.TagResult])
+	assert.Equal(t, "running", (*events)[0].tags[tracking.TagPhase])
+	assert.False(t, m.overview.adminWatchRunning)
+}
+
+func TestStopWhilePreparingReportsUserStopped(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}})
+	m = updated.(Model)
+	m.overview.adminWatchStarting = true
+
+	updated, cmd := m.executeCommand("admin-watch-stop")
+	m = updated.(Model)
+	require.NotNil(t, cmd, "the palette's stop entry works while the watcher prepares")
+	_, isTracked := m.watchers[watcherAdmin]
+	assert.False(t, isTracked)
+
+	// The cancelled preparation reports back, but the run was already counted.
+	_, _ = m.updateWatcherMsg(watcherRunningMsg{name: watcherAdmin, err: context.Canceled})
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, "user_stopped", (*events)[0].tags[tracking.TagResult])
+	assert.Equal(t, "preparing", (*events)[0].tags[tracking.TagPhase])
+}
+
+func TestQuitDuringTaskReportsRunningWatchers(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}})
+	m = updated.(Model)
+	m.phase = phaseTask
+	m.telemetry.beginTask("cache-clear")
+
+	_, cmd := m.Update(keyRune('q'))
+
+	require.NotNil(t, cmd)
+	assert.IsType(t, tea.QuitMsg{}, cmd())
+	names := make([]string, 0, len(*events))
+	for _, e := range *events {
+		names = append(names, e.name)
+	}
+	assert.Contains(t, names, tracking.EventDevAction)
+	assert.Contains(t, names, tracking.EventDevWatcher)
+	assert.Contains(t, names, tracking.EventDevSession)
+	assert.Empty(t, m.watchers, "the watchers are stopped")
 }

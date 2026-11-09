@@ -66,12 +66,12 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 	useVite := StorefrontUsesVite(projectRoot)
 	dumpArgs, err := storefrontThemeDumpArgs(ctx, opts)
 	if err != nil {
-		return nil, err
+		return nil, failedStep(WatcherStepThemeSelect, err)
 	}
 
 	logStep(out, "Dumping features...")
 	if err := runStep(ctx, cmdExecutor, out, "feature:dump"); err != nil {
-		return nil, err
+		return nil, failedStep(WatcherStepFeatureDump, err)
 	}
 
 	if !useVite {
@@ -82,13 +82,13 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 
 		logStep(out, "Compiling theme...")
 		if err := runStep(ctx, cmdExecutor, out, "theme:compile", activeOnly); err != nil {
-			return nil, err
+			return nil, failedStep(WatcherStepThemeCompile, err)
 		}
 	}
 
 	logStep(out, "Dumping theme...")
 	if err := runStorefrontThemeDump(ctx, cmdExecutor, in, out, dumpArgs...); err != nil {
-		return nil, err
+		return nil, failedStep(WatcherStepThemeDump, err)
 	}
 
 	storefrontRelPath := PlatformRelPath(projectRoot, "Storefront", filepath.Join("Resources", "app", "storefront"))
@@ -105,7 +105,7 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 		}
 		logStep(out, "Installing npm dependencies (this can take a few minutes)...")
 		if err := npm.InstallDependenciesStreamed(ctx, storefrontExecutor, npm.NonEmptyPackage, out); err != nil {
-			return nil, err
+			return nil, failedStep(WatcherStepNPMInstall, err)
 		}
 	}
 
@@ -124,7 +124,7 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 	if opts.ProxyHostname != "" {
 		proxyEnv, err := storefrontProxyEnv(projectRoot, cmdExecutor, opts.ProxyHostname)
 		if err != nil {
-			return nil, err
+			return nil, failedStep(WatcherStepProxyEnv, err)
 		}
 		for k, v := range proxyEnv {
 			env[k] = v

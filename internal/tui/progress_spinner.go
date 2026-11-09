@@ -39,22 +39,54 @@ func runSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd, output
 		cmd.Stderr = &writer
 	}
 
+	// Start before the renderer so even an early UI exit has a process to stop.
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	done := make(chan struct{})
+	var commandErr error
+	go func() {
+		commandErr = cmd.Wait()
+		close(done)
+	}()
+	stop := func() {
+		select {
+		case <-done:
+		default:
+			if cmd.Cancel != nil {
+				_ = cmd.Cancel()
+			} else {
+				_ = cmd.Process.Kill()
+			}
+			<-done
+		}
+	}
+	defer stop()
+
 	s := NewBrandSpinner()
 
 	model := &installProgressModel{
 		spinner:   s,
 		logWriter: &writer,
 		title:     title,
-		cmd:       cmd,
+		wait:      func() error { <-done; return commandErr },
 		cancel:    cancel,
 	}
 
-	if err := runProgram(cmdCtx, model); err != nil {
+	err := runProgram(cmdCtx, model)
+	stop()
+	if err != nil {
 		return err
 	}
 
 	if model.cancelled {
 		return context.Canceled
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if model.err == nil {
+		model.err = commandErr
 	}
 
 	if model.err != nil {
@@ -118,8 +150,8 @@ type installProgressModel struct {
 	logWriter *logWriter
 	showLogs  bool
 	title     string
-	cmd       *exec.Cmd
 	cancel    context.CancelFunc
+	wait      func() error
 
 	width     int
 	height    int
@@ -130,7 +162,7 @@ type installProgressModel struct {
 
 func (m *installProgressModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, func() tea.Msg {
-		err := m.cmd.Run()
+		err := m.wait()
 		return installFinishedMsg{err: err}
 	})
 }

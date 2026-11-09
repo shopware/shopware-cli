@@ -7,33 +7,36 @@ on:
       - 'internal/shop/config_schema.json'
       - 'internal/extension/config_schema.json'
       - '.github/workflows/schema-pages.yml'
-  release:
-    types: [published]
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # ratchet:step-security/harden-runner@v2.22.1
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Assemble Pages site
         env:
@@ -43,14 +46,8 @@ jobs:
           cp internal/shop/config_schema.json _site/shopware-project-schema.json
           cp internal/extension/config_schema.json _site/shopware-extension-schema.json
 
-          # Prefer the release that triggered this run; otherwise use the latest non-prerelease.
-          if [ "${{ github.event_name }}" = "release" ] && [ "${{ github.event.release.prerelease }}" != "true" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
-            RELEASE_TIME="${{ github.event.release.published_at }}"
-          else
-            VERSION=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
-            RELEASE_TIME=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .published_at 2>/dev/null || true)
-          fi
+          VERSION=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
+          RELEASE_TIME=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .published_at 2>/dev/null || true)
           VERSION="${VERSION#v}"
           if [ -z "$VERSION" ]; then
             VERSION="dev"
@@ -78,11 +75,11 @@ jobs:
           EOF
 
       - name: Setup Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # ratchet:actions/configure-pages@v6.0.0
+        uses: actions/configure-pages@v6.0.0
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # ratchet:actions/upload-pages-artifact@v5.0.0
+        uses: actions/upload-pages-artifact@v5.0.0
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # ratchet:actions/deploy-pages@v5.0.1
+        uses: actions/deploy-pages@v5.0.1

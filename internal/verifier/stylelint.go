@@ -3,32 +3,40 @@ package verifier
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
-
-	"golang.org/x/sync/errgroup"
+	"sync"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-type StylintError struct {
+// stylelintOutput describes native file reports, whose source paths are absolute.
+type stylelintOutput []struct {
+	Source                string             `json:"source"`
+	Autofixed             bool               `json:"autofixed"`
+	Deprecations          []stylelintMessage `json:"deprecations"`
+	InvalidOptionWarnings []any              `json:"invalidOptionWarnings"`
+	ParseErrors           []stylelintMessage `json:"parseErrors"`
+	Warnings              []stylelintMessage `json:"warnings"`
+}
+
+type stylelintMessage struct {
 	Line     int    `json:"line"`
-	Column   int    `json:"column"`
 	Rule     string `json:"rule"`
 	Severity string `json:"severity"`
 	Text     string `json:"text"`
 }
 
-type StylelintOutput []struct {
-	Source                string         `json:"source"`
-	Deprecations          []StylintError `json:"deprecations"`
-	InvalidOptionWarnings []any          `json:"invalidOptionWarnings"`
-	ParseErrors           []any          `json:"parseErrors"`
-	Errored               bool           `json:"errored"`
-	Warnings              []StylintError `json:"warnings"`
+// stylelintReport retains valid findings alongside malformed report errors.
+type stylelintReport struct {
+	findings     []validation.CheckResult
+	changedFiles []string
+	errors       []error
 }
 
 type StyleLint struct{}
@@ -37,110 +45,195 @@ func (s StyleLint) Name() string {
 	return "stylelint"
 }
 
-func (s StyleLint) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	paths := append([]string{}, config.StorefrontDirectories...)
-	paths = append(paths, config.AdminDirectories...)
-
-	var gr errgroup.Group
-
-	for _, p := range paths {
-		p := p
-
-		hasSCSS, err := hasSCSSFiles(p)
-		if err != nil {
-			return err
-		}
-
-		if !hasSCSS {
-			continue
-		}
-
-		gr.Go(func() error {
-			stylelint := CommandContext(ctx, "node", path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
-				"--formatter=json",
-				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("stylelint.config.%s.mjs", path.Base(p))),
-				"--ignore-pattern", "dist/**",
-				"--ignore-pattern", ".tmp/**",
-				"--ignore-pattern", "vendor/**",
-				p+"/**/*.scss",
-			)
-			stylelint.Dir = p
-
-			log, _ := stylelint.CombinedOutput()
-
-			var stylelintOutput StylelintOutput
-
-			if err := json.Unmarshal(log, &stylelintOutput); err != nil {
-				return fmt.Errorf("failed to unmarshal stylelint output: %w, %s", err, string(log))
-			}
-
-			for _, diagnostic := range stylelintOutput {
-				fixedPath := validation.NormalizeSourcePath(diagnostic.Source, config.RootDir)
-
-				for _, msg := range diagnostic.Warnings {
-					check.AddResult(validation.CheckResult{
-						Path:       fixedPath,
-						Line:       msg.Line,
-						Message:    msg.Text,
-						Severity:   msg.Severity,
-						Identifier: "stylelint/" + msg.Rule,
-					})
-				}
-
-				for _, msg := range diagnostic.Deprecations {
-					check.AddResult(validation.CheckResult{
-						Path:       fixedPath,
-						Line:       msg.Line,
-						Message:    msg.Text,
-						Severity:   msg.Severity,
-						Identifier: "stylelint/" + msg.Rule,
-					})
-				}
-			}
-
-			return nil
-		})
-	}
-
-	return gr.Wait()
+func (s StyleLint) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+	return s.run(ctx, config, execution, false)
 }
 
-func (s StyleLint) Fix(ctx context.Context, config ToolConfig) error {
-	paths := append([]string{}, config.StorefrontDirectories...)
-	paths = append(paths, config.AdminDirectories...)
+func (s StyleLint) Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
+	if dryRun {
+		return s.Check(ctx, config, execution)
+	}
+	return s.run(ctx, config, execution, true)
+}
 
-	var gr errgroup.Group
+func (s StyleLint) run(
+	ctx context.Context,
+	config ToolConfig,
+	execution *ToolExecution,
+	fix bool,
+) ToolSummary {
+	paths := append(append([]string{}, config.StorefrontDirectories...), config.AdminDirectories...)
+	var summaryMu sync.Mutex
+	changedFiles := make(map[string]struct{})
+	ran, failed := false, false
 
-	for _, p := range paths {
-		p := p
-
-		hasSCSS, err := hasSCSSFiles(p)
+	runDirectories(paths, func(directory string) {
+		hasSCSS, err := hasSCSSFiles(directory)
 		if err != nil {
-			return err
+			execution.Fail(&ToolError{Err: fmt.Errorf("cannot find SCSS files: %w", err)})
+			summaryMu.Lock()
+			failed = true
+			summaryMu.Unlock()
+			return
+		}
+		if !hasSCSS {
+			return
 		}
 
-		if !hasSCSS {
+		report := s.runDirectory(ctx, config, execution, directory, fix)
+		summaryMu.Lock()
+		defer summaryMu.Unlock()
+		ran = true
+		failed = failed || len(report.errors) > 0
+		if fix {
+			for _, file := range report.changedFiles {
+				changedFiles[file] = struct{}{}
+			}
+		}
+	})
+
+	if !ran && !failed {
+		return ToolSummary{SkipReason: "no SCSS source files"}
+	}
+	if !fix || failed {
+		return ToolSummary{}
+	}
+
+	return ToolSummary{Note: fileChangeNote(len(changedFiles), "fixed")}
+}
+
+func (s StyleLint) runDirectory(
+	ctx context.Context,
+	config ToolConfig,
+	execution *ToolExecution,
+	directory string,
+	fix bool,
+) stylelintReport {
+	args := []string{
+		path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
+		"--config", path.Join(
+			config.ToolDirectory, "js", "configs",
+			fmt.Sprintf("stylelint.config.%s.mjs", path.Base(directory)),
+		),
+		"--ignore-pattern", "dist/**",
+		"--ignore-pattern", ".tmp/**",
+		"--ignore-pattern", "vendor/**",
+		"--formatter=json", "**/*.scss",
+	}
+
+	operation := OperationCheck
+	if fix {
+		operation = OperationFix
+		args = append(args, "--fix")
+	}
+
+	cmd := CommandContext(ctx, "node", args...)
+	cmd.Dir = directory
+	subprocess := execution.Run(operation, cmd)
+
+	report := parseStylelintReport(subprocess, config.RootDir)
+	execution.AddFindings(report.findings...)
+	for _, err := range report.errors {
+		execution.Fail(subprocess.ToolError(err))
+	}
+
+	return report
+}
+
+func parseStylelintReport(subprocess SubprocessResult, root string) stylelintReport {
+	if !expectedExit(subprocess.Err, 2) {
+		return stylelintReport{errors: []error{
+			fmt.Errorf("cannot run stylelint in %s: %w", subprocess.Dir, subprocess.Err),
+		}}
+	}
+
+	output := subprocess.Stdout
+	if strings.TrimSpace(output) == "" {
+		output = subprocess.Stderr
+	}
+	var parsed stylelintOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		return stylelintReport{errors: []error{
+			fmt.Errorf("cannot parse stylelint output in %s: %w", subprocess.Dir, err),
+		}}
+	}
+	if parsed == nil {
+		return stylelintReport{errors: []error{
+			errors.New("cannot parse stylelint output: expected a report array"),
+		}}
+	}
+
+	var report stylelintReport
+	for _, file := range parsed {
+		if file.Source == "" || file.Warnings == nil {
+			report.errors = append(report.errors,
+				errors.New("cannot parse stylelint output: incomplete file result"),
+			)
+			continue
+		}
+		if len(file.InvalidOptionWarnings) > 0 {
+			report.errors = append(report.errors,
+				fmt.Errorf("cannot configure stylelint: %v", file.InvalidOptionWarnings),
+			)
+		}
+
+		messages := slices.Concat(file.Warnings, file.ParseErrors)
+		for _, deprecation := range file.Deprecations {
+			deprecation.Severity = validation.SeverityWarning
+			messages = append(messages, deprecation)
+		}
+		if !file.Autofixed && len(messages) == 0 {
 			continue
 		}
 
-		gr.Go(func() error {
-			stylelint := CommandContext(ctx, "node", path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
-				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("stylelint.config.%s.mjs", path.Base(p))),
-				"--ignore-pattern", "dist/**",
-				"--ignore-pattern", ".tmp/**",
-				"--ignore-pattern", "vendor/**",
-				"**/*.scss",
-				"--fix",
-			)
-			stylelint.Dir = p
-			stylelint.Stdout = os.Stdout
-			stylelint.Stderr = os.Stderr
+		filePath := validation.NormalizeSourcePath(file.Source, root)
+		if file.Autofixed {
+			report.changedFiles = append(report.changedFiles, filePath)
+		}
 
-			return stylelint.Run()
-		})
+		for _, message := range messages {
+			finding, err := message.finding(filePath)
+			if err != nil {
+				report.errors = append(report.errors, err)
+				continue
+			}
+			report.findings = append(report.findings, finding)
+		}
 	}
 
-	return gr.Wait()
+	if subprocess.Err != nil && len(report.findings) == 0 && len(report.errors) == 0 {
+		report.errors = append(report.errors,
+			errors.New("cannot complete stylelint analysis: unsuccessful exit without diagnostics"),
+		)
+	}
+
+	return report
+}
+
+func (m stylelintMessage) finding(filePath string) (validation.CheckResult, error) {
+	severity := m.Severity
+	if severity == "" {
+		severity = validation.SeverityError
+	}
+	if (severity != validation.SeverityError && severity != validation.SeverityWarning) ||
+		strings.TrimSpace(m.Text) == "" {
+		return validation.CheckResult{}, errors.New(
+			"cannot parse stylelint output: incomplete or invalid diagnostic",
+		)
+	}
+
+	rule := m.Rule
+	if rule == "" {
+		rule = "diagnostic"
+	}
+
+	return validation.CheckResult{
+		Path:       filePath,
+		Line:       m.Line,
+		Message:    m.Text,
+		Severity:   severity,
+		Identifier: "stylelint/" + rule,
+	}, nil
 }
 
 func init() {

@@ -15,10 +15,11 @@ import (
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
-	"github.com/shopware/shopware-cli/internal/git"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -45,33 +46,26 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	}
 
 	if output, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, opts.phpBinary); err != nil {
-		if !isComposerSecurityBlocked(output) || opts.noAudit {
-			return err
+		if ctx.Err() != nil || errors.Is(err, executor.ErrDockerCleanup) || !isComposerSecurityBlocked(output) || opts.noAudit {
+			return tracking.FailedAt(createStepComposerInstall, err)
 		}
 
 		if err := handleSecurityBlockedInstall(ctx, opts, chosenVersion); err != nil {
-			return err
+			return tracking.FailedAt(createStepComposerSecurityAdvisories, err)
 		}
 
 		if _, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, opts.phpBinary); err != nil {
-			return err
+			return tracking.FailedAt(createStepComposerInstall, err)
 		}
 	}
 
 	if opts.useDocker {
 		env, err := dockerpkg.NewEnvironment(opts.projectFolder, dockerpkg.Options{PHP: dockerpkg.PHP{Version: composerInstallPHP}})
 		if err != nil {
-			return err
+			return tracking.FailedAt(createStepDockerSetup, err)
 		}
 		if err := env.WriteCompose(); err != nil {
-			return err
-		}
-	}
-
-	if opts.initGit {
-		logging.FromContext(ctx).Infof("Initializing Git repository")
-		if err := git.Init(ctx, opts.projectFolder); err != nil {
-			return fmt.Errorf("failed to initialize git repository: %w", err)
+			return tracking.FailedAt(createStepDockerSetupWriteCompose, err)
 		}
 	}
 
@@ -87,11 +81,10 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	}
 
 	if err := shop.WriteConfig(shopCfg, opts.projectFolder); err != nil {
-		return err
+		return tracking.FailedAt(createStepWriteConfig, err)
 	}
 
-	printCreateSummary(ctx, opts)
-	return nil
+	return ctx.Err()
 }
 
 func newProjectConfig(opts *createOptions, composerInstallPHP string) *shop.Config {
@@ -178,8 +171,10 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 // isComposerSecurityBlocked reports whether composer output indicates that
 // dependency resolution failed because packages affected by security
 // advisories were blocked (composer >= 2.9 with audit blocking enabled).
+// Composer also mentions advisories as a side note when resolution fails for
+// another reason, such as a missing PHP extension; that does not count.
 func isComposerSecurityBlocked(output string) bool {
-	return strings.Contains(output, "affected by security advisories")
+	return strings.Contains(output, "but these were not loaded, because they are affected by security advisories")
 }
 
 // handleSecurityBlockedInstall is called when composer refused to install
@@ -202,7 +197,7 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 	}
 
 	if continueAnyway == tui.No {
-		return errors.New("project creation cancelled")
+		return errCreateCancelled
 	}
 
 	opts.noAudit = true
@@ -222,6 +217,7 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 // of the Composer PHAR is downloaded and used instead.
 func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool, phpVersion string, phpBinary string) (string, error) {
 	var cmdInstall *exec.Cmd
+	finish := func(err error) error { return err }
 
 	if useDocker && !system.IsInsideContainer() {
 		absProjectFolder, err := filepath.Abs(projectFolder)
@@ -229,8 +225,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			return "", err
 		}
 
-		dockerArgs := []string{"run",
-			"--rm",
+		dockerArgs := []string{
 			"--pull=always",
 			"-v", absProjectFolder + ":/app",
 			"-w", "/app"}
@@ -253,7 +248,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node24-caddy", phpVersion),
 			"composer", "install", "--no-interaction")
 
-		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
+		cmdInstall, finish = executor.DockerRunCommand(ctx, dockerArgs...)
 	} else {
 		composerBinary, isPhar, err := system.ResolveComposer(ctx)
 		if err != nil {
@@ -284,12 +279,12 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		cmdInstall.Stderr = io.MultiWriter(os.Stderr, &output)
 
 		err := cmdInstall.Run()
-		return output.String(), err
+		return output.String(), finish(err)
 	}
 
 	cmdInstall.Stdout = &output
 	cmdInstall.Stderr = &output
 
 	err := tui.RunSpinnerWithLogs(ctx, "Installing dependencies", cmdInstall)
-	return output.String(), err
+	return output.String(), finish(err)
 }

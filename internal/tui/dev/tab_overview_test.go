@@ -1,16 +1,20 @@
 package dev
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -302,4 +306,51 @@ func TestRenderWatchers_LocalModeIgnoresDockerPorts(t *testing.T) {
 	view := m.renderWatchers()
 	assert.Contains(t, view, "http://127.0.0.1:8080", "local mode must use the platform's dev server port, not docker.ports")
 	assert.Contains(t, view, "http://127.0.0.1:9998")
+}
+
+func TestWatcherProxiedDetection(t *testing.T) {
+	dir := t.TempDir()
+	writeComposerLock(t, dir, "^8.2")
+	env, err := dockerpkg.NewEnvironment(dir, dockerpkg.Options{Proxy: &dockerpkg.Proxy{Hostname: "my-shop.shopware.local"}})
+	require.NoError(t, err)
+
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", dir, nil, &shop.Config{})
+	assert.False(t, m.adminWatchProxied(), "no environment")
+	m.setEnvironment(env)
+	assert.True(t, m.adminWatchProxied())
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	assert.Empty(t, storefrontWatchOptions(dir, extension.StorefrontWatcherOptions{}).ProxyHostname, "not registered")
+
+	reg := proxy.Registry{}
+	reg.Upsert(proxy.ProjectEntry{ProjectRoot: proxy.CanonicalProjectRoot(dir), Hostname: "my-shop.shopware.local"})
+	require.NoError(t, reg.Save())
+	assert.Equal(t, "storefront-watch.my-shop.shopware.local", storefrontWatchOptions(dir, extension.StorefrontWatcherOptions{}).ProxyHostname)
+}
+
+func TestRenderDomains_CertificateRowFollowsTrust(t *testing.T) {
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", t.TempDir(), nil, &shop.Config{})
+	m.domainsSetupDone = true
+
+	m.certTrusted = false
+	assert.Contains(t, ansi.Strip(m.renderDomains()), "[ ] Local certificate trusted")
+
+	m.certTrusted = true
+	assert.Contains(t, ansi.Strip(m.renderDomains()), "[x] Local certificate trusted")
+}
+
+func TestProxyHealthChecks_OmittedWhenContextExpired(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	reg := proxy.Registry{}
+	reg.Upsert(proxy.ProjectEntry{ProjectRoot: proxy.CanonicalProjectRoot(dir), Hostname: "my-shop.shopware.local"})
+	require.NoError(t, reg.Save())
+	require.NotEmpty(t, registeredHostname(dir))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	assert.Empty(t, proxyHealthChecks(ctx, dir), "a timed-out check must not report the setup as broken")
 }

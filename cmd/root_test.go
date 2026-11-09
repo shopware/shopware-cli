@@ -14,6 +14,8 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/shopware/shopware-cli/cmd/project"
+	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -59,6 +61,11 @@ func TestInvocationErrorPrintsUsage(t *testing.T) {
 	assert.Contains(t, out, "Usage:")
 }
 
+type reportedError struct{}
+
+func (reportedError) Error() string { return "already reported" }
+func (reportedError) SilenceError() {}
+
 func TestExitCode(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -84,6 +91,26 @@ func TestExitCode(t *testing.T) {
 			wantLog:  []string{"running command: something broke"},
 		},
 		{
+			name:     "custom error opts in without registration",
+			err:      reportedError{},
+			wantCode: 1,
+		},
+		{
+			name:     "wrapped custom error exits silently",
+			err:      fmt.Errorf("cannot complete command: %w", reportedError{}),
+			wantCode: 1,
+		},
+		{
+			name:     "wrapped tool report failure exits silently",
+			err:      fmt.Errorf("status: %w", validation.ErrToolReportFailed),
+			wantCode: 1,
+		},
+		{
+			name:     "tool report naming its tools exits silently",
+			err:      fmt.Errorf("status: %w", &validation.ToolReportError{ToolsWithErrorFindings: []string{"phpstan"}}),
+			wantCode: 1,
+		},
+		{
 			name:     "environment down exits silently",
 			err:      project.ErrEnvironmentDown,
 			wantCode: 1,
@@ -101,6 +128,11 @@ func TestExitCode(t *testing.T) {
 		{
 			name:     "proxy verification failed exits silently",
 			err:      project.ErrProxyVerificationFailed,
+			wantCode: 1,
+		},
+		{
+			name:     "missing dependencies were already explained and exit silently",
+			err:      fmt.Errorf("cannot create project: %w", &system.MissingDependenciesError{Missing: []system.MissingDependency{{Name: "Docker", Reason: "not running", ID: "docker_not_running"}}}),
 			wantCode: 1,
 		},
 	}

@@ -2,12 +2,14 @@ package system
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -249,7 +251,12 @@ func TestCopyFileContentsAndPermissions(t *testing.T) {
 					src, dst := filepath.Join(base, "source"), filepath.Join(base, "target")
 					original := strings.Repeat("original contents", 8192)
 					require.NoError(t, os.WriteFile(src, []byte(original), 0o600))
-					require.NoError(t, os.Chmod(src, mode))
+					if err := os.Chmod(src, mode); err != nil {
+						if mode&(os.ModeSetuid|os.ModeSetgid) != 0 && errors.Is(err, syscall.EPERM) {
+							t.Skip("setuid and setgid bits are not permitted here")
+						}
+						require.NoError(t, err)
+					}
 					info, err := os.Stat(src)
 					require.NoError(t, err)
 

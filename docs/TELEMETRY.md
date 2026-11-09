@@ -27,6 +27,8 @@ The goal of telemetry is to answer questions like:
   maintaining?
 - What operating systems do our users run (Linux / macOS / Windows)?
 - How often do commands fail vs. succeed, and how long do they take?
+- Which CI systems run the CLI, and does WSL behave differently from native
+  Linux?
 - Is the CLI mostly run interactively by developers, or non-interactively in
   CI pipelines?
 - For key flows (project creation, upgrade checks), which configuration options
@@ -40,7 +42,7 @@ The goal of telemetry is to answer questions like:
 
 ## How we identify users
 
-We never identify a *person*. We identify an **install / environment** with a
+We never identify a _person_. We identify an **install / environment** with a
 pseudonymous `user_id`. How that ID is derived depends on where the CLI runs.
 
 ### 1. CI environments (deterministic, hashed)
@@ -51,11 +53,11 @@ the same ID, without us knowing which repository it is.
 
 The following environment variables are checked, in order:
 
-| Provider  | Environment variable        | Example value                              |
-|-----------|-----------------------------|--------------------------------------------|
-| GitHub    | `GITHUB_REPOSITORY`         | `shopware/shopware`                         |
-| GitLab    | `CI_PROJECT_URL`            | `https://gitlab.example.com/group/repo`    |
-| Bitbucket | `BITBUCKET_REPO_FULL_NAME`  | `workspace/repo`                           |
+| Provider  | Environment variable       | Example value                           |
+| --------- | -------------------------- | --------------------------------------- |
+| GitHub    | `GITHUB_REPOSITORY`        | `shopware/shopware`                     |
+| GitLab    | `CI_PROJECT_URL`           | `https://gitlab.example.com/group/repo` |
+| Bitbucket | `BITBUCKET_REPO_FULL_NAME` | `workspace/repo`                        |
 
 The raw value is run through **SHA-256** and we keep the first 16 bytes (32 hex
 characters). The original repository name is **never transmitted** — only its
@@ -86,33 +88,113 @@ over time.
 
 All events share a common envelope:
 
-| Field       | Description                                                        |
-|-------------|--------------------------------------------------------------------|
-| `event`     | Event name, always prefixed with `shopware_cli.`                   |
-| `user_id`   | The pseudonymous ID described above                                |
-| `timestamp` | RFC 3339 timestamp of when the event was sent                      |
-| `tags`      | Event-specific key/value pairs (all string values), described below|
+| Field       | Description                                                         |
+| ----------- | ------------------------------------------------------------------- |
+| `event`     | Event name, always prefixed with `shopware_cli.`                    |
+| `user_id`   | The pseudonymous ID described above                                 |
+| `timestamp` | RFC 3339 timestamp of when the event was sent                       |
+| `tags`      | Event-specific key/value pairs (all string values), described below |
+
+Every event's `tags` also carry `cli_version`, the version of `shopware-cli`
+that sent it, so dev builds can be excluded for every event. They also carry
+`session_id`, a random ID for one run of the CLI that is not saved on the
+machine, so the events of the same run can be linked.
 
 There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
+
+### `shopware_cli.tool.subprocess` — subprocess duration and output sizes
+
+Sent after each checker, formatter, or fixer subprocess attempt, including
+failed starts and preparation commands such as Composer installation. This
+respects `DO_NOT_TRACK`.
+
+| Tag            | Meaning                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| `tool`         | Tool name, such as `phpstan` or `eslint`                                                                   |
+| `operation`    | Fixed operation label identifying the subprocess purpose; see below                                        |
+| `stdout_bytes` | Number of bytes captured from stdout                                                                       |
+| `stderr_bytes` | Number of bytes captured from stderr                                                                       |
+| `duration_ms`  | Elapsed wall-clock milliseconds around command execution, including startup; may be zero for fast attempts |
+| `cpu_ms`       | CPU milliseconds the process used, including child processes; omitted for failed starts and on Windows     |
+| `started`      | `"true"` if the process started, `"false"` if it failed to start                                           |
+| `exit_code`    | Exit code when available; omitted for failed starts and signal termination                                 |
+
+Operation labels are defined in the CLI code and never derived from command
+arguments, paths, or package names. They are included for failed starts too.
+
+| Tool                          | Operation                             |
+| ----------------------------- | ------------------------------------- |
+| PHPStan or Rector preparation | `composer_require`, `composer_update` |
+| PHPStan                       | `analyse`                             |
+| Rector                        | `check` (dry run), `fix`               |
+| ESLint, Stylelint             | `check`, `fix`                        |
+| Prettier, PHP-CS-Fixer        | `check` (dry run), `format`           |
+
+Repeated invocations across source directories share the same operation label;
+directory details remain in local verbose logs.
+
+Duration excludes output parsing and telemetry delivery. Processes terminated by
+a signal still report their duration and captured output sizes. A nonzero exit
+code can indicate findings rather than an execution failure, depending on the
+tool. Output contents, command arguments, working directories, and error
+messages are not included. These measurements help compare subprocess runtime,
+output sizes, and exit codes, identify startup failures, and decide which tools
+need streaming output instead of buffering it in memory.
 
 ### `shopware_cli.command` — every command run
 
 Sent after (almost) any sub-command finishes. This is our broadest signal of
 overall CLI usage.
 
-| Tag            | Meaning                                                       | Example                |
-|----------------|---------------------------------------------------------------|------------------------|
-| `command_name` | The command path, dot-separated (dashes become underscores)   | `extension.build`      |
-| `result`       | Outcome of the command                                        | `success` / `failure` / `cancelled` |
-| `duration_ms`  | How long the command took, in milliseconds                    | `1423`                 |
-| `cli_version`  | The version of `shopware-cli` in use                          | `0.4.123`              |
-| `os`           | Operating system the CLI runs on (Go `runtime.GOOS`)          | `linux` / `darwin` / `windows` |
-| `is_tui`       | Whether the run was interactive (a terminal / TUI session)    | `true` / `false`       |
+| Tag            | Meaning                                                                                                                                                                                                                                                                                  | Example                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `command_name` | The command path, dot-separated (dashes become underscores)                                                                                                                                                                                                                              | `extension.build`                           |
+| `result`       | Outcome of the command. A run that ends with an error after Ctrl+C or SIGTERM, or because the user aborted a prompt, is `cancelled`, even when a child process reported the error. So is a run that stops with an error after the user declined a confirmation, as `project create` does; commands that end normally after a decline stay `success`. Long-running commands that shut down cleanly after a signal, such as `project worker`, stay `success` | `success` / `failure` / `cancelled`         |
+| `duration_ms`  | How long the command took, in milliseconds                                                                                                                                                                                                                                               | `1423`                                      |
+| `cli_version`  | The version of `shopware-cli` in use                                                                                                                                                                                                                                                     | `0.4.123`                                   |
+| `os`           | Operating system the CLI runs on (Go `runtime.GOOS`)                                                                                                                                                                                                                                     | `linux` / `darwin` / `windows`              |
+| `is_tui`       | Whether the run was interactive (a terminal / TUI session)                                                                                                                                                                                                                               | `true` / `false`                            |
+| `is_wsl`       | Whether a Linux run happens inside the Windows Subsystem for Linux                                                                                                                                                                                                                       | `true` / `false`                            |
+| `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider                                                                                                                                                                         | `github` / `gitlab` / `bitbucket` / `other` |
+| `shopware_version` | The installed Shopware version, looked up in the background near command startup from installed packages with `composer.lock` as fallback. Omitted if the lookup is not ready when the command finishes; commands that modify dependencies may affect the observed version. Accepts a release, a release candidate or `dev-trunk`; other development branches are never sent. Only on `project` commands run inside a project, not on `project create` | `6.7.11.0` |
+| `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` unless `--docker` was passed explicitly | `compose_plugin_missing,docker_not_running` |
+| `failed_tools` | Tools that failed, sorted and comma-separated; only with `result=failure` on commands that report tool results (`validate`, `fix`, `format`). A tool fails when it cannot run or breaks while running, and on `fix` also when ESLint or Stylelint leave problems they cannot fix | `eslint` |
+| `tools_with_error_findings` | Tools that reported error findings, sorted and comma-separated; only with `result=failure` on the same commands. Warnings and ignored findings do not count | `builtin,phpstan` |
+| `failed_step` | The step a failed or cancelled `project create` stopped at; only with `result=failure` or `result=cancelled`. Absent when the run failed before the first step, for example on an unknown flag. Values are listed below | `composer_install` |
+| `extension_count` | How many extensions the tools work on, on commands that report tool results (`validate`, `fix`, `format`). Bundles configured in the project are not counted, and extension names are never sent | `12` |
+| `source_dir_count` | How many source folders the tools work on, including those of configured bundles; on the same commands | `14` |
+| `admin_dir_count` | How many Administration folders the tools work on; on the same commands | `3` |
+| `storefront_dir_count` | How many Storefront folders the tools work on; on the same commands | `2` |
+| `checked_shopware_version` | The Shopware version PHPStan or Rector ran against in `validate` or `fix`: for an extension as installed for the tool, for a project from its `vendor/`. Accepts a release, a release candidate or `dev-trunk`; omitted otherwise. Sent once the dependencies are installed, also when the tool fails afterwards | `6.6.0.0` |
+| `check_against` | Which end of the extension's Shopware constraint was used; on extensions only. Always `lowest` for `extension fix` | `highest` / `lowest` |
+| `cpu_ms` | CPU time the tools used, in milliseconds, including the Composer setup for PHPStan and Rector; on the same commands, except on Windows. Checks that run inside the CLI, such as `builtin`, are not included | `48210` |
+| `cpu_count` | How many logical CPU cores the CLI can run on; on the same commands. Container CPU limits are not reflected | `8` |
 
 Notes:
-- The command *name* is captured (e.g. `project.create`), but **not** its
-  arguments, flags, paths, or any free-text input.
+
+- `missing` uses stable identifiers: `docker_not_installed`,
+  `docker_not_running`, `compose_plugin_missing`, `php_not_installed`,
+  `php_version` and `other`. The versions found or required are never sent.
+- A pinned `php_version` that is not installed stops the command before the
+  dependency check and is reported as `php_version`.
+- `failed_tools` and `tools_with_error_findings` use the tool names that
+  `--only` accepts, such as `phpstan` or `storefront-twig`. Tools that run as a
+  subprocess use the same names in the `tool` tag of
+  `shopware_cli.tool.subprocess`; `builtin`, `storefront-twig` and `symfony-xml`
+  run inside the CLI and send no such event. A command that fails before its
+  tools run, for example because Node.js is too old, has neither tag. Findings,
+  rule identifiers, paths and tool output are never sent.
+- The counts and CPU tags are sent once the tools start, so a command that
+  fails before has none. Folder names and paths are never sent.
+- `cpu_ms` is not sent on Windows, where the CPU time of the processes a tool
+  starts cannot be counted.
+- Comparing `cpu_ms` with `duration_ms` shows whether a run kept the CPU busy
+  or mostly waited, for example on downloads.
+- The command _name_ is captured (e.g. `project.create`), but **not** its
+  arguments, flags, paths, or any free-text input. `checked_shopware_version`
+  and `check_against` are the version and mode the tools actually used, not
+  the flag as typed.
 - The root command alone (running `shopware-cli` with no sub-command) is not
   tracked.
 - Plugin generators (`shopware-cli extension add <generator>`) are measured
@@ -121,32 +203,63 @@ Notes:
   `extension.add.admin_module` and `extension.add.store_api_route`. Entity
   names and other generator arguments are never sent.
 
+`failed_step` values for `project create`, in the order the steps run:
+
+| Value | The step that failed |
+| --- | --- |
+| `validate_compose_project_name` | Checking the `--compose-project-name` value |
+| `validate_docker` | Checking that Docker is available, when `--docker` was passed |
+| `validate_php_version` | Checking that `--php-version` is a supported PHP version |
+| `packagist_fetch_versions` | Fetching the available Shopware versions from Packagist |
+| `wizard_questions` | Running the interactive questions |
+| `wizard_docker_check` | Re-checking Docker after the questions, when `--docker` was passed |
+| `wizard_confirm` | Running the final confirmation prompt |
+| `preflight_resolve_version` | Resolving the requested Shopware version |
+| `preflight_validate_project_settings` | Checking the project folder, deployment method, CI system and Compose project name |
+| `preflight_php_version` | Checking or finding a PHP version that the selected Shopware version supports |
+| `preflight_dependencies` | Checking the required dependencies, such as Docker or PHP |
+| `preflight_security_advisories` | Checking the selected Shopware version for known security advisories |
+| `preflight_incompatibilities` | Asking whether to continue despite a known incompatibility of the system |
+| `scaffold` | Creating the project folder and writing `composer.json`, `.env` and the other initial files |
+| `composer_install` | Installing the Composer dependencies |
+| `composer_security_advisories` | Handling a Composer install blocked by security advisories |
+| `docker_setup` | Preparing the Docker environment from the installed project |
+| `docker_setup_write_compose` | Writing the Docker Compose file |
+| `write_config` | Writing `.config/shopware-project.yml` |
+| `git_init` | Initializing the Git repository |
+
 ### `shopware_cli.project.create` — project scaffolding
 
 Sent when a user creates a new Shopware project. Helps us understand which
 starting configurations are popular.
 
-| Tag                  | Meaning                                  | Example         |
-|----------------------|------------------------------------------|-----------------|
-| `version`            | Selected Shopware version                | `6.6`           |
-| `deployment`         | Selected deployment target               | `shopware-paas` |
-| `ci`                 | Selected CI provider                     | `github`        |
-| `docker`             | Whether Docker setup was chosen          | `true`          |
-| `with_elasticsearch` | Whether Elasticsearch was enabled        | `false`         |
-| `with_amqp`          | Whether AMQP was enabled                 | `false`         |
-| `interactive`        | Whether the wizard ran interactively     | `true`          |
+| Tag                  | Meaning                              | Example         |
+| -------------------- | ------------------------------------ | --------------- |
+| `version`            | Selected Shopware version            | `6.6`           |
+| `deployment`         | Selected deployment target           | `shopware-paas` |
+| `ci`                 | Selected CI provider                 | `github`        |
+| `docker`             | Whether Docker setup was chosen      | `true`          |
+| `with_elasticsearch` | Whether Elasticsearch was enabled    | `false`         |
+| `with_amqp`          | Whether AMQP was enabled             | `false`         |
+| `interactive`        | Whether the wizard ran interactively | `true`          |
 
-### `shopware_cli.project.upgrade` — interactive upgrade wizard run
+### `shopware_cli.project.upgrade` — project upgrade run
 
-Sent when the upgrade wizard (`shopware-cli project upgrade`) finishes
-executing an upgrade, successfully or not. Helps us understand which upgrade
-paths succeed and where guided upgrades fail.
+Sent when `shopware-cli project upgrade` finishes executing an upgrade,
+successfully or not, in the wizard or non-interactively, and when a
+non-interactive run stops at a blocking check before the upgrade starts. Dry
+runs send nothing, and neither does a run that finds the project already on the
+latest version. Helps us understand which upgrade paths succeed and where guided
+upgrades fail.
 
 | Tag              | Meaning                                   | Example    |
 |------------------|-------------------------------------------|------------|
-| `from_version`   | The Shopware version before the upgrade   | `6.6.10.3` |
-| `target_version` | The version the wizard upgraded to        | `6.7.11.0` |
-| `result`         | Outcome of the upgrade run                | `success` / `failure` |
+| `from_version`   | The Shopware version before the upgrade; empty when the run stopped before it could be read | `6.6.10.3` |
+| `target_version` | The version the run upgrades to; empty when the run stopped before a target was chosen | `6.7.11.0` |
+| `result`         | Outcome of the upgrade run (`cancelled` when the user interrupted it) | `success` / `failure` / `cancelled` |
+| `failed_step`    | Where a failed or cancelled run stopped; absent on success and when unknown. Before the upgrade starts (non-interactive runs): `readiness`, `catalog`, `target`, `security_advisory`, `composer_resolve`. During the upgrade: `rewrite_composer`, `composer_update`, `recipes_install`, `deployment_helper`, `write_report` | `composer_update` |
+| `blocking_checks` | The blocking readiness checks that stopped a non-interactive run, sorted and comma-separated; only with `failed_step=readiness`: `composer_lock`, `composer_name`, `git_clean`, `extensions`, `tooling` | `composer_lock,git_clean` |
+| `interactive`    | `true` for the wizard, `false` for a non-interactive run | `false` |
 
 ## AI integration events (`shopware-cli ai`)
 
@@ -163,34 +276,34 @@ ever sent.
 Sent when `shopware-cli ai add` installs (or previews, with `--dry-run`) a known
 integration, whether the attempt succeeds or fails.
 
-| Tag           | Meaning                                                        | Example                        |
-|---------------|----------------------------------------------------------------|--------------------------------|
-| `integration` | The integration from the directory                             | `shopware-cli` / `deployment-helper` / `meteor` |
-| `type`        | Kind of integration                                            | `skill` / `mcp`                |
-| `agent`       | Target AI agent (skills only; omitted for MCP)                 | `claude-code` / `codex`        |
-| `scope`       | Where it was installed                                         | `project` / `global`           |
-| `pinned`      | Whether a specific release was requested with `@<tag>` (skills only). The tag value itself is **never** sent. | `false` |
-| `dry_run`     | Whether this was a preview that changed nothing on disk        | `false`                        |
-| `result`      | Outcome of the install                                         | `success` / `failure`          |
+| Tag           | Meaning                                                                                                       | Example                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `integration` | The integration from the directory                                                                            | `shopware-cli` / `deployment-helper` / `meteor` |
+| `type`        | Kind of integration                                                                                           | `skill` / `mcp`                                 |
+| `agent`       | Target AI agent (skills only; omitted for MCP)                                                                | `claude-code` / `codex`                         |
+| `scope`       | Where it was installed                                                                                        | `project` / `global`                            |
+| `pinned`      | Whether a specific release was requested with `@<tag>` (skills only). The tag value itself is **never** sent. | `false`                                         |
+| `dry_run`     | Whether this was a preview that changed nothing on disk                                                       | `false`                                         |
+| `result`      | Outcome of the install                                                                                        | `success` / `failure`                           |
 
 MCP installs are always `scope=project` and carry no `agent` (the project's
-`.mcp.json` is not agent-specific). The command's duration is already captured by
-`shopware_cli.command`, so it is not repeated here.
+`.mcp.json` is not agent-specific). The command's duration is already captured
+by `shopware_cli.command`, so it is not repeated here.
 
 ### `shopware_cli.ai.remove` — AI integration removed
 
-Sent when `shopware-cli ai remove` removes (or previews, with `--dry-run`) a known
-integration.
+Sent when `shopware-cli ai remove` removes (or previews, with `--dry-run`) a
+known integration.
 
-| Tag           | Meaning                                                        | Example                 |
-|---------------|----------------------------------------------------------------|-------------------------|
-| `integration` | The integration from the directory                             | `meteor`                |
-| `type`        | Kind of integration                                            | `skill` / `mcp`         |
-| `agent`       | Target AI agent (skills only; omitted for MCP)                 | `claude-code`           |
-| `scope`       | Which install was targeted                                     | `project` / `global`    |
-| `dry_run`     | Whether this was a preview that changed nothing                | `false`                 |
-| `removed`     | Whether the integration was actually present (`false` = there was nothing to remove) | `true` |
-| `result`      | Outcome of the removal                                         | `success` / `failure`   |
+| Tag           | Meaning                                                                              | Example               |
+| ------------- | ------------------------------------------------------------------------------------ | --------------------- |
+| `integration` | The integration from the directory                                                   | `meteor`              |
+| `type`        | Kind of integration                                                                  | `skill` / `mcp`       |
+| `agent`       | Target AI agent (skills only; omitted for MCP)                                       | `claude-code`         |
+| `scope`       | Which install was targeted                                                           | `project` / `global`  |
+| `dry_run`     | Whether this was a preview that changed nothing                                      | `false`               |
+| `removed`     | Whether the integration was actually present (`false` = there was nothing to remove) | `true`                |
+| `result`      | Outcome of the removal                                                               | `success` / `failure` |
 
 ## Development TUI events (`shopware-cli project dev`)
 
@@ -209,17 +322,17 @@ the installation begins are not reported under this event). Choice tags are
 only present once the user made that choice (an event for a run cancelled on
 the language step carries no `language` tag).
 
-| Tag                  | Meaning                                                       | Example          |
-|----------------------|---------------------------------------------------------------|------------------|
-| `result`             | Outcome of the wizard                                         | `success` / `failure` / `cancelled` / `skipped` |
-| `abandoned_at`       | Step shown when the user quit (only for `cancelled`)          | `ask` / `language` / `currency` / `credentials` / `installing` |
-| `failed_step`        | Step that was running when the install failed (only for `failure`). `install_start` means the helper failed before any step began; `save_credentials` means the install succeeded but writing the admin credentials to the project config failed. | `system:install` / `install_start` / `save_credentials` |
-| `failure_category`   | Classified reason the install failed (only for `failure`). Closed enum — the raw error text is **never** sent. | `db_connection` / `db_version` / `env_config` / `migration` / `permission` / `php` / `invalid_input` / `already_exists` / `missing_prerequisite` / `theme_compile` / `transport` / `unknown` |
-| `duration_ms`        | Install runtime, once the install actually started            | `84213`          |
-| `language`           | Selected default language                                     | `de-DE`          |
-| `currency`           | Selected default currency                                     | `EUR`            |
-| `custom_credentials` | Whether the default admin username/password were changed. The credentials themselves are **never** sent. | `false` |
-| `interactive`        | `true` for the TUI wizard, `false` for `project dev install`  | `true`           |
+| Tag                  | Meaning                                                                                                                                                                                                                                           | Example                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `result`             | Outcome of the wizard                                                                                                                                                                                                                             | `success` / `failure` / `cancelled` / `skipped`                                                                                                                                              |
+| `abandoned_at`       | Step shown when the user quit (only for `cancelled`)                                                                                                                                                                                              | `ask` / `language` / `currency` / `credentials` / `installing`                                                                                                                               |
+| `failed_step`        | Step that was running when the install failed (only for `failure`). `install_start` means the helper failed before any step began; `save_credentials` means the install succeeded but writing the admin credentials to the project config failed. | `system:install` / `install_start` / `save_credentials`                                                                                                                                      |
+| `failure_category`   | Classified reason the install failed (only for `failure`). Closed enum — the raw error text is **never** sent.                                                                                                                                    | `db_connection` / `db_version` / `env_config` / `migration` / `permission` / `php` / `invalid_input` / `already_exists` / `missing_prerequisite` / `theme_compile` / `transport` / `unknown` |
+| `duration_ms`        | Install runtime, once the install actually started                                                                                                                                                                                                | `84213`                                                                                                                                                                                      |
+| `language`           | Selected default language                                                                                                                                                                                                                         | `de-DE`                                                                                                                                                                                      |
+| `currency`           | Selected default currency                                                                                                                                                                                                                         | `EUR`                                                                                                                                                                                        |
+| `custom_credentials` | Whether the default admin username/password were changed. The credentials themselves are **never** sent.                                                                                                                                          | `false`                                                                                                                                                                                      |
+| `interactive`        | `true` for the TUI wizard, `false` for `project dev install`                                                                                                                                                                                      | `true`                                                                                                                                                                                       |
 
 ### `shopware_cli.project.dev.migration_wizard` — dev-environment setup wizard
 
@@ -228,23 +341,24 @@ environment reaches a terminal state. This replaces the earlier
 `shopware_cli.migration_wizard_completed` event, which only reported
 successful runs.
 
-| Tag                       | Meaning                                              | Example      |
-|---------------------------|------------------------------------------------------|--------------|
-| `result`                  | Outcome of the wizard                                | `completed` / `cancelled` / `failed` |
-| `abandoned_at`            | Step shown when the user quit (only for `cancelled`) | `welcome` / `admin_user` / `docker_php` / `review` |
-| `duration_ms`             | Time since the welcome screen was confirmed          | `45120`      |
-| `php_version`             | Selected PHP version (`completed` / `failed` only)   | `8.3`        |
-| `deployment_helper_added` | Whether composer.json was missing `shopware/deployment-helper` and it was added (`completed` only) | `true` |
+| Tag                       | Meaning                                                                                            | Example                                            |
+| ------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `result`                  | Outcome of the wizard                                                                              | `completed` / `cancelled` / `failed`               |
+| `abandoned_at`            | Step shown when the user quit (only for `cancelled`)                                               | `welcome` / `admin_user` / `docker_php` / `review` |
+| `duration_ms`             | Time since the welcome screen was confirmed                                                        | `45120`                                            |
+| `php_version`             | Selected PHP version (`completed` / `failed` only)                                                 | `8.3`                                              |
+| `deployment_helper_added` | Whether composer.json was missing `shopware/deployment-helper` and it was added (`completed` only) | `true`                                             |
 
 ### `shopware_cli.project.dev.docker_start` — container startup
 
 Sent when a `docker compose up -d` run by the TUI finishes.
 
-| Tag           | Meaning                                                      | Example         |
-|---------------|--------------------------------------------------------------|-----------------|
-| `trigger`     | Why the containers were (re)started                          | `initial` / `config_change` |
-| `result`      | Outcome (`cancelled` when the user quit while waiting)       | `success` / `failure` / `cancelled` |
-| `duration_ms` | How long the startup took                                    | `12894`         |
+| Tag           | Meaning                                                | Example                             |
+| ------------- | ------------------------------------------------------ | ----------------------------------- |
+| `trigger`     | Why the containers were (re)started                    | `initial` / `config_change`         |
+| `result`      | Outcome (`cancelled` when the user quit while waiting) | `success` / `failure` / `cancelled` |
+| `duration_ms` | How long the startup took                              | `12894`                             |
+| `failure_category` | Classified reason the startup failed (only for `failure`), from the `docker compose` output. Closed enum — the output itself is **never** sent | `port_in_use` / `disk_full` / `image_pull` / `mount` / `permission` / `unknown` |
 
 ### `shopware_cli.project.dev.action` — dashboard actions
 
@@ -252,21 +366,26 @@ Sent when a command-palette action runs. Instant actions (opening the shop or
 admin in the browser) carry only the action name; task actions also report
 their outcome and runtime.
 
-| Tag           | Meaning                                    | Example        |
-|---------------|--------------------------------------------|----------------|
-| `action`      | The invoked action                         | `open-shop` / `open-admin` / `cache-clear` / `admin-build` / `sf-build` |
-| `result`      | Task outcome (task actions only)           | `success` / `failure` / `cancelled` |
-| `duration_ms` | Task runtime (task actions only)           | `31022`        |
+| Tag           | Meaning                          | Example                                                                 |
+| ------------- | -------------------------------- | ----------------------------------------------------------------------- |
+| `action`      | The invoked action               | `open-shop` / `open-admin` / `cache-clear` / `admin-build` / `sf-build` |
+| `result`      | Task outcome (task actions only) | `success` / `failure` / `cancelled`                                     |
+| `duration_ms` | Task runtime (task actions only) | `31022`                                                                 |
 
 ### `shopware_cli.project.dev.watcher` — admin/storefront watchers
 
-Sent once per watcher run, when the watcher ends.
+Sent once per watcher run, when the watcher ends. A run that ends while it is
+still preparing or starting carries that phase, so runs that never got going
+are visible.
 
-| Tag           | Meaning                                                     | Example    |
-|---------------|-------------------------------------------------------------|------------|
-| `watcher`     | Which watcher ran                                           | `admin` / `storefront` |
-| `result`      | How the run ended: preparation failed, the dev-server process exited on its own, the user stopped it, or the TUI session ended | `prep_failed` / `crashed` / `user_stopped` / `session_end` |
-| `duration_ms` | How long the watcher ran                                    | `1830211`  |
+| Tag           | Meaning                                                                                                                                                                                   | Example                                                                                                                           |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `watcher`     | Which watcher ran                                                                                                                                                                         | `admin` / `storefront`                                                                                                            |
+| `result`      | How the run ended: preparation failed, the dev-server process exited on its own, the user stopped it, or the TUI session ended                                                            | `prep_failed` / `crashed` / `user_stopped` / `session_end`                                                                        |
+| `phase`       | How far the run got when it ended: the preparation steps, the dev server started but not answering yet, or answering                                                                      | `preparing` / `starting` / `running`                                                                                              |
+| `failed_step` | The preparation step that failed (only for `prep_failed`)                                                                                                                                 | `plugins_json` / `feature_dump` / `npm_install` / `entity_schema` / `theme_select` / `theme_compile` / `theme_dump` / `proxy_env` |
+| `proxied`     | Whether the watcher is configured to run through the shared proxy; when the proxy could not start and the dashboard fell back to local ports, the storefront watcher still reports `true` | `true` / `false`                                                                                                                  |
+| `duration_ms` | How long the watcher ran                                                                                                                                                                  | `1830211`                                                                                                                         |
 
 ### `shopware_cli.project.dev.health` — setup health snapshot
 
@@ -275,25 +394,43 @@ loads: one event per check. This tells us how common misconfigurations are in
 real projects — and which checks are worth turning into automatic fixes. Only
 the check's level is sent, never the underlying values.
 
-| Tag      | Meaning                                       | Example |
-|----------|-----------------------------------------------|---------|
-| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker` |
-| `result` | The check's level                             | `ok` / `warn` / `critical` |
+| Tag      | Meaning                                                                                   | Example                    |
+| -------- | ----------------------------------------------------------------------------------------- | -------------------------- |
+| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`, plus `proxy` and `hostname_resolves` for proxy projects) | `admin_worker`             |
+| `result` | The check's level                                                                         | `ok` / `warn` / `critical` |
+
+`hostname_resolves` looks up the project's hostname through the system
+resolver. Earlier CLI versions only checked that the resolver configuration
+existed, so compare this check by `cli_version`.
+
+### `shopware_cli.project.dev.session_start` — dashboard opened
+
+Sent when the dashboard opens. The `shopware_cli.project.dev.session` event
+that ends the session carries the same `session_id`, so we can tell sessions
+that ended normally from those that crashed or were closed abruptly.
+
+| Tag        | Meaning                         | Example            |
+| ---------- | ------------------------------- | ------------------ |
+| `executor` | Environment the project runs in | `docker` / `local` |
 
 ### `shopware_cli.project.dev.session` — dashboard session shape
 
-Sent when the user leaves the dashboard (the overall command duration is
-already covered by `shopware_cli.command`; this event adds what happened
-inside the TUI).
+Sent when the user leaves the dashboard, and in most cases also when it is
+stopped from outside or crashes (the overall command duration is already
+covered by `shopware_cli.command`; this event adds what happened inside the
+TUI).
 
-| Tag             | Meaning                                            | Example                     |
-|-----------------|----------------------------------------------------|-----------------------------|
-| `executor`      | Environment the project runs in                    | `docker` / `local`          |
-| `duration_ms`   | TUI session length                                 | `1912734`                   |
-| `tabs_visited`  | Which tabs were opened (sorted, comma-separated)   | `config,instance,overview`  |
-| `actions`       | Number of palette actions invoked                  | `3`                         |
-| `watchers_used` | Which watchers were started (omitted if none)      | `admin,storefront`          |
-| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` |
+| Tag             | Meaning                                                                  | Example                                     |
+| --------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
+| `executor`      | Environment the project runs in                                          | `docker` / `local`                          |
+| `duration_ms`   | Time since the TUI launched, including container start and install       | `1912734`                                   |
+| `tabs_visited`  | Which tabs were opened (sorted, comma-separated)                         | `config,instance,overview`                  |
+| `actions`       | Number of palette actions invoked                                        | `3`                                         |
+| `watchers_used` | Which watchers were started (omitted if none)                            | `admin,storefront`                          |
+| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` / `terminated` / `interrupted` / `panic` / `error` |
+
+If the dashboard is stopped from outside, for example with `kill`, or crashes,
+`result` is `terminated`, `interrupted`, `panic` or `error` instead.
 
 ## What we explicitly do **not** collect
 
@@ -316,12 +453,13 @@ inside the TUI).
 
 ## Opting out
 
-Telemetry honors the cross-tool [Console Do Not Track](https://consoledonottrack.com/)
-standard. Setting the `DO_NOT_TRACK` environment variable to any value disables
-all telemetry:
+Telemetry honors the cross-tool
+[Console Do Not Track](https://consoledonottrack.com/) standard. Setting the
+`DO_NOT_TRACK` environment variable to any value disables all telemetry:
 
 ```bash
 export DO_NOT_TRACK=1
 ```
 
-When set, the `Track` function returns immediately and **no event is ever sent**.
+When set, the `Track` function returns immediately and
+**no event is ever sent**.

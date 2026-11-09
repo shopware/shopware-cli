@@ -1,10 +1,136 @@
 package verifier
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"runtime"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/logging"
 )
+
+type ToolResult = validation.ToolResult
+
+// RunTools collects findings as tools publish them and waits for every tool,
+// including when a sibling fails. Finding delivery is serialized per tool, while
+// verbose output is serialized across tools. Tools return ToolSummary metadata;
+// the runner obtains HasFindings and Errors from the execution helper after all tool cleanup has
+// completed. A tool that returns after ctx is cancelled fails with the
+// cancellation, so interrupted commands exit nonzero.
+func RunTools[T Tool](
+	ctx context.Context,
+	tools ToolList[T],
+	skipped []ToolResult,
+	config ToolConfig,
+	progress *Progress,
+	run func(T, *ToolExecution) ToolSummary,
+) []validation.ToolReport {
+	// The command event reports how much the tools work on and how much CPU time they use.
+	for key, value := range configTelemetryTags(config) {
+		tracking.SetCommandTag(key, value)
+	}
+	// Logical CPUs, not GOMAXPROCS: that is a scheduler setting, which rounds container limits up.
+	tracking.SetCommandTag(tracking.TagCPUCount, strconv.Itoa(runtime.NumCPU()))
+	var cpuTime atomic.Int64
+	results := make([]validation.ToolReport, len(tools), len(tools)+len(skipped))
+	sourceRoot := validation.ResolveSourceRoot(config.RootDir)
+	var stderrMu sync.Mutex
+	var group sync.WaitGroup
+	for i, tool := range tools {
+		group.Go(func() {
+			var collected []validation.CheckResult
+			var findingsMu sync.Mutex
+			execution := NewToolExecution(func(findings []validation.CheckResult) bool {
+				findingsMu.Lock()
+				defer findingsMu.Unlock()
+				retained := filterFindings(findings, sourceRoot, config.ValidationIgnores)
+				collected = append(collected, retained...)
+				return len(retained) > 0
+			})
+			execution.onSubprocess = func(subprocess SubprocessResult) {
+				cpuTime.Add(int64(subprocess.cpuTime()))
+				tracking.Track(ctx, tracking.EventToolSubprocess, subprocessTelemetryTags(tool.Name(), subprocess))
+				if logging.IsVerbose(ctx) {
+					stderrMu.Lock()
+					defer stderrMu.Unlock()
+					var output strings.Builder
+					fmt.Fprintf(&output, "\n%s subprocess: %s\nDirectory: %s\n", tool.Name(), strings.Join(subprocess.Command, " "), subprocess.Dir)
+					if subprocess.Stdout != "" {
+						fmt.Fprintf(&output, "stdout:\n%s\n", subprocess.Stdout)
+					}
+					if subprocess.Stderr != "" {
+						fmt.Fprintf(&output, "stderr:\n%s\n", subprocess.Stderr)
+					}
+					_, _ = io.WriteString(os.Stderr, output.String())
+				}
+			}
+			finish := progress.Start(tool.Name())
+			summary := run(tool, execution)
+			if err := ctx.Err(); err != nil {
+				execution.Fail(&ToolError{Err: err})
+			}
+			result := execution.snapshot()
+			result.Name = tool.Name()
+			result.Note = summary.Note
+			// A tool that reported findings or failures has run, whatever it returned.
+			if !result.HasFindings && len(result.Errors) == 0 {
+				result.SkipReason = summary.SkipReason
+			}
+			if len(result.Errors) > 0 {
+				finish(result.Errors[0])
+			} else {
+				finish(nil)
+			}
+			results[i] = validation.ToolReport{ToolResult: result, Findings: collected}
+		})
+	}
+	group.Wait()
+	if cpuTimeCoversChildren {
+		tracking.SetCommandTag(tracking.TagCPUMS, strconv.FormatInt(time.Duration(cpuTime.Load()).Milliseconds(), 10))
+	}
+	for _, result := range skipped {
+		results = append(results, validation.ToolReport{ToolResult: result})
+	}
+	return results
+}
+
+func subprocessTelemetryTags(tool string, subprocess SubprocessResult) map[string]string {
+	tags := map[string]string{
+		tracking.TagTool:        tool,
+		tracking.TagOperation:   subprocess.Operation,
+		tracking.TagStdoutBytes: strconv.Itoa(len(subprocess.Stdout)),
+		tracking.TagStderrBytes: strconv.Itoa(len(subprocess.Stderr)),
+		tracking.TagDurationMS:  strconv.FormatInt(subprocess.Duration.Milliseconds(), 10),
+		tracking.TagStarted:     strconv.FormatBool(subprocess.ProcessState != nil),
+	}
+	if subprocess.ProcessState != nil {
+		if cpuTimeCoversChildren {
+			tags[tracking.TagCPUMS] = strconv.FormatInt(subprocess.cpuTime().Milliseconds(), 10)
+		}
+		if code := subprocess.ProcessState.ExitCode(); code >= 0 {
+			tags[tracking.TagExitCode] = strconv.Itoa(code)
+		}
+	}
+	return tags
+}
+
+func configTelemetryTags(config ToolConfig) map[string]string {
+	return map[string]string{
+		tracking.TagExtensionCount:     strconv.Itoa(len(config.Extensions)),
+		tracking.TagSourceDirCount:     strconv.Itoa(len(config.SourceDirectories)),
+		tracking.TagAdminDirCount:      strconv.Itoa(len(config.AdminDirectories)),
+		tracking.TagStorefrontDirCount: strconv.Itoa(len(config.StorefrontDirectories)),
+	}
+}
 
 type Check struct {
 	Results    []validation.CheckResult `json:"results"`
@@ -55,31 +181,36 @@ func (c *Check) RemoveByIdentifier(ignores []validation.ToolConfigIgnore) valida
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	filtered := make([]validation.CheckResult, 0)
-	for _, r := range c.Results {
-		shouldKeep := true
-		for _, ignore := range ignores {
-			if validation.IgnoreMatches(r, ignore, c.samePath) {
-				shouldKeep = false
-				break
-			}
-		}
-		if shouldKeep {
-			filtered = append(filtered, r)
-		}
-	}
-	c.Results = filtered
+	c.Results = filterFindings(c.Results, c.sourceRoot, ignores)
 
 	return c
 }
 
-func (c *Check) samePath(resultPath, ignorePath string) bool {
-	if resultPath == ignorePath {
-		return true
+func filterFindings(findings []validation.CheckResult, root string, ignores []validation.ToolConfigIgnore) []validation.CheckResult {
+	samePath := func(resultPath, ignorePath string) bool {
+		return resultPath == ignorePath || (root != "" && ignorePath != "" &&
+			validation.NormalizeSourcePath(resultPath, root) == validation.NormalizeSourcePath(ignorePath, root))
 	}
-	if ignorePath == "" || c.sourceRoot == "" {
-		return false
+	filtered := make([]validation.CheckResult, 0, len(findings))
+	for _, finding := range findings {
+		if root != "" {
+			finding = validation.NormalizeResult(finding, root)
+		}
+		if !slices.ContainsFunc(ignores, func(ignore validation.ToolConfigIgnore) bool {
+			return validation.IgnoreMatches(finding, ignore, samePath)
+		}) {
+			filtered = append(filtered, finding)
+		}
 	}
+	return filtered
+}
 
-	return validation.NormalizeSourcePath(resultPath, c.sourceRoot) == validation.NormalizeSourcePath(ignorePath, c.sourceRoot)
+func fileChangeNote(count int, action string) string {
+	if count == 0 {
+		return "no changes"
+	}
+	if count == 1 {
+		return "1 file " + action
+	}
+	return fmt.Sprintf("%d files %s", count, action)
 }

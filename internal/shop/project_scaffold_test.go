@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
+	"github.com/shopware/shopware-cli/internal/symfony"
 )
 
 func TestShopwareProjectScaffold(t *testing.T) {
@@ -110,6 +111,37 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.NotEqual(t, envContent, env2)
 	})
 
+	t.Run("disables the admin worker for Docker projects with a working queue worker", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			version   string
+			useDocker bool
+			enabled   bool
+		}{
+			{version: "6.7.12.1", useDocker: true, enabled: false},
+			{version: "6.6.3.1", useDocker: true, enabled: true},
+			{version: "6.7.12.1", useDocker: false, enabled: true},
+		}
+		for _, tt := range tests {
+			projectFolder := t.TempDir()
+			scaffold := ShopwareProjectScaffold{
+				ProjectFolder:    projectFolder,
+				Version:          tt.version,
+				DeploymentMethod: DeploymentNone,
+				CISystem:         CINone,
+				UseDocker:        tt.useDocker,
+			}
+			require.NoError(t, scaffold.Scaffold(t.Context()))
+
+			for _, env := range []string{"dev", "prod"} {
+				enabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, env)
+				require.NoError(t, err)
+				assert.Equal(t, tt.enabled, enabled, "version=%s docker=%v env=%s", tt.version, tt.useDocker, env)
+			}
+		}
+	})
+
 	t.Run("writes an explicit compose project name", func(t *testing.T) {
 		t.Parallel()
 
@@ -207,6 +239,57 @@ func TestShopwareProjectScaffold(t *testing.T) {
 
 		assert.ErrorContains(t, scaffold.Scaffold(t.Context()), "not empty")
 		assert.NoFileExists(t, filepath.Join(projectFolder, "composer.json"))
+		assert.Equal(t, "keep", readScaffoldFile(t, projectFolder, "existing"))
+	})
+}
+
+func TestShopwareProjectScaffoldRollback(t *testing.T) {
+	t.Parallel()
+
+	// DeploymentContainer with an unsupported PHP version only fails in
+	// setupDeployment, after composer.json and the base files were written.
+	failingScaffold := func(projectFolder string) ShopwareProjectScaffold {
+		return ShopwareProjectScaffold{
+			ProjectFolder:    projectFolder,
+			Version:          "6.6.10.0",
+			DeploymentMethod: DeploymentContainer,
+			CISystem:         CINone,
+			PHPVersion:       "9.9",
+		}
+	}
+
+	t.Run("removes a newly created folder when scaffolding fails", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := filepath.Join(t.TempDir(), "shop")
+		scaffold := failingScaffold(projectFolder)
+
+		assert.Error(t, scaffold.Scaffold(t.Context()))
+
+		_, err := os.Stat(projectFolder)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("empties but keeps a pre-existing folder when scaffolding fails", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := t.TempDir()
+		scaffold := failingScaffold(projectFolder)
+
+		assert.Error(t, scaffold.Scaffold(t.Context()))
+
+		assert.DirExists(t, projectFolder)
+		entries, err := os.ReadDir(projectFolder)
+		require.NoError(t, err)
+		assert.Empty(t, entries)
+	})
+
+	t.Run("keeps a non-empty folder untouched when validation fails", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "existing"), []byte("keep"), 0o600))
+		scaffold := failingScaffold(projectFolder)
+
+		assert.Error(t, scaffold.Scaffold(t.Context()))
+
 		assert.Equal(t, "keep", readScaffoldFile(t, projectFolder, "existing"))
 	})
 }
@@ -361,4 +444,14 @@ func readScaffoldFile(t *testing.T, root string, path ...string) string {
 	require.NoError(t, err)
 
 	return string(content)
+}
+
+func TestSupportsDedicatedWorker(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, supportsDedicatedWorker("6.6.3.1"))
+	assert.True(t, supportsDedicatedWorker("6.6.4.0"))
+	assert.True(t, supportsDedicatedWorker("6.7.12.1"))
+	assert.True(t, supportsDedicatedWorker("dev-trunk"))
+	assert.False(t, supportsDedicatedWorker("dev-6.5.x"))
 }

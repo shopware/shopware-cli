@@ -55,7 +55,7 @@ func (sg migrationWizard) viewWelcome() string {
 	b.WriteString("\n\n")
 	b.WriteString(tui.ConfirmButtons("Start setup", "Quit", sg.confirmYes))
 
-	return tui.RenderPhaseCardCowsay("Let me help you to set up Docker!", b.String())
+	return tui.RenderPhaseCardCowsayFit("Let me help you to set up Docker!", b.String(), sg.cardWidth, sg.cardHeight)
 }
 
 func (sg migrationWizard) viewAdminUser() string {
@@ -70,7 +70,7 @@ func (sg migrationWizard) viewAdminUser() string {
 	b.WriteString(tui.BoldText.Render(".config/shopware-project.yml"))
 	b.WriteString(tui.DimStyle.Render(" — use a throwaway password for local dev."))
 	b.WriteString("\n")
-	return tui.RenderPhaseCard(b.String())
+	return tui.RenderPhaseCardFit(b.String(), sg.cardWidth, sg.cardHeight)
 }
 
 func (sg migrationWizard) viewDockerPHP() string {
@@ -90,7 +90,7 @@ func (sg migrationWizard) viewDockerPHP() string {
 	}
 	b.WriteString(tui.RenderSelectList("PHP Version", "", opts, sg.phpCursor))
 	b.WriteString("\n")
-	return tui.RenderPhaseCard(b.String())
+	return tui.RenderPhaseCardFit(b.String(), sg.cardWidth, sg.cardHeight)
 }
 
 func (sg migrationWizard) viewReview() string {
@@ -123,7 +123,7 @@ func (sg migrationWizard) viewReview() string {
 	b.WriteString(tui.ConfirmButtons("Save & start", "Quit", sg.confirmYes))
 	b.WriteString("\n\n")
 
-	return tui.RenderPhaseCard(b.String())
+	return tui.RenderPhaseCardFit(b.String(), sg.cardWidth, sg.cardHeight)
 }
 
 func (sg migrationWizard) viewDone() string {
@@ -138,7 +138,7 @@ func (sg migrationWizard) viewDone() string {
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("or try again with shopware-cli project dev"))
 		b.WriteString("\n\n")
-		return tui.RenderPhaseCard(b.String())
+		return tui.RenderPhaseCardFit(b.String(), sg.cardWidth, sg.cardHeight)
 	}
 
 	var b strings.Builder
@@ -165,7 +165,7 @@ func (sg migrationWizard) viewDone() string {
 	b.WriteString("\n\n")
 	b.WriteString(tui.BoldText.Render("Press Enter to start the Docker containers and open the project dev workspace."))
 	b.WriteString("\n\n")
-	return tui.RenderPhaseCardCowsay("Setup's complete!", b.String())
+	return tui.RenderPhaseCardCowsayFit("Setup's complete!", b.String(), sg.cardWidth, sg.cardHeight)
 }
 
 func (sg migrationWizard) footerHint() string {

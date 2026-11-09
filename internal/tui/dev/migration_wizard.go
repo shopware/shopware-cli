@@ -35,6 +35,10 @@ type migrationWizard struct {
 	url                   textinput.Model
 	startedAt             time.Time
 
+	// cardWidth and cardHeight bound the phase card; the view sets them per render, 0 means unbounded.
+	cardWidth  int
+	cardHeight int
+
 	err error
 }
 

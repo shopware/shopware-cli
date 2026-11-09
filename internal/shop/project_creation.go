@@ -1,14 +1,18 @@
 package shop
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 const (
@@ -41,6 +45,93 @@ func ValidateProjectFolder(projectFolder string) error {
 	}
 
 	return nil
+}
+
+// ProjectFolder tracks directories owned by a project creation attempt. Its path
+// is parsed once; cleanup is only enabled after the empty target is prepared.
+type ProjectFolder struct {
+	// path is absolute and non-empty; NewProjectFolder is its only constructor.
+	path     string
+	created  []string
+	prepared bool
+}
+
+// NewProjectFolder parses a non-empty path and rejects filesystem roots.
+func NewProjectFolder(name string) (*ProjectFolder, error) {
+	if name == "" {
+		return nil, errors.New("cannot create project: project folder name must not be empty")
+	}
+	path, err := filepath.Abs(name)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve project folder: %w", err)
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if path == filepath.Dir(path) || (err == nil && resolved == filepath.Dir(resolved)) {
+		return nil, errors.New("cannot create project in the filesystem root")
+	}
+	return &ProjectFolder{path: path}, nil
+}
+
+// Prepare validates the target immediately before writing and records only
+// directories this attempt creates, including missing parents.
+func (p *ProjectFolder) Prepare() error {
+	if p == nil {
+		return errors.New("cannot prepare an uninitialized project folder")
+	}
+	if err := ValidateProjectFolder(p.path); err != nil {
+		return err
+	}
+	var missing []string
+	for dir := p.path; ; dir = filepath.Dir(dir) {
+		_, err := os.Stat(dir)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		missing = append(missing, dir)
+	}
+	for i := len(missing) - 1; i >= 0; i-- {
+		if err := os.Mkdir(missing[i], os.ModePerm); err != nil {
+			return err
+		}
+		p.created = append(p.created, missing[i])
+	}
+	p.prepared = true
+	return nil
+}
+
+// Rollback preserves cause and joins any cleanup failure. Existing target
+// directories are retained, and newly created parents are removed only if empty.
+func (p *ProjectFolder) Rollback(ctx context.Context, cause error) error {
+	if p == nil || (!p.prepared && len(p.created) == 0) {
+		return cause
+	}
+	entries, err := os.ReadDir(p.path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(cause, fmt.Errorf("cannot read partially created project in %s: %w", p.path, err))
+	}
+	if len(entries) == 0 && len(p.created) == 0 {
+		return cause
+	}
+	logging.FromContext(ctx).Infof("Removing partially created project: %s", p.path)
+	if p.prepared {
+		for _, entry := range entries {
+			if err := os.RemoveAll(filepath.Join(p.path, entry.Name())); err != nil {
+				return errors.Join(cause, fmt.Errorf("cannot remove partially created project in %s: %w", p.path, err))
+			}
+		}
+	}
+	for i := len(p.created) - 1; i >= 0; i-- {
+		if err := os.Remove(p.created[i]); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return errors.Join(cause, fmt.Errorf("cannot remove created directory %s: %w", p.created[i], err))
+		}
+	}
+	p.created = nil
+	p.prepared = false
+	logging.FromContext(ctx).Infof("Removed partially created project: %s", p.path)
+	return cause
 }
 
 // ValidateDeploymentMethod reports whether a deployment method is supported by

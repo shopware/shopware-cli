@@ -5,16 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 var extensionValidateCmd = &cobra.Command{
@@ -22,17 +18,19 @@ var extensionValidateCmd = &cobra.Command{
 	Short: "Validate extension metadata, assets, and code quality",
 	Long: `Validate an extension folder or ZIP file.
 Store compliance checks that Administration and Storefront source files have matching compiled assets.
-Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.`,
+Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.
+A folder is validated in place; PHPStan's composer dependencies are always resolved inside var/cache/shopware-cli for the requested --check-against baseline.
+The extension's vendor/ and composer.lock are preserved. Custom PHPStan configurations that load vendor/autoload.php themselves still load local dependencies.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger := logging.FromContext(cmd.Context())
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := extensionValidationFormat(cmd)
+		ctx := cmd.Context()
+		progress := verifier.NewProgress(reportingFormat)
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
-		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectExtensionValidationTools(only, exclude)
@@ -50,49 +48,30 @@ Enable it with validation.store_compliance in the extension configuration or SHO
 		var toolCfg *verifier.ToolConfig
 
 		if stat.IsDir() {
-			validationPath := path
-			if noCopy {
-				logger.Debugf("Skipping copying extension files to temporary directory due to --no-copy flag")
-			} else if needsTools {
-				tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
-				if err != nil {
-					return fmt.Errorf("cannot create temporary directory: %w", err)
-				}
-				defer func() {
-					beforeDeleteTime := time.Now()
-					if err := os.RemoveAll(tmpDir); err != nil {
-						logger.Errorf("Failed to remove temporary directory: %v", err)
-					}
-					logger.Debugf("Removed temporary directory in %s", time.Since(beforeDeleteTime).String())
-				}()
-
-				beforeCopyTime := time.Now()
-				if err := system.CopyFiles(cmd.Context(), path, tmpDir); err != nil {
-					return err
-				}
-
-				logger.Debugf("Copied extension files to temporary directory in %s", time.Since(beforeCopyTime).String())
-				validationPath = tmpDir
-			}
-
-			ext, err := extension.GetExtensionByFolder(cmd.Context(), validationPath)
+			ext, err := extension.GetExtensionByFolder(ctx, path)
 			if err != nil {
 				return err
 			}
 
-			toolCfg, err = verifier.ConvertExtensionToToolConfig(cmd.Context(), ext)
+			finishConfig := progress.Start("discovering extension configuration")
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(ctx, ext)
+			finishConfig(err)
 			if err != nil {
 				return err
 			}
 
 			toolCfg.InputWasDirectory = true
 		} else {
-			ext, err := extension.GetExtensionByZip(cmd.Context(), args[0])
+			finishMetadata := progress.Start("extracting extension archive")
+			ext, err := extension.GetExtensionByZip(ctx, args[0])
+			finishMetadata(err)
 			if err != nil {
 				return err
 			}
 
-			toolCfg, err = verifier.ConvertExtensionToToolConfig(cmd.Context(), ext)
+			finishConfig := progress.Start("discovering extension configuration")
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(ctx, ext)
+			finishConfig(err)
 			if err != nil {
 				return err
 			}
@@ -106,29 +85,21 @@ Enable it with validation.store_compliance in the extension configuration or SHO
 		}
 
 		toolCfg.CheckAgainst = checkAgainst
-		result := verifier.NewCheck()
-		result.SetSourceRoot(toolCfg.RootDir)
 
 		if needsTools {
-			if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
-				return err
+			finishSetup := progress.Start("preparing tools")
+			setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+			finishSetup(setupErr)
+			if setupErr != nil {
+				return setupErr
 			}
 			toolCfg.ToolDirectory = verifier.GetToolDirectory()
 		}
 
-		var gr errgroup.Group
-		for _, tool := range tools {
-			gr.Go(func() error {
-				return tool.Check(cmd.Context(), result, *toolCfg)
-			})
-		}
-
-		runErr := gr.Wait()
-		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, runErr != nil, statuses...)
-		if runErr != nil {
-			return runErr
-		}
-		return reportErr
+		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Check(ctx, *toolCfg, execution)
+		})
+		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
 
@@ -160,18 +131,19 @@ func init() {
 	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Enable Store compliance (deprecated: use validation.store_compliance in the extension configuration)")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
-	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
+	extensionValidateCmd.PersistentFlags().String("check-against", verifier.CheckAgainstHighest, "Check against Shopware Version (highest, lowest)")
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
-	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{"highest", "lowest"}, cobra.ShellCompDirectiveNoFileComp))
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{verifier.CheckAgainstHighest, verifier.CheckAgainstLowest}, cobra.ShellCompDirectiveNoFileComp))
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", "use validation.store_compliance in the extension configuration")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if _, err := extensionValidationFormat(cmd); err != nil {
@@ -179,7 +151,7 @@ func init() {
 		}
 
 		mode, _ := cmd.Flags().GetString("check-against")
-		if mode != "highest" && mode != "lowest" {
+		if mode != verifier.CheckAgainstHighest && mode != verifier.CheckAgainstLowest {
 			return fmt.Errorf("invalid --check-against value %q, allowed values: highest, lowest", mode)
 		}
 

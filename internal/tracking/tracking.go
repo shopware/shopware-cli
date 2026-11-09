@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -33,6 +35,8 @@ var (
 	id   string
 	addr string
 	once sync.Once
+	// sessionID links the events of one CLI run. It is random and only kept in memory.
+	sessionID = rand.Text()
 )
 
 func ensureInitialized() {
@@ -101,9 +105,14 @@ func Track(ctx context.Context, eventName string, tags map[string]string) {
 
 	ensureInitialized()
 
+	// Every event carries the CLI version, so dev builds can be excluded anywhere,
+	// and the session ID, so the events of one run can be linked.
+	tags = maps.Clone(tags)
 	if tags == nil {
 		tags = make(map[string]string)
 	}
+	tags[TagCLIVersion] = cliversion.Version
+	tags[TagSessionID] = sessionID
 
 	e := event{
 		Event:     eventPrefix + eventName,

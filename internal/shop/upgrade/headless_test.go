@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -19,6 +21,7 @@ import (
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 // headlessUpgrader builds an upgrader whose network lookups are stubbed and
@@ -125,14 +128,45 @@ func TestConsumeRunEventsReturnsFailureThatAlsoHasOutput(t *testing.T) {
 	close(events)
 
 	var out bytes.Buffer
-	err := (&ProjectUpgrader{}).consumeRunEvents(&out, events)
+	failedStep, err := (&ProjectUpgrader{}).consumeRunEvents(&out, events)
 
 	assert.ErrorIs(t, err, runErr)
+	assert.Empty(t, failedStep, "no step failed before the synthetic finish")
 	assert.Contains(t, out.String(), "rollback detail")
+}
+
+func TestConsumeRunEventsReturnsFirstFailingStep(t *testing.T) {
+	runErr := errors.New("composer update failed")
+	events := make(chan StepEvent, 4)
+	events <- StepEvent{Step: StepRewriteComposer, State: StateOK}
+	events <- StepEvent{Step: StepComposerUpdate, State: StateFail, Err: runErr}
+	events <- StepEvent{Step: StepRecipesInstall, State: StateFail, Err: errors.New("skipped")}
+	events <- StepEvent{Step: StepFinished, State: StateFail, Err: runErr}
+	close(events)
+
+	failedStep, err := (&ProjectUpgrader{}).consumeRunEvents(io.Discard, events)
+
+	assert.ErrorIs(t, err, runErr)
+	assert.Equal(t, "composer_update", failedStep)
+}
+
+// captureUpgradeEvents replaces the tracking seam and returns the recorded tags.
+func captureUpgradeEvents(t *testing.T) *[]map[string]string {
+	t.Helper()
+	original := trackEvent
+	t.Cleanup(func() { trackEvent = original })
+
+	events := &[]map[string]string{}
+	trackEvent = func(_ context.Context, event string, tags map[string]string) {
+		assert.Equal(t, tracking.EventProjectUpgrade, event)
+		*events = append(*events, tags)
+	}
+	return events
 }
 
 func TestRunHeadlessRequiresTarget(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
 	dir := setupComposerProject(t)
 	u := headlessUpgrader(t, dir, "true")
 
@@ -142,10 +176,17 @@ func TestRunHeadlessRequiresTarget(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--target is required")
 	assert.Contains(t, ansi.Strip(out.String()), "Readiness checks")
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "target", (*events)[0][tracking.TagFailedStep])
+	assert.Equal(t, "6.6.10.3", (*events)[0][tracking.TagFromVersion])
+	assert.Empty(t, (*events)[0][tracking.TagTargetVersion])
 }
 
 func TestRunHeadlessDryRun(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
 	dir := setupComposerProject(t)
 	before, err := os.ReadFile(filepath.Join(dir, "composer.json"))
 	require.NoError(t, err)
@@ -167,10 +208,12 @@ func TestRunHeadlessDryRun(t *testing.T) {
 
 	_, err = os.Stat(u.ReportPath())
 	assert.NoError(t, err, "the dry run writes the report")
+	assert.Empty(t, *events, "a dry run is not an upgrade attempt")
 }
 
 func TestRunHeadlessSecurityBlockedNeedsOptIn(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
 	dir := setupComposerProject(t)
 	u := headlessUpgrader(t, dir, "echo 'these were not loaded, because they are affected by security advisories'; exit 2")
 
@@ -181,10 +224,42 @@ func TestRunHeadlessSecurityBlockedNeedsOptIn(t *testing.T) {
 	assert.Contains(t, err.Error(), "re-run with --no-audit")
 	assert.Contains(t, err.Error(), "Shopware Security plugin")
 	assert.False(t, u.AuditBlockDisabled())
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "security_advisory", (*events)[0][tracking.TagFailedStep])
+	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagTargetVersion])
+}
+
+func TestRunHeadlessInterruptedUpdateReportsCancelled(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
+	dir := setupComposerProject(t)
+	u := headlessUpgrader(t, dir, "true")
+
+	// Preflight passes; the real composer update cancels the context, like a Ctrl+C.
+	ctx, cancel := context.WithCancel(t.Context())
+	u.executor.(*fakeExecutor).composer = func(ctx context.Context, args ...string) *executor.Process {
+		if (len(args) > 0 && args[0] == "--version") || slices.Contains(args, "--no-install") {
+			return shellProcess(ctx, "true")
+		}
+		cancel()
+		return shellProcess(ctx, "sleep 10")
+	}
+
+	var out bytes.Buffer
+	err := u.RunHeadless(ctx, HeadlessOptions{Target: "6.7.11.0", Out: &out})
+
+	require.Error(t, err)
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultCancelled, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "composer_update", (*events)[0][tracking.TagFailedStep])
+	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagTargetVersion])
 }
 
 func TestRunHeadlessExecutes(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
 	dir := setupComposerProject(t)
 	u := headlessUpgrader(t, dir, "true")
 
@@ -203,10 +278,16 @@ func TestRunHeadlessExecutes(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = os.Stat(u.LogPath())
 	assert.NoError(t, err)
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultSuccess, (*events)[0][tracking.TagResult])
+	assert.NotContains(t, (*events)[0], tracking.TagFailedStep)
+	assert.Equal(t, "false", (*events)[0][tracking.TagInteractive])
 }
 
 func TestRunHeadlessFailingUpdateRollsBack(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
 	dir := setupComposerProject(t)
 	before, err := os.ReadFile(filepath.Join(dir, "composer.json"))
 	require.NoError(t, err)
@@ -236,4 +317,45 @@ func TestRunHeadlessFailingUpdateRollsBack(t *testing.T) {
 	after, readErr := os.ReadFile(filepath.Join(dir, "composer.json"))
 	require.NoError(t, readErr)
 	assert.Equal(t, string(before), string(after), "composer.json is restored after the failure")
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "composer_update", (*events)[0][tracking.TagFailedStep])
+}
+
+func TestRunHeadlessReadinessBlockNamesTheChecks(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
+	// setupProject has a plugin outside Composer, which blocks the upgrade.
+	u := headlessUpgrader(t, setupProject(t), "true")
+
+	err := u.RunHeadless(t.Context(), HeadlessOptions{Target: "6.7.11.0", Out: io.Discard})
+
+	require.Error(t, err)
+	require.Len(t, *events, 1)
+	assert.Equal(t, "readiness", (*events)[0][tracking.TagFailedStep])
+	assert.Equal(t, "extensions", (*events)[0][tracking.TagBlockingChecks])
+}
+
+func TestRunHeadlessFailingDryRunSendsNothing(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
+	u := headlessUpgrader(t, setupComposerProject(t), "true")
+
+	err := u.RunHeadless(t.Context(), HeadlessOptions{DryRun: true, Out: io.Discard})
+
+	require.Error(t, err, "no target was given")
+	assert.Empty(t, *events)
+}
+
+func TestBlockingCheckIDs(t *testing.T) {
+	r := Readiness{Checks: []ReadinessCheck{
+		{ID: "git-clean", Blocking: true, State: StateFail},
+		{ID: "composer-lock", Blocking: true, State: StateFail},
+		{ID: "tooling", Blocking: true, State: StateOK},
+		{ID: "deployment-helper", State: StateWarn},
+	}}
+
+	assert.Equal(t, "composer_lock,git_clean", blockingCheckIDs(r))
+	assert.Empty(t, blockingCheckIDs(Readiness{}))
 }

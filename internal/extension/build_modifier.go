@@ -107,6 +107,18 @@ func replaceUrlsInManifest(config BuildModifierConfig, manifest *xmlpath.Element
 		}
 	}
 
+	for index, module := range manifest.FindAll("admin/module") {
+		if err := replaceElementAttrUrl(module, "source", newBackendUrl); err != nil {
+			return fmt.Errorf("could not replace admin module source on index %d: %w", index, err)
+		}
+	}
+
+	if mainModule := manifest.Find("admin/main-module"); mainModule != nil {
+		if err := replaceElementAttrUrl(mainModule, "source", newBackendUrl); err != nil {
+			return fmt.Errorf("could not replace admin main module source: %w", err)
+		}
+	}
+
 	if checkout := manifest.Find("gateways/checkout"); checkout != nil {
 		if err := replaceElementUrl(checkout, newBackendUrl); err != nil {
 			return fmt.Errorf("could not replace checkout gateway url: %w", err)

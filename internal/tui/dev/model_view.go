@@ -91,9 +91,16 @@ func (m Model) View(ctx app.Context) string {
 	case phaseTask:
 		return m.renderTask(ctx)
 	case phaseMigrationWizard:
-		return renderPhaseBox(m.migrationWizard.viewContent(), ctx.Width, ctx.MainHeight)
+		wizard := m.migrationWizard
+		wizard.cardWidth, wizard.cardHeight = phaseCardBounds(ctx)
+		return renderPhaseBox(wizard.viewContent(), ctx.Width, ctx.MainHeight)
 	}
 	return ""
+}
+
+// phaseCardBounds returns the room a phase card has inside renderPhaseBox (border plus 1x3 padding).
+func phaseCardBounds(ctx app.Context) (int, int) {
+	return ctx.Width - 8, ctx.MainHeight - 4
 }
 
 func (m Model) renderDashboard(ctx app.Context) string {
@@ -167,6 +174,7 @@ func (m Model) renderDashboardFooter(width int) string {
 
 func (m Model) renderPhase(ctx app.Context) string {
 	var content strings.Builder
+	cardWidth, cardHeight := phaseCardBounds(ctx)
 
 	switch m.phase {
 	case phaseStarting:
@@ -174,17 +182,17 @@ func (m Model) renderPhase(ctx app.Context) string {
 			return m.renderDockerLogs("Starting Docker containers...", ctx.Width, ctx.MainHeight)
 		}
 		cardContent := m.dockerSpinner.View() + " Starting Docker containers..."
-		content.WriteString(tui.RenderPhaseCard(cardContent))
+		content.WriteString(tui.RenderPhaseCardFit(cardContent, cardWidth, cardHeight))
 	case phaseStopping:
 		if m.dockerShowLogs {
 			return m.renderDockerLogs("Stopping Docker containers...", ctx.Width, ctx.MainHeight)
 		}
 		cardContent := m.dockerSpinner.View() + " Stopping Docker containers..."
-		content.WriteString(tui.RenderPhaseCard(cardContent))
+		content.WriteString(tui.RenderPhaseCardFit(cardContent, cardWidth, cardHeight))
 	case phaseInstallPrompt:
 		var card strings.Builder
-		m.renderInstallPrompt(&card)
-		content.WriteString(tui.RenderPhaseCard(card.String()))
+		m.renderInstallPrompt(&card, tui.PhaseCardContentRows(cardHeight))
+		content.WriteString(tui.RenderPhaseCardFit(card.String(), cardWidth, cardHeight))
 	case phaseInstalling:
 		if m.installProg.showLogs {
 			return m.renderDockerLogs("Installing Shopware...", ctx.Width, ctx.MainHeight)
@@ -208,7 +216,7 @@ func (m Model) renderPhase(ctx app.Context) string {
 			}
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
-		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
+		content.WriteString(tui.RenderPhaseCardFit(strings.TrimRight(card.String(), "\n"), cardWidth, cardHeight))
 	case phaseInstallFailed:
 		if m.installProg.showLogs {
 			// Appended at render time, not when the install failed: output is
@@ -217,7 +225,7 @@ func (m Model) renderPhase(ctx app.Context) string {
 			lines := append(slices.Clone(m.overlayLines), m.installFailureNotice()...)
 			return m.renderLogScreen("Installation failed", lines, ctx.Width, ctx.MainHeight)
 		}
-		content.WriteString(tui.RenderPhaseCard(m.renderInstallFailed()))
+		content.WriteString(tui.RenderPhaseCardFit(m.renderInstallFailed(), cardWidth, cardHeight))
 	case phasePortConflict:
 		var card strings.Builder
 		card.WriteString(errorStyle.Render("Ports already in use"))
@@ -225,7 +233,7 @@ func (m Model) renderPhase(ctx app.Context) string {
 		card.WriteString(portConflictLines(m.portConflicts))
 		card.WriteString("\n")
 		card.WriteString(helpStyle.Render("Press q to exit"))
-		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
+		content.WriteString(tui.RenderPhaseCardFit(strings.TrimRight(card.String(), "\n"), cardWidth, cardHeight))
 	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.
 	}

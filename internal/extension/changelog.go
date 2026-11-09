@@ -1,13 +1,24 @@
 package extension
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
+
 	"github.com/shopware/shopware-cli/internal/markdown"
+)
+
+var (
+	changelogVersionHeadingRegex = regexp.MustCompile(`^\[?(?i:v)?([0-9]+\.[0-9]+(?:\.[0-9]+)*(?:-[0-9A-Za-z._-]+)?(?:\+[0-9A-Za-z._-]+)?)\]?(?:\([^)]*\)|\[[^\]]*\])?(?:\s*[-–—/:]\s*.*|\s+\([^)]*\).*|\s+\[(?i:yanked)\]|\s+[0-9]{4}[-/.][0-9]{1,2}[-/.][0-9]{1,2}.*)?$`)
+	changelogUnreleasedRegex     = regexp.MustCompile(`^\[?(?i:unreleased|unveröffentlicht)\]?(?:\([^)]*\)|\[[^\]]*\])?(?:\s+.*)?$`)
 )
 
 func parseMarkdownChangelogInPath(path string) (map[string]map[string]string, error) {
@@ -41,33 +52,43 @@ func parseMarkdownChangelogInPath(path string) (map[string]map[string]string, er
 }
 
 func parseMarkdownChangelog(content string) (map[string]string, error) {
+	source := []byte(content)
+	md := markdown.New()
+	document := md.Parser().Parse(text.NewReader(source))
 	versions := make(map[string]string)
 	currentVersion := ""
-	versionText := ""
+	var body bytes.Buffer
 
-	for _, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(line, "#") {
-			if len(currentVersion) > 0 && len(versionText) > 0 {
-				versions[currentVersion] = versionText
+	saveCurrentVersion := func() {
+		if currentVersion != "" && body.Len() > 0 {
+			versions[currentVersion] = body.String()
+		}
+		body.Reset()
+	}
+
+	for node := document.FirstChild(); node != nil; node = node.NextSibling() {
+		if heading, ok := node.(*ast.Heading); ok && heading.Level <= 3 {
+			label := strings.TrimSpace(string(util.UnescapePunctuations(heading.Lines().Value(source))))
+			if matches := changelogVersionHeadingRegex.FindStringSubmatch(label); len(matches) > 1 {
+				saveCurrentVersion()
+				currentVersion = matches[1]
+				continue
 			}
+			if changelogUnreleasedRegex.MatchString(label) {
+				saveCurrentVersion()
+				currentVersion = ""
+				continue
+			}
+		}
 
-			currentVersion = strings.Trim(strings.TrimPrefix(line, "#"), " ")
-			versionText = ""
-		} else {
-			versionText = strings.Trim(versionText+"\n"+line, " ")
+		if currentVersion != "" {
+			if err := md.Renderer().Render(&body, source, node); err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	versions[currentVersion] = versionText
-
-	for key, changelog := range versions {
-		html, err := markdown.ToHTML([]byte(changelog))
-		if err != nil {
-			return nil, err
-		}
-
-		versions[key] = html
-	}
+	saveCurrentVersion()
 
 	return versions, nil
 }
@@ -88,7 +109,9 @@ func parseExtensionMarkdownChangelog(ext Extension) (*ExtensionChangelog, error)
 		return nil, fmt.Errorf("english changelog in version %s is missing", v.String())
 	}
 
-	changelogEnVersion, ok := changelogEn[v.String()]
+	versionKey := strings.TrimPrefix(strings.TrimPrefix(v.String(), "v"), "V")
+
+	changelogEnVersion, ok := changelogEn[versionKey]
 	if !ok {
 		return nil, errors.New("english changelog is missing")
 	}
@@ -98,7 +121,7 @@ func parseExtensionMarkdownChangelog(ext Extension) (*ExtensionChangelog, error)
 		changelogDe = changelogEn
 	}
 
-	changelogDeVersion, ok := changelogDe[v.String()]
+	changelogDeVersion, ok := changelogDe[versionKey]
 	if !ok {
 		return nil, fmt.Errorf("german changelog in version %s is missing", v.String())
 	}
@@ -106,7 +129,7 @@ func parseExtensionMarkdownChangelog(ext Extension) (*ExtensionChangelog, error)
 	allChangelogsInVersion := make(map[string]string)
 
 	for key, changelog := range changelogs {
-		changelogVersion, ok := changelog[v.String()]
+		changelogVersion, ok := changelog[versionKey]
 		if !ok {
 			continue
 		}

@@ -10,7 +10,6 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/testhelper"
-	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 func TestBuiltinScopesExtensionIgnores(t *testing.T) {
@@ -35,27 +34,19 @@ func TestBuiltinScopesExtensionIgnores(t *testing.T) {
 					exts[0], exts[1] = exts[1], exts[0]
 				}
 
-				check := NewCheck()
-				check.SetSourceRoot(p.Root)
-				previous := validation.CheckResult{
-					Identifier: "config.services_xml.deprecated",
-					Path:       "src/Resources/config/services.xml",
-					Line:       1,
-				}
-				check.AddResult(previous)
-				require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
+				toolResult := runCheckTool(t, Builtin{}, ToolConfig{
 					Extensions: exts,
 					RootDir:    p.Root,
-				}))
+				})
+				require.Empty(t, toolResult.Errors)
 
 				var paths []string
-				for _, result := range check.GetResults() {
-					if result.Identifier == previous.Identifier {
+				for _, result := range toolResult.Findings {
+					if result.Identifier == "config.services_xml.deprecated" {
 						paths = append(paths, result.Path)
 					}
 				}
 				assert.ElementsMatch(t, []string{
-					previous.Path,
 					"custom/plugins/SecondPlugin/src/Resources/config/services.xml",
 				}, paths)
 			})

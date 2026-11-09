@@ -323,7 +323,9 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 			cancel()
 
 			// Drain ListenAndServe result (http.ErrServerClosed is expected).
-			<-errCh
+			if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+				return err
+			}
 		}
 
 		return nil

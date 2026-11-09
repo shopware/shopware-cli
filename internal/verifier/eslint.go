@@ -3,40 +3,36 @@ package verifier
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
-
-	"golang.org/x/sync/errgroup"
+	"strings"
+	"sync"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-type EslintOutput []struct {
-	FilePath string `json:"filePath"`
-	Messages []struct {
-		RuleID    string `json:"ruleId"`
-		Severity  int    `json:"severity"`
-		Message   string `json:"message"`
-		Line      int    `json:"line"`
-		Column    int    `json:"column"`
-		NodeType  string `json:"nodeType"`
-		EndLine   int    `json:"endLine"`
-		EndColumn int    `json:"endColumn"`
-		Fix       struct {
-			Range []int  `json:"range"`
-			Text  string `json:"text"`
-		} `json:"fix,omitempty"`
-		MessageID string `json:"messageId,omitempty"`
-	} `json:"messages"`
-	SuppressedMessages  []any  `json:"suppressedMessages"`
-	ErrorCount          int    `json:"errorCount"`
-	FatalErrorCount     int    `json:"fatalErrorCount"`
-	WarningCount        int    `json:"warningCount"`
-	FixableErrorCount   int    `json:"fixableErrorCount"`
-	FixableWarningCount int    `json:"fixableWarningCount"`
-	Source              string `json:"source"`
-	UsedDeprecatedRules []any  `json:"usedDeprecatedRules"`
+// eslintOutput describes ESLint's JSON report, which uses absolute file paths.
+type eslintOutput []struct {
+	FilePath string          `json:"filePath"`
+	Output   *string         `json:"output"`
+	Messages []eslintMessage `json:"messages"`
+}
+
+type eslintMessage struct {
+	RuleID   string `json:"ruleId"`
+	Severity int    `json:"severity"`
+	Message  string `json:"message"`
+	Line     int    `json:"line"`
+}
+
+// eslintReport keeps valid findings even when other entries are malformed.
+// Changed paths describe native output fields, not remaining findings.
+type eslintReport struct {
+	findings     []validation.CheckResult
+	changedFiles []string
+	errors       []error
 }
 
 type Eslint struct{}
@@ -45,104 +41,174 @@ func (e Eslint) Name() string {
 	return "eslint"
 }
 
-func (e Eslint) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	paths := append([]string{}, config.StorefrontDirectories...)
-	paths = append(paths, config.AdminDirectories...)
-
-	var gr errgroup.Group
-
-	env := append(os.Environ(), "SHOPWARE_VERSION="+config.MinShopwareVersion)
-
-	for _, p := range paths {
-		p := p
-
-		gr.Go(func() error {
-			eslint := CommandContext(ctx,
-				"node",
-				path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "eslint"),
-				"--format=json",
-				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("eslint.config.%s.mjs", path.Base(p))),
-				"--ignore-pattern", "dist/**",
-				"--ignore-pattern", ".tmp/**",
-				"--ignore-pattern", "vendor/**",
-				"--ignore-pattern", "test/e2e/**",
-				"--ignore-pattern", "**/jest.config.js",
-				"--no-error-on-unmatched-pattern",
-			)
-			eslint.Dir = p
-			eslint.Env = env
-
-			log, _ := eslint.CombinedOutput()
-
-			var eslintOutput EslintOutput
-
-			if err := json.Unmarshal(log, &eslintOutput); err != nil {
-				return fmt.Errorf("failed to unmarshal eslint output: %w, %s", err, string(log))
-			}
-
-			for _, diagnostic := range eslintOutput {
-				fixedPath := validation.NormalizeSourcePath(diagnostic.FilePath, config.RootDir)
-
-				for _, message := range diagnostic.Messages {
-					severity := validation.SeverityWarning
-
-					if message.Severity == 2 {
-						severity = validation.SeverityError
-					}
-
-					check.AddResult(validation.CheckResult{
-						Path:       fixedPath,
-						Line:       message.Line,
-						Message:    message.Message,
-						Severity:   severity,
-						Identifier: "eslint/" + message.RuleID,
-					})
-				}
-			}
-
-			return nil
-		})
-	}
-
-	return gr.Wait()
+func (e Eslint) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+	return e.run(ctx, config, execution, false)
 }
 
-func (e Eslint) Fix(ctx context.Context, config ToolConfig) error {
-	paths := append([]string{}, config.StorefrontDirectories...)
-	paths = append(paths, config.AdminDirectories...)
-	env := append(os.Environ(), "SHOPWARE_VERSION="+config.MinShopwareVersion)
+func (e Eslint) Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
+	if dryRun {
+		return e.Check(ctx, config, execution)
+	}
+	return e.run(ctx, config, execution, true)
+}
 
-	var gr errgroup.Group
-
-	for _, p := range paths {
-		p := p
-
-		gr.Go(func() error {
-			eslint := CommandContext(ctx,
-				"node",
-				path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "eslint"),
-				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("eslint.config.%s.mjs", path.Base(p))),
-				"--ignore-pattern", "dist/**",
-				"--ignore-pattern", ".tmp/**",
-				"--ignore-pattern", "vendor/**",
-				"--ignore-pattern", "test/e2e/**",
-				"--ignore-pattern", "**/jest.config.js",
-				"--fix",
-				"--no-error-on-unmatched-pattern",
-			)
-			eslint.Dir = p
-			eslint.Env = env
-
-			log, _ := eslint.CombinedOutput()
-
-			//nolint: forbidigo
-			fmt.Print(string(log))
-
-			return nil
-		})
+func (e Eslint) run(
+	ctx context.Context,
+	config ToolConfig,
+	execution *ToolExecution,
+	fix bool,
+) ToolSummary {
+	paths := append(append([]string{}, config.StorefrontDirectories...), config.AdminDirectories...)
+	if len(paths) == 0 {
+		return ToolSummary{SkipReason: "no administration or storefront sources"}
 	}
 
-	return gr.Wait()
+	var summaryMu sync.Mutex
+	changedFiles := make(map[string]struct{})
+	failed := false
+
+	runDirectories(paths, func(directory string) {
+		report := e.runDirectory(ctx, config, execution, directory, fix)
+		if !fix {
+			return
+		}
+
+		summaryMu.Lock()
+		defer summaryMu.Unlock()
+		failed = failed || len(report.errors) > 0
+		for _, file := range report.changedFiles {
+			changedFiles[file] = struct{}{}
+		}
+	})
+
+	if !fix || failed {
+		return ToolSummary{}
+	}
+
+	return ToolSummary{Note: fileChangeNote(len(changedFiles), "fixed")}
+}
+
+func (e Eslint) runDirectory(
+	ctx context.Context,
+	config ToolConfig,
+	execution *ToolExecution,
+	directory string,
+	fix bool,
+) eslintReport {
+	args := []string{
+		path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "eslint"),
+		"--config", path.Join(
+			config.ToolDirectory, "js", "configs",
+			fmt.Sprintf("eslint.config.%s.mjs", path.Base(directory)),
+		),
+		"--ignore-pattern", "dist/**",
+		"--ignore-pattern", ".tmp/**",
+		"--ignore-pattern", "vendor/**",
+		"--ignore-pattern", "test/e2e/**",
+		"--ignore-pattern", "**/jest.config.js",
+		"--no-error-on-unmatched-pattern",
+		"--format=json",
+	}
+
+	operation := OperationCheck
+	if fix {
+		operation = OperationFix
+		args = append(args, "--fix")
+	}
+
+	cmd := CommandContext(ctx, "node", args...)
+	cmd.Dir = directory
+	cmd.Env = append(os.Environ(), "SHOPWARE_VERSION="+config.MinShopwareVersion)
+	subprocess := execution.Run(operation, cmd)
+
+	report := parseESLintReport(subprocess, config.RootDir)
+	execution.AddFindings(report.findings...)
+	for _, err := range report.errors {
+		execution.Fail(subprocess.ToolError(err))
+	}
+
+	return report
+}
+
+func parseESLintReport(subprocess SubprocessResult, root string) eslintReport {
+	if !expectedExit(subprocess.Err, 1) {
+		return eslintReport{errors: []error{
+			fmt.Errorf("cannot run eslint in %s: %w", subprocess.Dir, subprocess.Err),
+		}}
+	}
+
+	var output eslintOutput
+	if err := json.Unmarshal([]byte(subprocess.Stdout), &output); err != nil {
+		return eslintReport{errors: []error{
+			fmt.Errorf("cannot parse eslint output in %s: %w", subprocess.Dir, err),
+		}}
+	}
+	if output == nil {
+		return eslintReport{errors: []error{
+			errors.New("cannot parse eslint output: expected a report array"),
+		}}
+	}
+
+	var report eslintReport
+	for _, file := range output {
+		if file.FilePath == "" || file.Messages == nil {
+			report.errors = append(report.errors,
+				errors.New("cannot parse eslint output: incomplete file result"),
+			)
+			continue
+		}
+		if len(file.Messages) == 0 && file.Output == nil {
+			continue
+		}
+
+		filePath := validation.NormalizeSourcePath(file.FilePath, root)
+		if file.Output != nil {
+			report.changedFiles = append(report.changedFiles, filePath)
+		}
+
+		for _, message := range file.Messages {
+			finding, err := message.finding(filePath)
+			if err != nil {
+				report.errors = append(report.errors, err)
+				continue
+			}
+			report.findings = append(report.findings, finding)
+		}
+	}
+
+	if subprocess.Err != nil && len(report.findings) == 0 && len(report.errors) == 0 {
+		report.errors = append(report.errors,
+			errors.New("cannot complete eslint analysis: unsuccessful exit without diagnostics"),
+		)
+	}
+
+	return report
+}
+
+func (m eslintMessage) finding(filePath string) (validation.CheckResult, error) {
+	if (m.Severity != 1 && m.Severity != 2) || strings.TrimSpace(m.Message) == "" {
+		return validation.CheckResult{}, errors.New(
+			"cannot parse eslint output: incomplete or invalid diagnostic",
+		)
+	}
+
+	severity := validation.SeverityWarning
+	if m.Severity == 2 {
+		severity = validation.SeverityError
+	}
+
+	rule := m.RuleID
+	if rule == "" {
+		rule = "diagnostic"
+	}
+
+	return validation.CheckResult{
+		Path:       filePath,
+		Line:       m.Line,
+		Message:    m.Message,
+		Severity:   severity,
+		Identifier: "eslint/" + rule,
+	}, nil
 }
 
 func init() {

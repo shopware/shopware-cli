@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,11 +18,12 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // ErrProxyNotRegistered is returned by `project proxy status` when the
 // current project is not registered with the shared proxy.
-var ErrProxyNotRegistered = errors.New("project is not registered with the shared proxy")
+var ErrProxyNotRegistered = logging.NewSilent("project is not registered with the shared proxy")
 
 type proxyEnvironment struct {
 	projectRoot   string

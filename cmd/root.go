@@ -22,6 +22,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/agent"
 	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -55,10 +56,13 @@ func Execute(ctx context.Context) int {
 	updateHandle, updateCancel := startUpdateCheck(ctx, args)
 	defer updateCancel()
 
+	name, _ := commandEventName(args)
+	shopwareVersion := tracking.StartShopwareVersion(name)
 	start := time.Now()
 	err := rootCmd.ExecuteContext(ctx)
 
-	trackCommandExecution(ctx, args, start, err)
+	duration := time.Since(start)
+	trackCommandExecution(ctx, args, duration, err, shopwareVersion.Ready())
 	printUpdateHint(ctx, os.Stderr, updateHandle.Wait(ctx).Release)
 	printAIHint(ctx, os.Stderr, args)
 
@@ -73,7 +77,8 @@ func exitCode(ctx context.Context, err error) int {
 		return 0
 	}
 
-	if !errors.Is(err, project.ErrEnvironmentDown) && !errors.Is(err, project.ErrProxyNotRegistered) && !errors.Is(err, project.ErrProxyVerificationFailed) {
+	var silent logging.SilenceError
+	if !errors.As(err, &silent) {
 		logging.FromContext(ctx).Errorln(err)
 	}
 
@@ -114,6 +119,11 @@ func init() {
 	cobra.EnableTraverseRunHooks = true
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
+		// Resolve the background before any Bubble Tea program owns stdin;
+		// a lazy query from inside a running program would race its reader.
+		if system.IsInteractionEnabled(cmd.Context()) {
+			tui.HasDarkBackground()
+		}
 		return nil
 	}
 

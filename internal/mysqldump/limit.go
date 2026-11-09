@@ -62,7 +62,7 @@ func (d *Dumper) computeLimitFilters(ctx context.Context) error {
 		table = strings.ToLower(table)
 
 		schema, ok := schemas[table]
-		if !ok {
+		if !ok || d.filterMap[table] == IgnoreMapPlacement {
 			logging.FromContext(ctx).Warnf("Ignoring row limit for table %s: the table does not exist or is excluded from the dump", table)
 			continue
 		}
@@ -295,7 +295,7 @@ func (r *limitResolver) conditionFor(table string) string {
 		condition := fmt.Sprintf("%s IN (%s)", columnTuple(fk.Columns), r.keptRowsQuery(referenced, fk.ReferencedColumns))
 
 		// Rows not referencing the parent at all are kept.
-		if nullable := r.nullableColumns(table, fk.Columns); len(nullable) != 0 {
+		if nullable := nullableColumns(r.schemas[table], fk.Columns); len(nullable) != 0 {
 			nullChecks := make([]string, 0, len(nullable))
 			for _, column := range nullable {
 				nullChecks = append(nullChecks, fmt.Sprintf("`%s` IS NULL", column))
@@ -454,10 +454,11 @@ func prefixColumns(tableRef string, columns []string) string {
 	return strings.Join(prefixed, ", ")
 }
 
-func (r *limitResolver) nullableColumns(table string, columns []string) []string {
+// nullableColumns returns the subset of columns that the schema allows to be NULL.
+func nullableColumns(schema *TableSchema, columns []string) []string {
 	var nullable []string
 	for _, column := range columns {
-		for _, col := range r.schemas[table].Columns {
+		for _, col := range schema.Columns {
 			if col.Name == column && col.Nullable {
 				nullable = append(nullable, column)
 				break

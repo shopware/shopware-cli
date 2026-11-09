@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	charm.land/bubbles/v2 v2.2.1
-	charm.land/bubbletea/v2 v2.1.0
+	charm.land/bubbletea/v2 v2.1.1
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.6
 	dario.cat/mergo v1.0.2
@@ -35,17 +35,17 @@ require (
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
 	github.com/smallstep/truststore v0.13.0
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/stretchr/testify v1.12.1
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
-	github.com/vulcand/oxy/v2 v2.2.1
+	github.com/vulcand/oxy/v2 v2.3.0
 	github.com/wI2L/jsondiff v0.7.1
-	github.com/yuin/goldmark v1.8.6
+	github.com/yuin/goldmark v1.8.7
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/image v0.47.0
 	golang.org/x/mod v0.42.0
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0

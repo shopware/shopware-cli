@@ -14,7 +14,10 @@ func (s Builtin) Name() string {
 	return "builtin"
 }
 
-func (s Builtin) Check(ctx context.Context, check *Check, config ToolConfig) error {
+func (s Builtin) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+	if len(config.Extensions) == 0 {
+		return ToolSummary{SkipReason: "no extensions to check"}
+	}
 	ignores := make([]validation.ToolConfigIgnore, 0)
 
 	for _, ext := range config.Extensions {
@@ -42,20 +45,21 @@ func (s Builtin) Check(ctx context.Context, check *Check, config ToolConfig) err
 		if len(ignores) > 0 {
 			extensionCheck.RemoveByIdentifier(ignores)
 		}
-		for _, result := range extensionCheck.GetResults() {
+		findings := extensionCheck.GetResults()
+		for i, result := range findings {
 			// Builtin validators report extension-relative paths. Rebase them
 			// before merging into the project-wide check.
 			if result.Path != "" && config.RootDir != "" {
 				if !filepath.IsAbs(result.Path) {
 					result.Path = filepath.Join(ext.GetPath(), result.Path)
 				}
-				result.Path = validation.NormalizeSourcePath(result.Path, config.RootDir)
+				findings[i].Path = validation.NormalizeSourcePath(result.Path, config.RootDir)
 			}
-			check.AddResult(result)
 		}
+		execution.AddFindings(findings...)
 	}
 
-	return nil
+	return ToolSummary{}
 }
 
 func init() {

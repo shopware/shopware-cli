@@ -239,10 +239,10 @@ homebrew_casks:
     license: MIT
     hooks:
       post:
-        install: |
-          system_command "/bin/ln", args: ["-sf", "#{HOMEBREW_PREFIX}/bin/shopware-cli", "#{HOMEBREW_PREFIX}/bin/swx"]
-        uninstall: |
-          system_command "/bin/rm", args: ["-f", "#{HOMEBREW_PREFIX}/bin/swx"]
+        install_steps: |
+          symlink "bin/shopware-cli", "bin/swx",
+                  source_base: :homebrew_prefix, target_base: :homebrew_prefix,
+                  overwrite: true, remove_on_uninstall: true
     completions:
       bash: completions/shopware-cli.bash
       zsh: completions/shopware-cli.zsh

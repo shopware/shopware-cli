@@ -9,7 +9,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
-func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion string) error {
+func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion string) (*shop.ProjectFolder, error) {
 	go tracking.Track(ctx, tracking.EventProjectCreate, map[string]string{
 		tracking.TagVersion:           opts.selectedVersion,
 		tracking.TagDeployment:        opts.selectedDeployment,
@@ -23,7 +23,7 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 	scaffold := newShopwareProjectScaffold(opts, chosenVersion)
 	scaffold.SymfonyCLIInstalled = !opts.useDocker && system.IsSymfonyCliInstalled()
 
-	return scaffold.Scaffold(ctx)
+	return scaffold.ScaffoldWithCleanup(ctx)
 }
 
 func newShopwareProjectScaffold(opts *createOptions, chosenVersion string) shop.ShopwareProjectScaffold {

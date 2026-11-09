@@ -2,23 +2,19 @@ package project
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Run static analysis and Shopware checks on a project",
-	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated. Runs on a temporary copy unless --no-copy is passed.",
+	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated, but PHPStan needs them, so run composer install first.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
@@ -33,15 +29,13 @@ var projectValidateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := projectValidationFormat(cmd)
+		ctx := cmd.Context()
+		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectProjectValidationTools(only, exclude)
-		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
-			return err
-		}
-		noCopy, _ := cmd.Flags().GetBool("no-copy")
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
 		var err error
@@ -61,46 +55,25 @@ var projectValidateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		validationPath := projectPath
-		if !noCopy {
-			tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-project-*")
-			if err != nil {
-				return fmt.Errorf("cannot create temporary directory: %w", err)
-			}
-			defer func() {
-				if err := os.RemoveAll(tmpDir); err != nil {
-					logging.FromContext(cmd.Context()).Errorf("Failed to remove temporary directory: %v", err)
-				}
-			}()
-
-			if err := system.CopyFiles(cmd.Context(), projectPath, tmpDir); err != nil {
-				return err
-			}
-			validationPath = tmpDir
-		}
-
-		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), validationPath, localOnly)
+		finishConfig := progress.Start("discovering project configuration")
+		toolCfg, err := verifier.GetConfigFromProject(ctx, projectPath, localOnly)
+		finishConfig(err)
 		if err != nil {
 			return err
 		}
 
-		result := verifier.NewCheck()
-		result.SetSourceRoot(toolCfg.RootDir)
-
-		var gr errgroup.Group
-
-		for _, tool := range tools {
-			gr.Go(func() error {
-				return tool.Check(cmd.Context(), result, *toolCfg)
-			})
+		finishSetup := progress.Start("preparing tools")
+		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+		finishSetup(setupErr)
+		if setupErr != nil {
+			return setupErr
 		}
+		toolCfg.ToolDirectory = verifier.GetToolDirectory()
 
-		runErr := gr.Wait()
-		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, runErr != nil, statuses...)
-		if runErr != nil {
-			return runErr
-		}
-		return reportErr
+		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Check(ctx, *toolCfg, execution)
+		})
+		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
 
@@ -130,5 +103,6 @@ func init() {
 	_ = projectValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
+	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")
 }
