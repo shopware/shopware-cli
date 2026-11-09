@@ -1,7 +1,11 @@
-# ADR: Deprecation policy
+---
+title: Deprecation policy
+status: Accepted
+tags: [deprecation, telemetry, release]
+---
 
-**Status:** Accepted
-**Related:** Discussion under issue #1407, deprecation tracking issue #1859
+- Related: [Issue #1407](https://github.com/shopware/shopware-cli/issues/1407),
+  deprecation tracking [issue #1859](https://github.com/shopware/shopware-cli/issues/1859)
 
 ## Context
 
