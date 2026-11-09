@@ -1,19 +1,13 @@
 # ADR: Deprecation policy
 
-**Status:** Proposed
-**Related:** Disussion under issue #1407
+**Status:** Accepted
+**Related:** Discussion under issue #1407, deprecation tracking issue #1859
 
 ## Context
 
-shopware-cli is used by many developers, often non-interactively in CI pipelines and build scripts. 
+shopware-cli is used by many developers, often non-interactively in CI pipelines and build scripts.
 A removed command, flag, env var or config key can break builds or development flow for users who never read our changelog.
-We deprecate commands and flags, but have no rule for when they are removed. 
-
-Example: `--store-compliance` and `--full` are deprecated with no removal date.
-
-Constraints:
-- No fixed release cadence.
-- Telemetry exists for commands, not for flags.
+Until now we deprecated things without a rule for when they are removed.
 
 We need a predictable process that gives users clarity and gives maintainers a way to actually retire code.
 
@@ -25,50 +19,24 @@ This policy covers the public interface of shopware-cli:
 - Flags
 - Environment variables (`SHOPWARE_CLI_*`)
 - Config keys in `.shopware-extension.yml` and `.shopware-project.yml`
-- Documented output formats that users may parse (e.g. JSON output)
-
-## Decision drivers
-
-- Clarity for users: they know *when* something goes away and *what to use instead*.
-- CI safety: no silent breakage. Users get warned in the logs before removal.
-- Maintainability: no indefinitely growing "half-dead" code paths.
-- Consistency with the Shopware ecosystem, where users are used to deprecations with announced removal.
-- Low process overhead: we're a small team.
-
-## Options
-
-**A. Keep deprecated items until they become a maintenance burden**
-Never breaks users. Gives no clarity, and deprecated code stays indefinitely.
-
-**B. Remove after a fixed window in calendar months**
-Clear for users, works without a release cadence. Requires tracking dates.
-
-**C. Remove in the next (or second next) major release**
-Common convention. Open-ended without planned major releases.
 
 ## Decision
 
-_To be agreed by the team._
+1. **Every deprecation has a removal date.** The date is set when the deprecation is merged into `main`: merge date + 3 months, falling on a working day. Users get one quarter to adapt.
+2. **Users are warned at runtime.** Using a deprecated item prints a warning to stderr (so stdout and JSON output stay clean). The warning states that the item is deprecated, its removal date and its replacement, if one exists. Deprecated commands and flags are hidden from `--help` output.
+3. **Usage is tracked via telemetry.** Using a deprecated item is reported via telemetry, so we can see how many users still rely on it.
+4. **Extensions are possible.** If a deprecated item is still widely used and users need more time, the removal date can be extended. Each case is assessed individually, based on telemetry, user feedback and our own knowledge. An extension ships in a new release with the updated date, and the sub-issue gets the new due date.
+5. **#1859 is the source of truth.** The issue is pinned in the repository as a living document. Every deprecation is a sub-issue of #1859 and must have a due date (the removal date).
+6. **Removals are automated reminders.** A scheduled GitHub Action sends a notification to our internal Slack channel for every deprecation due that week.
+7. **Changelog has a Deprecations section.** Each release changelog lists new deprecations and removals in a separate section, linking to the sub-issues.
+8. **Dev docs describe the process.** A new page in our dev docs explains how deprecation works and the default window, and links to #1859.
 
-## Questions to answer
+## Versioning
 
-1. Which option do we adopt?
-2. If B: how long is the window?
-3. How do we warn users (help text, runtime warning, changelog)?
-4. How do we assess impact for flags without telemetry?
-5. Do we allow exceptions, and how are they recorded?
+This policy applies even though shopware-cli is still below 1.0.0. If we release a major version, we will revisit this policy.
 
-## Proposal
+## Consequences
 
-We adopt **Option B**, with an explicit, recorded exception path.
-
-1. **Every deprecation has a removal target from day one.** The warning, the changelog and the docs state the earliest removal date and the replacement.
-2. **Minimum window: 3 calendar months** from the first release that emits the warning. Longer windows are allowed for widely used features.
-3. **Batched removals.** Removals land together in a release.
-4. **Runtime warnings, not only help text.** Using a deprecated item prints a warning to **stderr** (so stdout and JSON output stay clean), with the replacement Deprecated flags or commands are hidden from `--help` output.
-5. **Impact check before removal.**
-   - Commands: check telemetry before the removal release.
-   - Flags, env vars, config keys: no telemetry today. We search public usage (GitHub code search, shopware/github-actions, docs, Shopware's own repos) and fix our own usages first.
-   - *Open question:* whether to collect anonymous flag-usage telemetry (flag names only) to make this measurable.
-6. **Exceptions are explicit.** If the team decides to keep a deprecated item longer (e.g. maintenance cost is negligible and user impact is high), we record that decision in the tracking issue with a new review date. "Deprecated" never means "undecided".
-7. **Tracking.** Each deprecation gets an issue labeled `deprecation` with the removal date and a checklist: warning, docs, changelog, own usages migrated, impact check, removal.
+- Users know from day one when something goes away and have a quarter to adapt.
+- Maintainers can remove deprecated code on a known date, without re-discussing each case.
+- Each deprecation needs a sub-issue with a due date under #1859.
