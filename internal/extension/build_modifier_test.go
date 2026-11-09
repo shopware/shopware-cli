@@ -143,3 +143,36 @@ func TestBuildModifierRewritesUrlsWithoutDroppingUnknownManifestXML(t *testing.T
 	assert.Contains(t, output, `url="https://example.com/webhook"`)
 	assert.NotContains(t, output, "_xmlns")
 }
+
+func TestBuildModifierRewritesAdminModuleSources(t *testing.T) {
+	app := &App{}
+	tmpDir := t.TempDir()
+	manifest := strings.TrimSpace(`<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+    <meta>
+        <version>1.0.0</version>
+    </meta>
+    <admin>
+        <module name="catalog" source="http://localhost:8100/admin/catalog" parent="sw-catalogue" position="50">
+            <label>Catalog</label>
+        </module>
+        <module name="parent-only" parent="sw-catalogue">
+            <label>Parent only</label>
+        </module>
+        <main-module source="http://localhost:8100/admin/main"/>
+    </admin>
+</manifest>`)
+
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.xml"), []byte(manifest), 0644))
+
+	assert.NoError(t, BuildModifier(app, tmpDir, BuildModifierConfig{AppBackendUrl: "https://example.com"}))
+
+	bytes, err := os.ReadFile(filepath.Join(tmpDir, "manifest.xml"))
+	assert.NoError(t, err)
+	output := string(bytes)
+
+	assert.Contains(t, output, `source="https://example.com/admin/catalog"`)
+	assert.Contains(t, output, `source="https://example.com/admin/main"`)
+	assert.NotContains(t, output, "localhost")
+	assert.Contains(t, output, `<module name="parent-only" parent="sw-catalogue">`)
+}
