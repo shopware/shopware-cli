@@ -18,6 +18,7 @@ type Preflight = deployment.Preflight
 type PreflightAction = deployment.PreflightAction
 type PreflightOptions = deployment.PreflightOptions
 type PreflightTarget = deployment.PreflightTarget
+type PreflightField = deployment.PreflightField
 type PreflightProvider = deployment.PreflightProvider
 
 const PreflightRollout = deployment.PreflightRollout

@@ -24,7 +24,7 @@ type PreflightOptions struct {
 }
 
 // Preflight describes the resolved local source and configured remote targets.
-// It does not connect to SSH or check remote readiness.
+// It does not connect to remote targets or check their readiness.
 type Preflight struct {
 	ProjectDirectory string
 	ConfigPath       string
@@ -32,14 +32,14 @@ type Preflight struct {
 	Targets          []PreflightTarget
 }
 
+// PreflightTarget contains ordered, backend-provided details for one target.
 type PreflightTarget struct {
-	Name           string
-	Host           string
-	User           string
-	Port           int
-	Directory      string
-	DeploymentRoot string
-	Migration      bool
+	Fields []PreflightField
+}
+
+type PreflightField struct {
+	Label string
+	Value string
 }
 
 type PreflightProvider interface {
@@ -90,25 +90,8 @@ func WritePreflight(ctx context.Context, backend Backend, options PreflightOptio
 	}
 	for _, target := range preview.Targets {
 		summary.WriteByte('\n')
-		if target.Name != "" {
-			field("SSH target", target.Name)
-		}
-		field("SSH host", target.Host)
-		user := target.User
-		if user == "" {
-			user = "SSH config/default"
-		}
-		field("SSH user", user)
-		port := "SSH config/default"
-		// The SSH transport only passes -p for non-default ports.
-		if target.Port != 0 && target.Port != 22 {
-			port = strconv.Itoa(target.Port)
-		}
-		field("SSH port", port)
-		field("Active path", target.Directory)
-		field("Deployment root", target.DeploymentRoot)
-		if target.Migration {
-			field("Role", "Deployment Helper host")
+		for _, detail := range target.Fields {
+			field(detail.Label, detail.Value)
 		}
 	}
 	summary.WriteByte('\n')

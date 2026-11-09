@@ -323,7 +323,7 @@ func (s *sshDeploymentSession) stage(ctx context.Context, archive io.Reader) err
 	if err != nil {
 		return err
 	}
-	if action == "UNCHANGED" {
+	if action == sshRolloutUnchanged {
 		reference, err := s.reader.ReadString('\n')
 		if err != nil {
 			return err
@@ -340,11 +340,11 @@ func (s *sshDeploymentSession) stage(ctx context.Context, archive io.Reader) err
 		s.unchanged = true
 		return nil
 	}
-	if s.input.Action == sshDeploymentActivate && action != "REUSE" {
+	if s.input.Action == sshDeploymentActivate && action != sshRolloutReuse {
 		return fmt.Errorf("unexpected retained activation action %s", action)
 	}
-	if action != "REUSE" {
-		if action == "UPLOAD" {
+	if action != sshRolloutReuse {
+		if action == sshRolloutUpload {
 			if archive == nil {
 				return errors.New("upload requested without archive")
 			}
@@ -352,14 +352,14 @@ func (s *sshDeploymentSession) stage(ctx context.Context, archive io.Reader) err
 				return err
 			}
 		}
-		if err := readRolloutMessage(s.reader, "PREPARE "+s.input.Reference); err != nil {
+		if err := readRolloutMessage(s.reader, sshRolloutPrepare+" "+s.input.Reference); err != nil {
 			return err
 		}
-		if err := s.authorize(ctx, "CONTINUE"); err != nil {
+		if err := s.authorize(ctx, sshRolloutContinue); err != nil {
 			return err
 		}
 	}
-	return readRolloutMessage(s.reader, "STAGED "+s.input.Reference)
+	return readRolloutMessage(s.reader, sshRolloutStaged+" "+s.input.Reference)
 }
 
 func (s *sshDeploymentSession) authorize(ctx context.Context, action string) error {
@@ -374,20 +374,20 @@ func (s *sshDeploymentSession) prepare(ctx context.Context) error {
 	if s.unchanged {
 		return nil
 	}
-	if err := s.authorize(ctx, "PREPARE"); err != nil {
+	if err := s.authorize(ctx, sshRolloutPrepare); err != nil {
 		return err
 	}
-	return readRolloutMessage(s.reader, "READY "+s.input.Reference)
+	return readRolloutMessage(s.reader, sshRolloutReady+" "+s.input.Reference)
 }
 
 func (s *sshDeploymentSession) activate(ctx context.Context) error {
 	if s.unchanged {
 		return nil
 	}
-	if err := s.authorize(ctx, "ACTIVATE"); err != nil {
+	if err := s.authorize(ctx, sshRolloutActivate); err != nil {
 		return err
 	}
-	if err := readRolloutMessage(s.reader, "ACTIVE "+s.input.Reference); err != nil {
+	if err := readRolloutMessage(s.reader, sshRolloutActive+" "+s.input.Reference); err != nil {
 		return err
 	}
 	if err := json.NewDecoder(s.reader).Decode(&s.result); err != nil {
@@ -399,7 +399,13 @@ func (s *sshDeploymentSession) activate(ctx context.Context) error {
 	return nil
 }
 
-func (g *sshGroup) coordinate(ctx context.Context, deployment Deployment, base sshRolloutInput, archive *os.File, output io.Writer) (result Rollout, err error) {
+func (g *sshGroup) coordinate(
+	ctx context.Context,
+	deployment Deployment,
+	base sshRolloutInput,
+	archive *os.File,
+	output io.Writer,
+) (result Rollout, err error) {
 	if output == nil {
 		output = io.Discard
 	}
@@ -429,7 +435,33 @@ func (g *sshGroup) coordinate(ctx context.Context, deployment Deployment, base s
 			result = Rollout{}
 		}
 	}()
-	err = g.parallel(ctx, func(i int) error {
+	err = g.stageSessions(ctx, base, archive, output, sessions, statuses)
+	if err != nil {
+		return result, err
+	}
+	if err = g.prepareSessions(ctx, sessions, statuses); err != nil {
+		return result, err
+	}
+	changed, err := g.activateSessions(ctx, sessions, statuses)
+	if err != nil {
+		return result, err
+	}
+	if !changed {
+		return sessions[g.migration].result, nil
+	}
+	now := time.Now().UTC()
+	return Rollout{Reference: base.Reference, Deployment: deployment, Active: true, DeployedAt: &now}, nil
+}
+
+func (g *sshGroup) stageSessions(
+	ctx context.Context,
+	base sshRolloutInput,
+	archive *os.File,
+	output io.Writer,
+	sessions []*sshDeploymentSession,
+	statuses []string,
+) error {
+	return g.parallel(ctx, func(i int) error {
 		host := g.hosts[i]
 		input := base
 		input.Follower = i != g.migration
@@ -472,15 +504,15 @@ func (g *sshGroup) coordinate(ctx context.Context, deployment Deployment, base s
 		}
 		return nil
 	})
-	if err != nil {
-		return result, err
-	}
+}
+
+func (g *sshGroup) prepareSessions(ctx context.Context, sessions []*sshDeploymentSession, statuses []string) error {
 	// Global work is authorized only after every member is safely staged.
-	if err = sessions[g.migration].prepare(ctx); err != nil {
+	if err := sessions[g.migration].prepare(ctx); err != nil {
 		statuses[g.migration] = "failed preparation; not activated"
-		return result, fmt.Errorf("migration host %s: %w", g.hosts[g.migration].name, err)
+		return fmt.Errorf("migration host %s: %w", g.hosts[g.migration].name, err)
 	}
-	if err = g.parallel(ctx, func(i int) error {
+	if err := g.parallel(ctx, func(i int) error {
 		if i == g.migration {
 			return nil
 		}
@@ -490,26 +522,26 @@ func (g *sshGroup) coordinate(ctx context.Context, deployment Deployment, base s
 		}
 		return nil
 	}); err != nil {
-		return result, err
+		return err
 	}
+	return nil
+}
+
+func (g *sshGroup) activateSessions(ctx context.Context, sessions []*sshDeploymentSession, statuses []string) (bool, error) {
 	changed := false
 	for i, session := range sessions {
 		if session.unchanged {
 			continue
 		}
-		if err = ctx.Err(); err != nil {
-			return result, err
+		if err := ctx.Err(); err != nil {
+			return changed, err
 		}
-		if err = session.activate(ctx); err != nil {
+		if err := session.activate(ctx); err != nil {
 			statuses[i] = "failed activation; state unknown"
-			return result, fmt.Errorf("host %s activation: %w", g.hosts[i].name, err)
+			return changed, fmt.Errorf("host %s activation: %w", g.hosts[i].name, err)
 		}
 		statuses[i] = "activated"
 		changed = true
 	}
-	if !changed {
-		return sessions[g.migration].result, nil
-	}
-	now := time.Now().UTC()
-	return Rollout{Reference: base.Reference, Deployment: deployment, Active: true, DeployedAt: &now}, nil
+	return changed, nil
 }

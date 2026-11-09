@@ -50,8 +50,14 @@ func TestSSHDeploymentPreflightResolvesLocalPaths(t *testing.T) {
 		assert.Equal(t, filepath.Join(s.root, "custom-project.yml"), preview.ConfigPath)
 		assert.Equal(t, filepath.Join(s.root, ".shopware-cli/deployments/release.tar.gz"), preview.ArchivePath)
 		assert.Equal(t, []PreflightTarget{{
-			Host: "production-alias", User: "deploy", Port: 2222,
-			Directory: s.directory, DeploymentRoot: filepath.Dir(s.directory), Migration: true,
+			Fields: []PreflightField{
+				{Label: "SSH host", Value: "production-alias"},
+				{Label: "SSH user", Value: "deploy"},
+				{Label: "SSH port", Value: "2222"},
+				{Label: "Active path", Value: s.directory},
+				{Label: "Deployment root", Value: filepath.Dir(s.directory)},
+				{Label: "Role", Value: "Deployment Helper host"},
+			},
 		}}, preview.Targets)
 	}
 	assert.NoDirExists(t, filepath.Dir(s.directory))
@@ -64,7 +70,7 @@ func TestSSHDeploymentPreflightRollbackNeedsNoLocalArchive(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, preview.ArchivePath)
 	require.Len(t, preview.Targets, 1)
-	assert.False(t, preview.Targets[0].Migration)
+	assert.NotContains(t, preview.Targets[0].Fields, PreflightField{Label: "Role", Value: "Deployment Helper host"})
 	_, err = s.DeploymentPreflight(t.Context(), Deployment{Reference: "../retained-release"}, PreflightRollback)
 	require.Error(t, err)
 	assert.NoDirExists(t, filepath.Dir(s.directory))
@@ -84,14 +90,29 @@ func TestSSHDeploymentPreflightShowsInheritedGroupTargets(t *testing.T) {
 	preview, err := backend.(PreflightProvider).DeploymentPreflight(t.Context(), Deployment{Reference: "release"}, PreflightRollout)
 	require.NoError(t, err)
 	assert.Equal(t, []PreflightTarget{
-		{Name: "web-a", Host: "first", User: "release", Port: 2200, Directory: "/srv/other/shop", DeploymentRoot: "/srv/other"},
-		{Name: "web-b", Host: "second", User: "deploy", Port: 2222, Directory: "/srv/shop/live", DeploymentRoot: "/srv/shop", Migration: true},
+		{Fields: []PreflightField{
+			{Label: "SSH target", Value: "web-a"},
+			{Label: "SSH host", Value: "first"},
+			{Label: "SSH user", Value: "release"},
+			{Label: "SSH port", Value: "2200"},
+			{Label: "Active path", Value: "/srv/other/shop"},
+			{Label: "Deployment root", Value: "/srv/other"},
+		}},
+		{Fields: []PreflightField{
+			{Label: "SSH target", Value: "web-b"},
+			{Label: "SSH host", Value: "second"},
+			{Label: "SSH user", Value: "deploy"},
+			{Label: "SSH port", Value: "2222"},
+			{Label: "Active path", Value: "/srv/shop/live"},
+			{Label: "Deployment root", Value: "/srv/shop"},
+			{Label: "Role", Value: "Deployment Helper host"},
+		}},
 	}, preview.Targets)
 
 	preview, err = backend.(PreflightProvider).DeploymentPreflight(t.Context(), Deployment{Reference: "release"}, PreflightRollback)
 	require.NoError(t, err)
 	for _, target := range preview.Targets {
-		assert.False(t, target.Migration)
+		assert.NotContains(t, target.Fields, PreflightField{Label: "Role", Value: "Deployment Helper host"})
 	}
 
 	// A single named target must retain its name even without a group backend.
@@ -101,7 +122,7 @@ func TestSSHDeploymentPreflightShowsInheritedGroupTargets(t *testing.T) {
 	preview, err = backend.(PreflightProvider).DeploymentPreflight(t.Context(), Deployment{Reference: "release"}, PreflightRollout)
 	require.NoError(t, err)
 	require.Len(t, preview.Targets, 1)
-	assert.Equal(t, "web-b", preview.Targets[0].Name)
+	assert.Contains(t, preview.Targets[0].Fields, PreflightField{Label: "SSH target", Value: "web-b"})
 }
 
 func TestWriteDeploymentPreflight(t *testing.T) {

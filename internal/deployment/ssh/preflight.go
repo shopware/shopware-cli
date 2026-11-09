@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 )
 
 func (s *SSH) DeploymentPreflight(ctx context.Context, artifact Deployment, action PreflightAction) (Preflight, error) {
@@ -17,7 +18,7 @@ func (s *SSH) DeploymentPreflight(ctx context.Context, artifact Deployment, acti
 	if action != PreflightRollout && action != PreflightRollback {
 		return preview, errors.New("cannot preview an unsupported deployment action")
 	}
-	target, err := s.preflightTarget()
+	target, err := s.preflightTarget(s.name)
 	if err != nil {
 		return preview, err
 	}
@@ -50,13 +51,13 @@ func (s *SSH) DeploymentPreflight(ctx context.Context, artifact Deployment, acti
 		if !info.Mode().IsRegular() {
 			return preview, errors.New("cannot use deployment archive: it must be a regular file")
 		}
-		target.Migration = true
+		target.Fields = append(target.Fields, PreflightField{Label: "Role", Value: "Deployment Helper host"})
 	}
 	preview.Targets = []PreflightTarget{target}
 	return preview, nil
 }
 
-func (s *SSH) preflightTarget() (PreflightTarget, error) {
+func (s *SSH) preflightTarget(name string) (PreflightTarget, error) {
 	var target PreflightTarget
 	root, err := s.deploymentRoot()
 	if err != nil {
@@ -72,10 +73,26 @@ func (s *SSH) preflightTarget() (PreflightTarget, error) {
 	if err := config.Cachetool.Validate(); err != nil {
 		return target, err
 	}
-	return PreflightTarget{
-		Name: s.name, Host: config.Host, User: config.User, Port: config.Port,
-		Directory: path.Join(root, s.activeLinkName()), DeploymentRoot: root,
-	}, nil
+	if name != "" {
+		target.Fields = append(target.Fields, PreflightField{Label: "SSH target", Value: name})
+	}
+	user := config.User
+	if user == "" {
+		user = "SSH config/default"
+	}
+	port := "SSH config/default"
+	// The SSH transport only passes -p for non-default ports.
+	if config.Port != 0 && config.Port != 22 {
+		port = strconv.Itoa(config.Port)
+	}
+	target.Fields = append(target.Fields,
+		PreflightField{Label: "SSH host", Value: config.Host},
+		PreflightField{Label: "SSH user", Value: user},
+		PreflightField{Label: "SSH port", Value: port},
+		PreflightField{Label: "Active path", Value: path.Join(root, s.activeLinkName())},
+		PreflightField{Label: "Deployment root", Value: root},
+	)
+	return target, nil
 }
 
 func (g *sshGroup) DeploymentPreflight(ctx context.Context, artifact Deployment, action PreflightAction) (Preflight, error) {
@@ -88,12 +105,13 @@ func (g *sshGroup) DeploymentPreflight(ctx context.Context, artifact Deployment,
 		if err := ctx.Err(); err != nil {
 			return Preflight{}, err
 		}
-		target, err := host.backend.preflightTarget()
+		target, err := host.backend.preflightTarget(host.name)
 		if err != nil {
 			return Preflight{}, fmt.Errorf("cannot preview SSH target %s: %w", host.name, err)
 		}
-		target.Name = host.name
-		target.Migration = action == PreflightRollout && i == g.migration
+		if action == PreflightRollout && i == g.migration {
+			target.Fields = append(target.Fields, PreflightField{Label: "Role", Value: "Deployment Helper host"})
+		}
 		preview.Targets = append(preview.Targets, target)
 	}
 	return preview, nil
