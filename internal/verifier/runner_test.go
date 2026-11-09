@@ -73,7 +73,7 @@ func TestRunToolsCollectsConcurrentFindings(t *testing.T) {
 	results := RunTools(t.Context(), ToolList[Tool]{testTool{name: "one"}, testTool{name: "two"}}, nil, ToolConfig{
 		ValidationIgnores: []validation.ToolConfigIgnore{{Identifier: "ignored"}},
 	}, nil, func(tool Tool, execution *ToolExecution) ToolSummary {
-		runDirectories(directories, func(directory string) {
+		runDirectories(t.Context(), directories, func(directory string) {
 			execution.AddFindings(
 				validation.CheckResult{Identifier: tool.Name() + "/" + directory},
 				validation.CheckResult{Identifier: "ignored"},
@@ -120,6 +120,18 @@ func TestRunToolsReportsCancellation(t *testing.T) {
 	require.Len(t, results, 1)
 	assert.Equal(t, "failed", results[0].Status())
 	assert.Empty(t, results[0].SkipReason)
+	require.Len(t, results[0].Errors, 1)
+	assert.ErrorIs(t, results[0].Errors[0], context.Canceled)
+}
+
+func TestRunToolsDoesNotDuplicateReportedCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	results := RunTools(ctx, ToolList[Tool]{testTool{name: "test"}}, nil, ToolConfig{}, nil, func(_ Tool, execution *ToolExecution) ToolSummary {
+		cancel()
+		execution.Fail(&ToolError{Err: errors.Join(errors.New("interrupted validation"), ctx.Err())})
+		return ToolSummary{}
+	})
+	require.Len(t, results, 1)
 	require.Len(t, results[0].Errors, 1)
 	assert.ErrorIs(t, results[0].Errors[0], context.Canceled)
 }

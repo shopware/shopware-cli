@@ -39,7 +39,7 @@ func TestConvertXMLFileFixtures(t *testing.T) {
 				convert = ConvertRoutesXMLFile
 			}
 
-			converted, err := convert(entryFile)
+			converted, err := convert(t.Context(), entryFile)
 			require.NoError(t, err)
 			require.NotEmpty(t, converted)
 
@@ -108,7 +108,7 @@ func TestConvertServicesXMLFileRefusesWhenYamlExists(t *testing.T) {
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container/>`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "services.yaml"), []byte("services:\n"), 0o644))
 
-	_, err := ConvertServicesXMLFile(servicesXML)
+	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "exists already")
 
 	assert.FileExists(t, servicesXML)
@@ -121,7 +121,7 @@ func TestConvertServicesXMLFileRefusesWhenYmlExists(t *testing.T) {
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container/>`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "services.yml"), []byte("services:\n"), 0o644))
 
-	_, err := ConvertServicesXMLFile(servicesXML)
+	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "exists already")
 
 	assert.FileExists(t, servicesXML)
@@ -147,7 +147,7 @@ func TestConvertServicesXMLFileKeepsEverythingOnError(t *testing.T) {
     </services>
 </container>`), 0o644))
 
-	_, err := ConvertServicesXMLFile(servicesXML)
+	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "unsupported element <stack>")
 	var conversionErr *XMLConversionError
 	require.ErrorAs(t, err, &conversionErr)
@@ -166,7 +166,7 @@ func TestConvertServicesXMLFileUnparsableXML(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container`), 0o644))
 
-	_, err := ConvertServicesXMLFile(servicesXML)
+	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
 	assert.Error(t, err)
 	var conversionErr *XMLConversionError
 	require.ErrorAs(t, err, &conversionErr)
@@ -190,7 +190,7 @@ func TestConvertServicesXMLFileReportsStatFailures(t *testing.T) {
 			require.NoError(t, os.WriteFile(xmlPath, []byte(scenario.content), 0o644))
 			// A symlink loop produces a stat error even when tests run as root.
 			require.NoError(t, os.Symlink(scenario.link, filepath.Join(root, scenario.link)))
-			converted, err := ConvertServicesXMLFile(xmlPath)
+			converted, err := ConvertServicesXMLFile(t.Context(), xmlPath)
 			var pathErr *os.PathError
 			require.ErrorAs(t, err, &pathErr)
 			assert.Equal(t, filepath.Join(root, scenario.link), pathErr.Path)

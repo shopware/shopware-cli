@@ -64,7 +64,13 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check, 
 	}
 
 	for _, val := range ext.GetSourceDirs() {
+		if c.Err() != nil {
+			return
+		}
 		_ = filepath.Walk(val, func(path string, info os.FileInfo, err error) error {
+			if err := c.Err(); err != nil {
+				return err
+			}
 			if err != nil {
 				return err
 			}

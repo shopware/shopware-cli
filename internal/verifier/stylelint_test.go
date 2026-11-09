@@ -34,7 +34,7 @@ func TestHasSCSSFiles(t *testing.T) {
 			for _, file := range scenario.files {
 				testhelper.WriteFile(t, filepath.Join(directory, file), "")
 			}
-			found, err := hasSCSSFiles(directory)
+			found, err := hasSCSSFiles(t.Context(), directory)
 			assert.NoError(t, err)
 			assert.Equal(t, scenario.found, found)
 		})

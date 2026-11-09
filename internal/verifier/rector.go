@@ -119,6 +119,9 @@ func (r Rector) fixSources(
 	reportsComplete := true
 
 	for _, sourceDirectory := range config.SourceDirectories {
+		if ctx.Err() != nil {
+			return ToolSummary{}
+		}
 		report := r.process(ctx, config, execution, configFile, autoloadFile, sourceDirectory, dryRun)
 		if dryRun {
 			for _, file := range report.FileDiffs {

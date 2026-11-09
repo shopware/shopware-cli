@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -74,11 +75,17 @@ func RunTools[T Tool](
 				}
 			}
 			finish := progress.Start(tool.Name())
-			summary := run(tool, execution)
-			if err := ctx.Err(); err != nil {
-				execution.Fail(&ToolError{Err: err})
+			var summary ToolSummary
+			if ctx.Err() == nil {
+				summary = run(tool, execution)
 			}
 			result := execution.snapshot()
+			if err := ctx.Err(); err != nil && !slices.ContainsFunc(result.Errors, func(failure ToolError) bool {
+				return errors.Is(failure, err)
+			}) {
+				execution.Fail(&ToolError{Err: err})
+				result = execution.snapshot()
+			}
 			result.Name = tool.Name()
 			result.Note = summary.Note
 			// A tool that reported findings or failures has run, whatever it returned.

@@ -26,6 +26,9 @@ const (
 )
 
 func GetExtensionByFolder(ctx context.Context, path string) (Extension, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if _, err := os.Stat(path + "/plugin.xml"); err == nil {
 		return nil, errors.New("shopware 5 is not supported. Please use https://github.com/FriendsOfShopware/FroshPluginUploader instead")
 	}
@@ -53,6 +56,9 @@ func GetExtensionByFolder(ctx context.Context, path string) (Extension, error) {
 }
 
 func GetExtensionByZip(ctx context.Context, filePath string) (Extension, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	dir, err := os.MkdirTemp("", "extension")
 	if err != nil {
 		return nil, err
@@ -68,7 +74,7 @@ func GetExtensionByZip(ctx context.Context, filePath string) (Extension, error) 
 		return nil, err
 	}
 
-	err = archiver.Unzip(file, dir)
+	err = archiver.Unzip(ctx, file, dir)
 	if err != nil {
 		return nil, err
 	}
