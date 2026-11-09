@@ -74,6 +74,9 @@ func TestToolExecutionRunTelemetry(t *testing.T) {
 			duration, err := strconv.ParseInt(tags[tracking.TagDurationMS], 10, 64)
 			require.NoError(t, err)
 			assert.GreaterOrEqual(t, duration, int64(0))
+			cpu, err := strconv.ParseInt(tags[tracking.TagCPUMS], 10, 64)
+			require.NoError(t, err)
+			assert.GreaterOrEqual(t, cpu, int64(0))
 			assert.Equal(t, "0", tags[tracking.TagStderrBytes])
 			if tt.code == -1 {
 				assert.Equal(t, "partial", result.Stdout)
@@ -97,6 +100,7 @@ func TestToolExecutionRunTelemetry(t *testing.T) {
 	assert.Equal(t, "false", tags[tracking.TagStarted])
 	assert.Equal(t, "check", tags[tracking.TagOperation])
 	assert.NotContains(t, tags, tracking.TagExitCode)
+	assert.NotContains(t, tags, tracking.TagCPUMS)
 	assert.Contains(t, tags, tracking.TagDurationMS)
 	assert.Equal(t, "0", tags[tracking.TagStdoutBytes])
 	assert.Equal(t, "0", tags[tracking.TagStderrBytes])
@@ -112,9 +116,19 @@ func runCheckTool(t *testing.T, tool CheckTool, config ToolConfig) validation.To
 
 func runFixTool(t *testing.T, tool FixTool, config ToolConfig) validation.ToolReport {
 	t.Helper()
+	return runFixToolWithDryRun(t, tool, config, false)
+}
+
+func runFixToolWithDryRun(
+	t *testing.T,
+	tool FixTool,
+	config ToolConfig,
+	dryRun bool,
+) validation.ToolReport {
+	t.Helper()
 	t.Setenv("DO_NOT_TRACK", "1")
 	return RunTools(t.Context(), ToolList[FixTool]{tool}, nil, config, nil, func(tool FixTool, execution *ToolExecution) ToolSummary {
-		return tool.Fix(t.Context(), config, execution)
+		return tool.Fix(t.Context(), config, execution, dryRun)
 	})[0]
 }
 
@@ -124,4 +138,20 @@ func runFormatTool(t *testing.T, tool FormatTool, config ToolConfig, dryRun bool
 	return RunTools(t.Context(), ToolList[FormatTool]{tool}, nil, config, nil, func(tool FormatTool, execution *ToolExecution) ToolSummary {
 		return tool.Format(t.Context(), config, execution, dryRun)
 	})[0]
+}
+
+func TestToolExecutionRunTelemetryWithoutChildCPUTime(t *testing.T) {
+	original := cpuTimeCoversChildren
+	t.Cleanup(func() { cpuTimeCoversChildren = original })
+	cpuTimeCoversChildren = false
+
+	execution := NewToolExecution(func([]validation.CheckResult) bool { return false })
+	var tags map[string]string
+	execution.onSubprocess = func(result SubprocessResult) {
+		tags = subprocessTelemetryTags("test", result)
+	}
+	execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/bin/sh", "-c", "exit 0"))
+
+	assert.Equal(t, "true", tags[tracking.TagStarted])
+	assert.NotContains(t, tags, tracking.TagCPUMS)
 }

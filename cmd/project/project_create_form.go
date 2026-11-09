@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -17,6 +16,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -96,7 +96,7 @@ func validateDockerChoice(choice string, dockerMissing []system.MissingDependenc
 func dockerUnavailableError(missing []system.MissingDependency) error {
 	dockerHint := "re-run with " + tui.BoldText.Render("--docker")
 	fmt.Fprintln(os.Stderr, system.RenderMissingDependencies(true, missing, "create a Shopware project", dockerHint))
-	return errors.New("missing required dependencies")
+	return &system.MissingDependenciesError{Missing: missing}
 }
 
 func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) error { //nolint:gocyclo
@@ -501,7 +501,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		if len(formGroups) > 0 {
 			form := huh.NewForm(formGroups...).WithTheme(theme)
 			if err := form.Run(); err != nil {
-				return err
+				return tracking.FailedAt(createStepWizardQuestions, err)
 			}
 		}
 
@@ -523,7 +523,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		if opts.useDocker {
 			if missing := dockerAvailabilityForCreate(cmd.Context()); len(missing) > 0 {
 				if !dockerPrompted {
-					return dockerUnavailableError(missing)
+					return tracking.FailedAt(createStepWizardDockerCheck, dockerUnavailableError(missing))
 				}
 				_ = dockerUnavailableError(missing)
 				selectDocker = tui.No
@@ -625,7 +625,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		)).WithTheme(theme)
 
 		if err := confirmForm.Run(); err != nil {
-			return err
+			return tracking.FailedAt(createStepWizardConfirm, err)
 		}
 
 		if selectConfirm == "proceed" {
@@ -633,7 +633,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		}
 
 		if selectConfirm == "cancel" {
-			return errors.New("project creation cancelled")
+			return errCreateCancelled
 		}
 	}
 }

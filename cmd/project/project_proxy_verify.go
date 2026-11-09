@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -10,12 +9,13 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // ErrProxyVerificationFailed is returned when a proxy health check fails; it
 // makes the command exit non-zero without an extra error message (the failed
 // check and its hint were already printed).
-var ErrProxyVerificationFailed = errors.New("proxy verification failed")
+var ErrProxyVerificationFailed = logging.NewSilent("proxy verification failed")
 
 var projectProxyVerifyCmd = &cobra.Command{
 	Use:           "verify",

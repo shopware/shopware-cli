@@ -1,12 +1,15 @@
 package dev
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
@@ -89,7 +92,7 @@ func TestMigrationWizardTagsCompleted(t *testing.T) {
 
 func TestWatcherEndTagsFireOncePerRun(t *testing.T) {
 	tel := newTelemetryState(true)
-	tel.watcherStarted(watcherAdmin)
+	tel.watcherStarted(watcherAdmin, false)
 
 	tags, ok := tel.watcherEndTags(watcherAdmin, "user_stopped")
 	assert.True(t, ok)
@@ -117,7 +120,7 @@ func TestSessionTagsSentOnce(t *testing.T) {
 	tel.markTab(tabConfig)
 	tel.markTab(tabInstance)
 	tel.countAction()
-	tel.watcherStarted(watcherStorefront)
+	tel.watcherStarted(watcherStorefront, false)
 	tel.setExitChoice("keep_running")
 
 	tags, ok := tel.sessionTags()
@@ -130,6 +133,48 @@ func TestSessionTagsSentOnce(t *testing.T) {
 
 	_, ok = tel.sessionTags()
 	assert.False(t, ok)
+}
+
+func TestSessionStartTagsSentOnce(t *testing.T) {
+	tel := newTelemetryState(true)
+
+	tags, ok := tel.sessionStartTags()
+	assert.True(t, ok)
+	assert.Equal(t, "docker", tags["executor"])
+
+	_, ok = tel.sessionStartTags()
+	assert.False(t, ok)
+}
+
+func TestSessionStartNotSentAfterTheSessionEnded(t *testing.T) {
+	tel := newTelemetryState(true)
+	tel.sessionTags()
+
+	_, ok := tel.sessionStartTags()
+	assert.False(t, ok)
+}
+
+func TestExitTagsEndAnOpenSessionWithTheResult(t *testing.T) {
+	tel := newTelemetryState(false)
+	tel.sessionStartTags()
+
+	tags, ok := tel.exitTags("panic")
+	assert.True(t, ok)
+	assert.Equal(t, "panic", tags["result"])
+}
+
+func TestExitTagsSkipSessionsThatEndedOrNeverOpened(t *testing.T) {
+	neverOpened := newTelemetryState(false)
+	_, ok := neverOpened.exitTags("terminated")
+	assert.False(t, ok, "a normal quit before the dashboard also returns nil")
+
+	ended := newTelemetryState(false)
+	ended.sessionStartTags()
+	ended.setExitChoice("stop_containers")
+	ended.sessionTags()
+	_, ok = ended.exitTags("panic")
+	assert.False(t, ok)
+	assert.Equal(t, "stop_containers", ended.exitChoice, "an ended session keeps how it ended")
 }
 
 func TestSessionTagsDefaults(t *testing.T) {
@@ -161,20 +206,22 @@ func TestTaskTagsRoundTrip(t *testing.T) {
 
 func TestDockerStartTagsRequireBegin(t *testing.T) {
 	tel := newTelemetryState(true)
-	_, ok := tel.dockerStartTags(nil)
+	_, ok := tel.dockerStartTags(nil, nil)
 	assert.False(t, ok)
 
 	tel.beginDockerStart()
-	tags, ok := tel.dockerStartTags(assert.AnError)
+	tags, ok := tel.dockerStartTags(assert.AnError, []string{"Error response from daemon: Bind for 0.0.0.0:3306 failed: port is already allocated"})
 	assert.True(t, ok)
 	assert.Equal(t, "initial", tags["trigger"])
 	assert.Equal(t, "failure", tags["result"])
+	assert.Equal(t, "port_in_use", tags["failure_category"])
 
 	tel.beginConfigRestart()
-	tags, ok = tel.configRestartTags(nil)
+	tags, ok = tel.configRestartTags(nil, nil)
 	assert.True(t, ok)
 	assert.Equal(t, "config_change", tags["trigger"])
 	assert.Equal(t, "success", tags["result"])
+	assert.NotContains(t, tags, "failure_category")
 }
 
 func TestHealthEventTagsOnePerCheck(t *testing.T) {
@@ -225,15 +272,19 @@ func TestNilTelemetryStateIsSafe(t *testing.T) {
 	tel.beginDockerStart()
 	tel.beginConfigRestart()
 	tel.beginTask("cache-clear")
-	tel.watcherStarted(watcherAdmin)
+	tel.watcherStarted(watcherAdmin, false)
 
 	_, ok := tel.sessionTags()
 	assert.False(t, ok)
+	_, ok = tel.sessionStartTags()
+	assert.False(t, ok)
+	_, ok = tel.exitTags("terminated")
+	assert.False(t, ok)
 	_, ok = tel.taskTags("success")
 	assert.False(t, ok)
-	_, ok = tel.dockerStartTags(nil)
+	_, ok = tel.dockerStartTags(nil, nil)
 	assert.False(t, ok)
-	_, ok = tel.configRestartTags(nil)
+	_, ok = tel.configRestartTags(nil, nil)
 	assert.False(t, ok)
 }
 
@@ -280,4 +331,38 @@ func TestInstallFailureTagsFromClassifier(t *testing.T) {
 
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
 	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
+}
+
+func TestWatcherEndTagsCarryPhaseAndProxied(t *testing.T) {
+	tel := newTelemetryState(true)
+
+	tel.watcherStarted(watcherStorefront, true)
+	tags, ok := tel.watcherEndTags(watcherStorefront, watcherEndSessionEnd)
+	assert.True(t, ok)
+	assert.Equal(t, "preparing", tags[tracking.TagPhase])
+	assert.Equal(t, "true", tags[tracking.TagProxied])
+
+	tel.watcherStarted(watcherAdmin, false)
+	tel.watcherProcessStarted(watcherAdmin)
+	tags, _ = tel.watcherEndTags(watcherAdmin, watcherEndUserStopped)
+	assert.Equal(t, "starting", tags[tracking.TagPhase])
+	assert.Equal(t, "false", tags[tracking.TagProxied])
+
+	tel.watcherStarted(watcherAdmin, false)
+	tel.watcherProcessStarted(watcherAdmin)
+	tel.watcherReady(watcherAdmin)
+	tags, _ = tel.watcherEndTags(watcherAdmin, watcherEndCrashed)
+	assert.Equal(t, "running", tags[tracking.TagPhase])
+
+	var nilTel *telemetryState
+	assert.NotPanics(t, func() {
+		tel.watcherReady("unknown")
+		nilTel.watcherProcessStarted(watcherAdmin)
+	})
+}
+
+func TestWatcherFailedStep(t *testing.T) {
+	stepErr := &extension.WatcherStepError{Step: extension.WatcherStepNPMInstall, Err: errors.New("boom")}
+	assert.Equal(t, "npm_install", watcherFailedStep(fmt.Errorf("starting admin watcher: %w", stepErr)))
+	assert.Empty(t, watcherFailedStep(errors.New("boom")))
 }

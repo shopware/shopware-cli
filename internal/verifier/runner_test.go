@@ -5,13 +5,18 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
@@ -140,4 +145,55 @@ func TestRunToolsIgnoresSkipReasonAfterFindingsOrFailures(t *testing.T) {
 	assert.False(t, results[1].HasFindings)
 	assert.Equal(t, "failed", results[2].Status())
 	assert.Empty(t, results[2].SkipReason)
+}
+
+func TestRunToolsSetsCommandTags(t *testing.T) {
+	// Only the counts matter here, so the extensions can stay empty.
+	RunTools(t.Context(), ToolList[Tool]{testTool{name: "test"}}, nil, ToolConfig{
+		Extensions:        make([]extension.Extension, 2),
+		SourceDirectories: []string{"a", "b", "c"},
+		AdminDirectories:  []string{"a"},
+	}, nil, func(_ Tool, _ *ToolExecution) ToolSummary {
+		return ToolSummary{}
+	})
+
+	tags := tracking.CommandTags()
+	assert.Equal(t, "2", tags[tracking.TagExtensionCount])
+	assert.Equal(t, "3", tags[tracking.TagSourceDirCount])
+	assert.Equal(t, "1", tags[tracking.TagAdminDirCount])
+	assert.Equal(t, "0", tags[tracking.TagStorefrontDirCount])
+}
+
+func TestRunToolsSetsCPUTags(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	RunTools(t.Context(), ToolList[Tool]{testTool{name: "test"}}, nil, ToolConfig{}, nil, func(_ Tool, execution *ToolExecution) ToolSummary {
+		// A busy loop uses measurable CPU time, a process that cannot start adds none.
+		execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/bin/sh", "-c", "i=0; while [ $i -lt 100000 ]; do i=$((i+1)); done"))
+		execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/missing-executable"))
+		return ToolSummary{}
+	})
+
+	tags := tracking.CommandTags()
+	assert.Equal(t, strconv.Itoa(runtime.NumCPU()), tags[tracking.TagCPUCount])
+	cpu, err := strconv.ParseInt(tags[tracking.TagCPUMS], 10, 64)
+	require.NoError(t, err)
+	assert.Positive(t, cpu)
+}
+
+func TestRunToolsLeavesOutCPUTimeWithoutChildCPUTime(t *testing.T) {
+	original := cpuTimeCoversChildren
+	t.Cleanup(func() { cpuTimeCoversChildren = original })
+	cpuTimeCoversChildren = false
+	t.Setenv("DO_NOT_TRACK", "1")
+	// The collector is shared between tests, so a marker shows whether RunTools sets cpu_ms.
+	tracking.SetCommandTag(tracking.TagCPUMS, "marker")
+
+	RunTools(t.Context(), ToolList[Tool]{testTool{name: "test"}}, nil, ToolConfig{}, nil, func(_ Tool, execution *ToolExecution) ToolSummary {
+		execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/bin/sh", "-c", "exit 0"))
+		return ToolSummary{}
+	})
+
+	tags := tracking.CommandTags()
+	assert.Equal(t, "marker", tags[tracking.TagCPUMS])
+	assert.Equal(t, strconv.Itoa(runtime.NumCPU()), tags[tracking.TagCPUCount])
 }

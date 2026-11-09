@@ -42,7 +42,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 			m.dockerShowLogs = !m.dockerShowLogs
 		case "q", tui.KeyCtrlC:
 			if m.phase == phaseStarting {
-				if tags, ok := m.telemetry.dockerStartTags(nil); ok {
+				if tags, ok := m.telemetry.dockerStartTags(nil, nil); ok {
 					tags[tracking.TagResult] = tracking.ResultCancelled
 					trackEventNow(tracking.EventDevDockerStart, tags)
 				}
@@ -87,9 +87,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 			return m, nil
 		}
 		if tui.KeyString(msg) == "q" || tui.KeyString(msg) == tui.KeyCtrlC {
-			if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
-				trackEventNow(tracking.EventDevAction, tags)
-			}
+			m.shutdown()
 			return m, tea.Quit
 		}
 		return m, nil
@@ -248,14 +246,14 @@ func (m Model) executeCommand(id string) (app.Content, tea.Cmd) {
 			return m, m.overview.startAdminWatch()
 		}
 	case "admin-watch-stop":
-		if m.overview.adminWatchRunning {
+		if m.overview.adminWatchRunning || m.overview.adminWatchStarting {
 			m.overview.adminWatchRunning = false
 			return m, m.stopWatcher(watcherAdmin)
 		}
 	case "sf-watch-start":
 		return m.openSalesChannelPicker()
 	case "sf-watch-stop":
-		if m.overview.sfWatchRunning {
+		if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
 			m.overview.sfWatchRunning = false
 			return m, m.stopWatcher(watcherStorefront)
 		}

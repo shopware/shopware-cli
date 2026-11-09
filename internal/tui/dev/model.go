@@ -2,6 +2,7 @@ package dev
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"time"
@@ -105,7 +106,10 @@ type Model struct {
 
 type dockerAlreadyRunningMsg struct{}
 type dockerNeedStartMsg struct{}
-type dockerStartedMsg struct{ err error }
+type dockerStartedMsg struct {
+	err    error
+	output []string
+}
 type dockerStoppedMsg struct{ err error }
 type dockerOutputLineMsg struct {
 	source <-chan string
@@ -123,7 +127,10 @@ type shopwareInstallDoneMsg struct {
 	err    error
 }
 
-type configRestartDoneMsg struct{ err error }
+type configRestartDoneMsg struct {
+	err    error
+	output []string
+}
 
 type portConflictMsg struct{ conflicts []dockerpkg.PortConflict }
 type portFixDoneMsg struct {
@@ -255,6 +262,9 @@ func newShell(m Model) *app.App {
 		Header:          func(ctx app.Context) string { return current().chromeHeader(ctx) },
 		Footer:          func(ctx app.Context) string { return current().chromeFooter(ctx) },
 		WindowTitleFunc: func(app.Context) string { return current().windowTitle() },
+		// A signal or a recovered panic ends the program without Update, so the
+		// end of an open session is sent here.
+		OnExit: func(err error) { current().reportExit(err) },
 		// Enable mouse reporting so the overview scrolls with the wheel/trackpad
 		// and the instance-log viewport reacts to the wheel.
 		Mouse: true,
@@ -284,23 +294,14 @@ func (m Model) initPhase() tea.Cmd {
 
 func (m *Model) shutdown() {
 	m.instance.StopStreaming()
+	m.trackOpenRunEnds()
 
 	ctx, cancel := context.WithTimeout(m.cleanupContext(), 3*time.Second)
 	defer cancel()
 
 	for name, h := range m.watchers {
-		if tags, ok := m.telemetry.watcherEndTags(name, watcherEndSessionEnd); ok {
-			trackEventNow(tracking.EventDevWatcher, tags)
-		}
 		h.stop(ctx)
 		delete(m.watchers, name)
-	}
-
-	// A config-change container restart may still be in flight when the user
-	// leaves the dashboard; report it as cancelled instead of dropping it.
-	if tags, ok := m.telemetry.configRestartTags(nil); ok {
-		tags[tracking.TagResult] = tracking.ResultCancelled
-		trackEventNow(tracking.EventDevDockerStart, tags)
 	}
 
 	if tags, ok := m.telemetry.sessionTags(); ok {
@@ -308,7 +309,58 @@ func (m *Model) shutdown() {
 	}
 }
 
+// reportExit sends the end events of an open dashboard that ended without its
+// quit paths: the work still running in it, then the session.
+func (m Model) reportExit(runErr error) {
+	tags, ok := m.telemetry.exitTags(exitResult(runErr))
+	if !ok {
+		return
+	}
+	m.trackOpenRunEnds()
+	trackEventNow(tracking.EventDevSession, tags)
+}
+
+// exitResult names how a program that skipped the quit paths ended. Bubble Tea
+// returns nil after SIGTERM and its own errors after an external SIGINT, a
+// recovered panic or a lost terminal.
+func exitResult(runErr error) string {
+	switch {
+	case runErr == nil:
+		return exitTerminated
+	case errors.Is(runErr, tea.ErrProgramPanic):
+		return exitPanic
+	case errors.Is(runErr, tea.ErrInterrupted):
+		return exitInterrupted
+	default:
+		return exitError
+	}
+}
+
+// trackOpenRunEnds reports the work still running when the session ends: a
+// palette task, the watchers and a config-change restart. It only reports;
+// stopping the processes is up to the caller.
+func (m Model) trackOpenRunEnds() {
+	if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
+		trackEventNow(tracking.EventDevAction, tags)
+	}
+	for name := range m.watchers {
+		if tags, ok := m.telemetry.watcherEndTags(name, watcherEndSessionEnd); ok {
+			trackEventNow(tracking.EventDevWatcher, tags)
+		}
+	}
+	// A config-change container restart may still be in flight when the
+	// session ends; report it as cancelled instead of dropping it.
+	if tags, ok := m.telemetry.configRestartTags(nil, nil); ok {
+		tags[tracking.TagResult] = tracking.ResultCancelled
+		trackEventNow(tracking.EventDevDockerStart, tags)
+	}
+}
+
 func (m *Model) startDashboard() tea.Cmd {
+	// The session event carries the same session_id, so a start without an end shows a session that did not quit normally.
+	if tags, ok := m.telemetry.sessionStartTags(); ok {
+		trackEvent(tracking.EventDevSessionStart, tags)
+	}
 	return tea.Batch(
 		m.overview.Init(),
 		m.instance.StartStreaming(),
@@ -371,6 +423,7 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// The program resumes after the interactive setup; refresh the Domains
 		// status and the setup-health checks it affects.
 		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
+		m.overview.certTrusted = overviewCertTrusted(m.projectRoot)
 		m.overview.healthLoading = true
 		return m, loadSetupHealth(m.commandContext(), m.projectRoot, m.executor)
 
@@ -431,14 +484,19 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 	switch msg := msg.(type) {
 	case watcherStartedMsg:
 		m.watchers[msg.name] = msg.handle
-		m.telemetry.watcherStarted(msg.name)
+		m.telemetry.watcherStarted(msg.name, msg.proxied)
 		return m, m.instance.AddStreamingSource(msg.name, msg.lines)
 
 	case watcherRunningMsg:
 		if msg.err != nil {
 			if tags, ok := m.telemetry.watcherEndTags(msg.name, watcherEndPrepFailed); ok {
+				if step := watcherFailedStep(msg.err); step != "" {
+					tags[tracking.TagFailedStep] = step
+				}
 				trackEvent(tracking.EventDevWatcher, tags)
 			}
+		} else {
+			m.telemetry.watcherProcessStarted(msg.name)
 		}
 		_, exists := m.watchers[msg.name]
 		switch msg.name {
@@ -471,6 +529,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.overview.sfWatchReady = msg.ready
 		}
 		if msg.ready {
+			m.telemetry.watcherReady(msg.name)
 			return m, nil
 		}
 		// Not serving yet — keep polling until it is.
@@ -692,7 +751,7 @@ func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (app.Content, t
 	// The config changed, so the environment snapshot the overview holds is
 	// stale; refresh it before the overview rediscovers the services.
 	m.overview.setEnvironment(m.dockerEnvironment())
-	if tags, ok := m.telemetry.configRestartTags(msg.err); ok {
+	if tags, ok := m.telemetry.configRestartTags(msg.err, msg.output); ok {
 		trackEvent(tracking.EventDevDockerStart, tags)
 	}
 	m.configTab.restarting = false

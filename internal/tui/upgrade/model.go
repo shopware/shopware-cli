@@ -125,6 +125,7 @@ func (m *Model) Init() tea.Cmd {
 // ctrl+c cancels the runner (which rolls back) instead of quitting.
 func (m *Model) handleQuit() tea.Cmd {
 	if m.panel == panelRun && !m.run.finished {
+		m.run.cancelled = true
 		m.run.cancel()
 		return nil
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
+	"github.com/shopware/shopware-cli/internal/symfony"
 )
 
 func TestShopwareProjectScaffold(t *testing.T) {
@@ -108,6 +109,37 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		require.NoError(t, scaffold2.Scaffold(t.Context()))
 		env2 := readScaffoldFile(t, projectFolder2, ".env")
 		assert.NotEqual(t, envContent, env2)
+	})
+
+	t.Run("disables the admin worker for Docker projects with a working queue worker", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			version   string
+			useDocker bool
+			enabled   bool
+		}{
+			{version: "6.7.12.1", useDocker: true, enabled: false},
+			{version: "6.6.3.1", useDocker: true, enabled: true},
+			{version: "6.7.12.1", useDocker: false, enabled: true},
+		}
+		for _, tt := range tests {
+			projectFolder := t.TempDir()
+			scaffold := ShopwareProjectScaffold{
+				ProjectFolder:    projectFolder,
+				Version:          tt.version,
+				DeploymentMethod: DeploymentNone,
+				CISystem:         CINone,
+				UseDocker:        tt.useDocker,
+			}
+			require.NoError(t, scaffold.Scaffold(t.Context()))
+
+			for _, env := range []string{"dev", "prod"} {
+				enabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, env)
+				require.NoError(t, err)
+				assert.Equal(t, tt.enabled, enabled, "version=%s docker=%v env=%s", tt.version, tt.useDocker, env)
+			}
+		}
 	})
 
 	t.Run("writes an explicit compose project name", func(t *testing.T) {
@@ -412,4 +444,14 @@ func readScaffoldFile(t *testing.T, root string, path ...string) string {
 	require.NoError(t, err)
 
 	return string(content)
+}
+
+func TestSupportsDedicatedWorker(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, supportsDedicatedWorker("6.6.3.1"))
+	assert.True(t, supportsDedicatedWorker("6.6.4.0"))
+	assert.True(t, supportsDedicatedWorker("6.7.12.1"))
+	assert.True(t, supportsDedicatedWorker("dev-trunk"))
+	assert.False(t, supportsDedicatedWorker("dev-6.5.x"))
 }

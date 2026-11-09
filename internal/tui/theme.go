@@ -10,8 +10,6 @@ import (
 	"github.com/charmbracelet/x/term"
 )
 
-var hasDarkBG = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
-
 const maxPanelWidth = 80
 
 // TerminalWidth returns the current terminal width, falling back to
@@ -34,7 +32,7 @@ func PanelWidth() int {
 }
 
 // Semantic colors used across shopware-cli TUI components, adapted to the
-// terminal's light or dark background at startup.
+// terminal's light or dark background when first rendered.
 var (
 	// BrandColor is the Shopware brand blue used for focus, selection
 	// markers, and primary buttons.
@@ -108,10 +106,7 @@ func VariantColor(v Variant) color.Color {
 }
 
 func adaptiveColor(dark, light string) color.Color {
-	if hasDarkBG {
-		return lipgloss.Color(dark)
-	}
-	return lipgloss.Color(light)
+	return AdaptiveColor{Dark: lipgloss.Color(dark), Light: lipgloss.Color(light)}
 }
 
 func adaptiveMuted() color.Color {

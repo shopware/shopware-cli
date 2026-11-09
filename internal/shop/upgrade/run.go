@@ -56,6 +56,25 @@ func (s StepID) Label() string {
 	return "Unknown step"
 }
 
+// TelemetryID is the stable name of a step in telemetry events.
+func (s StepID) TelemetryID() string {
+	switch s {
+	case StepRewriteComposer:
+		return "rewrite_composer"
+	case StepComposerUpdate:
+		return "composer_update"
+	case StepRecipesInstall:
+		return "recipes_install"
+	case StepDeploymentHelper:
+		return "deployment_helper"
+	case StepWriteReport:
+		return "write_report"
+	case StepFinished:
+		return "finished"
+	}
+	return "unknown"
+}
+
 // StepEvent is emitted by the Runner while the upgrade executes. Line events
 // carry streamed subprocess output (State is StateRunning); state events mark
 // step transitions.

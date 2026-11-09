@@ -36,6 +36,11 @@ func GetToolsOf[T Tool]() ToolList[T] {
 	return tools
 }
 
+const (
+	CheckAgainstHighest = "highest"
+	CheckAgainstLowest  = "lowest"
+)
+
 type ToolConfig struct {
 	// Path to the tool directory
 	ToolDirectory string
@@ -62,6 +67,8 @@ type ToolConfig struct {
 	Extensions []extension.Extension
 	// PHP version of the project the extensions are validated in; empty for a single extension
 	PHPVersion string
+	// Whether RootDir is a Shopware project rather than a single extension
+	IsProject bool
 }
 
 func (c *ToolConfig) logConfiguration(ctx context.Context) {
@@ -106,7 +113,8 @@ type CheckTool interface {
 
 type FixTool interface {
 	Tool
-	Fix(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
+	// Fix reports pending changes without applying them when dryRun is true.
+	Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
 }
 
 type FormatTool interface {

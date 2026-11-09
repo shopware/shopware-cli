@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"os"
@@ -21,15 +22,18 @@ func (SymfonyXMLConverter) Name() string {
 	return "symfony-xml"
 }
 
-func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	found := false
 	changed := 0
+	failed := false
+	pendingFiles := make(map[string]struct{})
 	conversions := []struct {
 		fileName string
 		convert  func(string) (map[string]string, error)
+		plan     func(string) (map[string]string, error)
 	}{
-		{"services.xml", symfony.ConvertServicesXMLFile},
-		{"routes.xml", symfony.ConvertRoutesXMLFile},
+		{"services.xml", symfony.ConvertServicesXMLFile, symfony.PlanServicesXMLFile},
+		{"routes.xml", symfony.ConvertRoutesXMLFile, symfony.PlanRoutesXMLFile},
 	}
 
 	for _, configDir := range s.collectConfigDirs(config) {
@@ -38,37 +42,96 @@ func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution
 
 			if _, err := os.Stat(xmlPath); err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
+					failed = true
 					execution.Fail(&ToolError{Err: fmt.Errorf("cannot read XML configuration: %w", err)})
 				}
 				continue
 			}
 			found = true
 
-			converted, err := conversion.convert(xmlPath)
+			convert := conversion.convert
+			if dryRun {
+				convert = conversion.plan
+			}
+
+			converted, err := convert(xmlPath)
 			if err != nil {
-				var pathErr *os.PathError
-				if errors.As(err, &pathErr) {
-					execution.Fail(&ToolError{Err: fmt.Errorf("cannot convert XML configuration: %w", err)})
+				if finding, ok := symfonyXMLFinding(err, config.RootDir); ok {
+					execution.AddFindings(finding)
 				} else {
-					execution.AddFindings(validation.CheckResult{
-						Path: validation.NormalizeSourcePath(xmlPath, config.RootDir), Severity: validation.SeverityWarning,
-						Identifier: "symfony-xml/unsupported", Message: fmt.Sprintf("Cannot convert XML to YAML; keeping the XML file: %v", err),
-					})
+					failed = true
+					execution.Fail(&ToolError{Err: fmt.Errorf("cannot convert XML configuration: %w", err)})
 				}
 				continue
 			}
 
-			changed += len(converted)
+			if !dryRun {
+				changed += len(converted)
+				continue
+			}
+
+			for source := range converted {
+				filePath := validation.NormalizeSourcePath(source, config.RootDir)
+				if _, exists := pendingFiles[filePath]; exists {
+					continue
+				}
+				pendingFiles[filePath] = struct{}{}
+				execution.AddFindings(validation.CheckResult{
+					Path:       filePath,
+					Severity:   validation.SeverityError,
+					Identifier: "symfony-xml/conversion",
+					Message:    "XML configuration can be converted to YAML. Run fix without dry-run to apply it.",
+				})
+			}
 		}
 	}
 
-	if !found {
+	if !found && !failed {
 		return ToolSummary{SkipReason: "no XML configuration files"}
 	}
+	if dryRun {
+		return ToolSummary{}
+	}
+
+	// I/O failures can leave partial writes. Avoid claiming no changes when
+	// conversion did not return a completed result.
+	if failed && changed == 0 {
+		return ToolSummary{}
+	}
+
 	return ToolSummary{Note: fileChangeNote(changed, "converted")}
 }
 
-// collectConfigDirs returns the Resources/config directories of all platform
+// symfonyXMLFinding maps source blockers to findings. Filesystem failures remain
+// execution errors because conversion may have left partially written files.
+func symfonyXMLFinding(err error, root string) (validation.CheckResult, bool) {
+	var conversionErr *symfony.XMLConversionError
+	if !errors.As(err, &conversionErr) {
+		return validation.CheckResult{}, false
+	}
+
+	line := 0
+	var syntaxErr *xml.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		line = syntaxErr.Line
+	}
+
+	// Retain the original root alias while normalizing embedded source paths.
+	message := validation.StripRootFromText(
+		fmt.Sprintf("Cannot convert XML to YAML; keeping the XML file: %v", err), root,
+	)
+
+	return validation.CheckResult{
+		Path:       validation.NormalizeSourcePath(conversionErr.Path, root),
+		Line:       line,
+		Severity:   validation.SeverityError,
+		Identifier: "symfony-xml/" + string(conversionErr.Kind),
+		Message:    message,
+		Tip:        "Resolve the XML issue or convert the configuration manually, then rerun fix.",
+	}, true
+}
+
+// collectConfigDirs returns the unique Resources/config directories of all platform
 // plugins covered by the tool config. Apps cannot use the dependency injection
 // container and bundles may load their configuration files explicitly by
 // path, so only plugins (where Shopware picks the XML or YAML variant
@@ -92,7 +155,17 @@ func (SymfonyXMLConverter) collectConfigDirs(config ToolConfig) []string {
 		}
 	}
 
-	return dirs
+	seen := make(map[string]struct{})
+	unique := make([]string, 0, len(dirs))
+	for _, directory := range dirs {
+		if _, exists := seen[directory]; exists {
+			continue
+		}
+		seen[directory] = struct{}{}
+		unique = append(unique, directory)
+	}
+
+	return unique
 }
 
 func init() {
