@@ -49,7 +49,7 @@ const (
 
 // Subdomains of the web service's proxy routes. They are constants (not
 // endpoint subdomains) because web's routes are custom: the admin watch port
-// is dynamic and the storefront watcher shares one hostname across three
+// is dynamic and the legacy storefront watcher shares one hostname across three
 // routes, neither of which a plain endpoint can model.
 const (
 	subdomainAdminWatch      = "admin-watch"

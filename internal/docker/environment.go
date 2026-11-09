@@ -117,8 +117,8 @@ type Options struct {
 	// services publish no host ports and instead join the proxy network with
 	// Traefik routing labels. Nil keeps fixed-port mode.
 	Proxy *Proxy
-	// StorefrontUsesVite enables the Storefront Vite endpoint when supported by
-	// the installed Shopware version.
+	// StorefrontUsesVite enables the Storefront Vite endpoint. Callers select it
+	// when Shopware is >= 6.7.17 and the Storefront defines a dev:server script.
 	StorefrontUsesVite bool
 	// User is the "uid:gid" the PHP containers run as so that writes to the
 	// bind-mounted project are owned by the host user. Empty resolves the

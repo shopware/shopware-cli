@@ -42,7 +42,7 @@ const (
 	// hot-proxy's two servers listen on: the HTML proxy and the asset+HMR
 	// server. In proxy mode Traefik routes storefront-watch.<host> to the
 	// former (websecure) and :<assets> to the latter (the sfassets entrypoint),
-	// so these must match the routes in internal/docker/compose_override.go and
+	// so these must match the routes in internal/docker/compose_proxy.go and
 	// the Traefik entrypoint in internal/proxy/traefik.go.
 	storefrontProxyPort  = 9998
 	storefrontAssetsPort = 8443
