@@ -287,7 +287,7 @@ func (s *SSH) openDeploymentSession(ctx context.Context, input sshRolloutInput, 
 	if err != nil {
 		return nil, err
 	}
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, "<?php\n"), "--", string(payload)).Cmd
+	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, phpOpeningTag), "--", string(payload)).Cmd
 	cmd.Stderr = output
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
