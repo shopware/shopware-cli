@@ -674,7 +674,7 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 		assert.Equal(t, "faker.Person.LastName()", customerRewrites["last_name"])
 		assert.Equal(t, "faker.Person.Name()", customerRewrites["company"])
 		assert.Equal(t, "faker.Person.Name()", customerRewrites["title"])
-		assert.Equal(t, "faker.Internet.Email()", customerRewrites["email"])
+		assert.Equal(t, "faker.Internet.SafeEmail()", customerRewrites["email"])
 		assert.Equal(t, "faker.Internet.Ipv4()", customerRewrites["remote_address"])
 	})
 
@@ -709,7 +709,7 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 
 		newsletterRewrites := config.Rewrite["newsletter_recipient"]
 		assert.Len(t, newsletterRewrites, 4)
-		assert.Equal(t, "faker.Internet.Email()", newsletterRewrites["email"])
+		assert.Equal(t, "faker.Internet.SafeEmail()", newsletterRewrites["email"])
 		assert.Equal(t, "faker.Person.FirstName()", newsletterRewrites["first_name"])
 		assert.Equal(t, "faker.Person.LastName()", newsletterRewrites["last_name"])
 		assert.Equal(t, "faker.Address.City()", newsletterRewrites["city"])
@@ -741,7 +741,7 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 		assert.Equal(t, "faker.Person.LastName()", orderCustomerRewrites["last_name"])
 		assert.Equal(t, "faker.Person.Name()", orderCustomerRewrites["company"])
 		assert.Equal(t, "faker.Person.Name()", orderCustomerRewrites["title"])
-		assert.Equal(t, "faker.Internet.Email()", orderCustomerRewrites["email"])
+		assert.Equal(t, "faker.Internet.SafeEmail()", orderCustomerRewrites["email"])
 		assert.Equal(t, "faker.Internet.Ipv4()", orderCustomerRewrites["remote_address"])
 	})
 
@@ -751,7 +751,7 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 
 		productReviewRewrites := config.Rewrite["product_review"]
 		assert.Len(t, productReviewRewrites, 1)
-		assert.Equal(t, "faker.Internet.Email()", productReviewRewrites["email"])
+		assert.Equal(t, "faker.Internet.SafeEmail()", productReviewRewrites["email"])
 	})
 
 	t.Run("merge with existing rewrites", func(t *testing.T) {
@@ -777,7 +777,7 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 		assert.Equal(t, "custom_value", customerRewrites["custom_field"])
 		assert.Equal(t, "faker.Person.FirstName()", customerRewrites["first_name"])
 		assert.Equal(t, "faker.Person.LastName()", customerRewrites["last_name"])
-		assert.Equal(t, "faker.Internet.Email()", customerRewrites["email"])
+		assert.Equal(t, "faker.Internet.SafeEmail()", customerRewrites["email"])
 	})
 
 	t.Run("user rewrites take precedence over defaults", func(t *testing.T) {
@@ -797,7 +797,7 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 		assert.Equal(t, "my_custom_rewrite", customerRewrites["first_name"])
 		assert.Equal(t, "another_custom_rewrite", customerRewrites["last_name"])
 		// Columns not configured by the user still get the default
-		assert.Equal(t, "faker.Internet.Email()", customerRewrites["email"])
+		assert.Equal(t, "faker.Internet.SafeEmail()", customerRewrites["email"])
 	})
 
 	t.Run("multiple calls are idempotent", func(t *testing.T) {
@@ -890,7 +890,7 @@ func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {
 		config := &ConfigDump{
 			Rewrite: map[string]map[string]string{
 				"customer": {
-					"email":      "faker.Internet.Email()",
+					"email":      "faker.Internet.SafeEmail()",
 					"first_name": "faker.Person.FirstName()",
 				},
 			},
@@ -898,7 +898,7 @@ func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {
 
 		config.NormalizeFakerExpressions()
 
-		assert.Equal(t, "{{- faker.Internet.Email() -}}", config.Rewrite["customer"]["email"])
+		assert.Equal(t, "{{- faker.Internet.SafeEmail() -}}", config.Rewrite["customer"]["email"])
 		assert.Equal(t, "{{- faker.Person.FirstName() -}}", config.Rewrite["customer"]["first_name"])
 	})
 
@@ -906,28 +906,28 @@ func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {
 		config := &ConfigDump{
 			Rewrite: map[string]map[string]string{
 				"customer": {
-					"email": "  faker.Internet.Email()  ",
+					"email": "  faker.Internet.SafeEmail()  ",
 				},
 			},
 		}
 
 		config.NormalizeFakerExpressions()
 
-		assert.Equal(t, "{{- faker.Internet.Email() -}}", config.Rewrite["customer"]["email"])
+		assert.Equal(t, "{{- faker.Internet.SafeEmail() -}}", config.Rewrite["customer"]["email"])
 	})
 
 	t.Run("does not modify already-delimited expressions", func(t *testing.T) {
 		config := &ConfigDump{
 			Rewrite: map[string]map[string]string{
 				"customer": {
-					"email": "{{- faker.Internet.Email() -}}",
+					"email": "{{- faker.Internet.SafeEmail() -}}",
 				},
 			},
 		}
 
 		config.NormalizeFakerExpressions()
 
-		assert.Equal(t, "{{- faker.Internet.Email() -}}", config.Rewrite["customer"]["email"])
+		assert.Equal(t, "{{- faker.Internet.SafeEmail() -}}", config.Rewrite["customer"]["email"])
 	})
 
 	t.Run("does not modify non-faker values", func(t *testing.T) {
@@ -959,7 +959,7 @@ func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {
 		config := &ConfigDump{
 			Rewrite: map[string]map[string]string{
 				"customer": {
-					"email": "faker.Internet.Email()",
+					"email": "faker.Internet.SafeEmail()",
 				},
 				"order_customer": {
 					"first_name": "faker.Person.FirstName()",
@@ -969,7 +969,7 @@ func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {
 
 		config.NormalizeFakerExpressions()
 
-		assert.Equal(t, "{{- faker.Internet.Email() -}}", config.Rewrite["customer"]["email"])
+		assert.Equal(t, "{{- faker.Internet.SafeEmail() -}}", config.Rewrite["customer"]["email"])
 		assert.Equal(t, "{{- faker.Person.FirstName() -}}", config.Rewrite["order_customer"]["first_name"])
 	})
 }

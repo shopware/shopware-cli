@@ -179,7 +179,7 @@ func TestPrepareDumpConfigMergesExtensionAnonymization(t *testing.T) {
 		ExtensionTables: map[string]map[string]string{
 			"Swag_Example_Token": {
 				"access_token": "EXTENSION",
-				"Email":        "faker.Internet.Email()",
+				"Email":        "faker.Internet.SafeEmail()",
 			},
 			"customer": {
 				"email":         "''",
@@ -188,18 +188,18 @@ func TestPrepareDumpConfigMergesExtensionAnonymization(t *testing.T) {
 		},
 		SystemConfigRules: []SystemConfigRule{
 			{Key: "SwagExample.config.clientSecret", Omit: true},
-			{Key: "SwagExample.config.merchantEmail", Faker: "faker.Internet.Email()"},
+			{Key: "SwagExample.config.merchantEmail", Faker: "faker.Internet.SafeEmail()"},
 		},
 	})
 	require.NoError(t, err)
 
 	assert.Equal(t, "PROJECT", prepared.Rewrite["swag_example_token"]["access_token"])
-	assert.Equal(t, "{{- faker.Internet.Email() -}}", prepared.Rewrite["swag_example_token"]["email"])
-	assert.Equal(t, "{{- faker.Internet.Email() -}}", prepared.Rewrite["customer"]["email"])
+	assert.Equal(t, "{{- faker.Internet.SafeEmail() -}}", prepared.Rewrite["swag_example_token"]["email"])
+	assert.Equal(t, "{{- faker.Internet.SafeEmail() -}}", prepared.Rewrite["customer"]["email"])
 	assert.Equal(t, "NULL", prepared.Rewrite["customer"]["custom_fields"])
 	assert.Equal(t, "{{- faker.Person.FirstName() -}}", prepared.Rewrite["customer"]["first_name"])
 	assert.Contains(t, prepared.Rewrite["system_config"]["configuration_value"], "SwagExample.config.merchantEmail")
-	assert.Contains(t, prepared.Rewrite["system_config"]["configuration_value"], "{{- faker.Internet.Email() -}}")
+	assert.Contains(t, prepared.Rewrite["system_config"]["configuration_value"], "{{- faker.Internet.SafeEmail() -}}")
 	assert.Equal(t, "`configuration_key` NOT IN ('SwagExample.config.clientSecret')", prepared.Where["system_config"])
 	assert.Contains(t, prepared.Rewrite, "order_customer")
 }
@@ -248,7 +248,7 @@ func TestPrepareDumpConfigIgnoresExtensionRulesWithoutAnonymize(t *testing.T) {
 func TestBuildSystemConfigAnonymization(t *testing.T) {
 	rewrite, where, err := BuildSystemConfigAnonymization([]SystemConfigRule{
 		{Key: "B.config.mode", HasValue: true, Value: "sandbox"},
-		{Key: "A.config.email", Faker: "faker.Internet.Email()"},
+		{Key: "A.config.email", Faker: "faker.Internet.SafeEmail()"},
 		{Key: "C.config.secret", Omit: true},
 		{Key: "D.config.on", HasValue: true, Value: false},
 		{Key: "E.config.name", HasValue: true, Value: "O'Brien"},
@@ -257,7 +257,7 @@ func TestBuildSystemConfigAnonymization(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "`configuration_key` NOT IN ('C.config.secret')", where)
 	assert.Equal(t,
-		"CASE WHEN `configuration_key` = 'A.config.email' THEN '{\"_value\":\"{{- faker.Internet.Email() -}}\"}' WHEN `configuration_key` = 'B.config.mode' THEN '{\"_value\":\"sandbox\"}' WHEN `configuration_key` = 'D.config.on' THEN '{\"_value\":false}' WHEN `configuration_key` = 'E.config.name' THEN '{\"_value\":\"O''Brien\"}' ELSE `configuration_value` END",
+		"CASE WHEN `configuration_key` = 'A.config.email' THEN '{\"_value\":\"{{- faker.Internet.SafeEmail() -}}\"}' WHEN `configuration_key` = 'B.config.mode' THEN '{\"_value\":\"sandbox\"}' WHEN `configuration_key` = 'D.config.on' THEN '{\"_value\":false}' WHEN `configuration_key` = 'E.config.name' THEN '{\"_value\":\"O''Brien\"}' ELSE `configuration_value` END",
 		rewrite,
 	)
 
