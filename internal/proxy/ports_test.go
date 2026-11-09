@@ -126,9 +126,8 @@ func TestNewEnvironment_ModeFollowsConfigUnlessFallback(t *testing.T) {
 
 func TestProjectDockerOptionsDetectViteFromDevServerScript(t *testing.T) {
 	dir := t.TempDir()
-	// Shopware 6.6 is below the version cutoff, so the dev:server script is
-	// what enables Vite in this fixture.
-	lock := `{"packages": [{"name": "shopware/core", "version": "6.6.0.0"}], "packages-dev": []}`
+	// Vite requires both a supported Shopware version and the dev:server script.
+	lock := `{"packages": [{"name": "shopware/core", "version": "6.7.17.0"}], "packages-dev": []}`
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
 	packagePath := filepath.Join(dir, "vendor", "shopware", "storefront", "Resources", "app", "storefront", "package.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(packagePath), 0o755))

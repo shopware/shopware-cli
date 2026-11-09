@@ -12,6 +12,7 @@ import (
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestMajorMinor(t *testing.T) {
@@ -237,7 +238,9 @@ func TestRenderWatchers_ProxyModeUsesSubdomains(t *testing.T) {
 func TestSetEnvironmentStorefrontViteSeparatesShopLinkAndProbeURL(t *testing.T) {
 	t.Setenv("APP_ENV", "test")
 	dir := t.TempDir()
-	writeComposerLock(t, dir, "^8.2")
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "shopware/core", Version: "v6.7.17.0", Require: map[string]string{"php": "^8.2"}},
+	))
 	packagePath := filepath.Join(dir, "vendor", "shopware", "storefront", "Resources", "app", "storefront", "package.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(packagePath), 0o755))
 	require.NoError(t, os.WriteFile(packagePath, []byte(`{"scripts":{"dev:server":"vite"}}`), 0o644))

@@ -161,16 +161,16 @@ func storefrontViteEnv(opts StorefrontWatcherOptions, executorType string) map[s
 }
 
 // StorefrontUsesVite reports whether the package defines a Vite dev server
-// script or Shopware is 6.7.17 or newer.
+// script and Shopware is 6.7.17 or newer.
 func StorefrontUsesVite(projectRoot string) bool {
 	packageJSON := PlatformPath(projectRoot, "Storefront", filepath.Join("Resources", "app", "storefront", "package.json"))
 	var pkg struct {
 		Scripts map[string]string `json:"scripts"`
 	}
-	if data, err := os.ReadFile(packageJSON); err == nil &&
-		json.Unmarshal(data, &pkg) == nil &&
-		pkg.Scripts["dev:server"] != "" {
-		return true
+	if data, err := os.ReadFile(packageJSON); err != nil ||
+		json.Unmarshal(data, &pkg) != nil ||
+		pkg.Scripts["dev:server"] == "" {
+		return false
 	}
 
 	if _, err := os.Stat(filepath.Join(projectRoot, "composer.lock")); err != nil {

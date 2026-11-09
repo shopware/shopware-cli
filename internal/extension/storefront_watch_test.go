@@ -73,27 +73,37 @@ func TestStorefrontThemeDumpArgs(t *testing.T) {
 }
 
 func TestStorefrontUsesVite(t *testing.T) {
-	projectRoot := t.TempDir()
-	packagePath := PlatformPath(projectRoot, "Storefront", filepath.Join("Resources", "app", "storefront", "package.json"))
-	require.NoError(t, os.MkdirAll(filepath.Dir(packagePath), 0o755))
-
-	writePackage := func(content string) {
-		t.Helper()
-		require.NoError(t, os.WriteFile(packagePath, []byte(content), 0o644))
+	tests := []struct {
+		name    string
+		version string
+		pkg     string
+		want    bool
+	}{
+		{name: "both prerequisites", version: "6.7.17.0", pkg: `{"scripts":{"dev:server":"vite --host"}}`, want: true},
+		{name: "newer version", version: "6.8.0.0", pkg: `{"scripts":{"dev:server":"vite"}}`, want: true},
+		{name: "older version with script", version: "6.7.16.0", pkg: `{"scripts":{"dev:server":"vite"}}`},
+		{name: "current version without script", version: "6.7.17.0", pkg: `{"scripts":{"hot-proxy":"node ./build/start-hot-reload.js"}}`},
+		{name: "empty script", version: "6.7.17.0", pkg: `{"scripts":{"dev:server":""}}`},
+		{name: "missing package", version: "6.7.17.0"},
+		{name: "invalid package", version: "6.7.17.0", pkg: `{`},
+		{name: "missing lock", pkg: `{"scripts":{"dev:server":"vite"}}`},
 	}
 
-	writePackage(`{"scripts":{"dev:server":"vite --host"}}`)
-	assert.True(t, StorefrontUsesVite(projectRoot))
-
-	writePackage(`{"scripts":{"hot-proxy":"NODE_ENV=development MODE=hot node ./build/start-hot-reload.js"}}`)
-	assert.False(t, StorefrontUsesVite(projectRoot))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.json"), []byte(`{"name":"shopware/platform"}`), 0o644))
-	assert.False(t, StorefrontUsesVite(projectRoot))
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.17.0"}]}`), 0o644))
-	assert.True(t, StorefrontUsesVite(projectRoot))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.16.0"}]}`), 0o644))
-	assert.False(t, StorefrontUsesVite(projectRoot))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			if tt.version != "" {
+				lock := `{"packages":[{"name":"shopware/core","version":"` + tt.version + `"}]}`
+				require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(lock), 0o644))
+			}
+			if tt.pkg != "" {
+				packagePath := PlatformPath(projectRoot, "Storefront", filepath.Join("Resources", "app", "storefront", "package.json"))
+				require.NoError(t, os.MkdirAll(filepath.Dir(packagePath), 0o755))
+				require.NoError(t, os.WriteFile(packagePath, []byte(tt.pkg), 0o644))
+			}
+			assert.Equal(t, tt.want, StorefrontUsesVite(projectRoot))
+		})
+	}
 }
 
 func TestStorefrontViteEnv(t *testing.T) {
