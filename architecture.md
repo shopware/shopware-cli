@@ -8,8 +8,8 @@ tags: [boundaries, commands, patterns]
 ## 1. Summary
 
 `shopware-cli` is a Go/Cobra CLI with four command groups, registering from
-[cmd/root.go](cmd/root.go): `account`, `ai`, `extension`, and `project`. Entry is
-[main.go](main.go) → `cmd.Execute`.
+[cmd/root.go](cmd/root.go): `account`, `ai`, `extension`, and `project`.
+Entry is [main.go](main.go) → `cmd.Execute`.
 
 The root command sets an interaction flag in the context based on stdin and
 `--no-interaction`. Commands use it to choose interactive or headless behavior;
@@ -19,6 +19,7 @@ single shared prompt mechanism.
 
 This summarizes current architecture, then sets a strategic direction across
 three main bets:
+
 - Enabling an AI/agent to be a first-class consumer
 - Providing a richer dev-inner-loop (build/watch/preview)
 - Providing a guided-but-delegating deploy experience
@@ -181,8 +182,8 @@ was skipped, rather than promising that source files were changed.
 ### 3.1 Where the CLI already does/runs things concurrently, for speed
 
 - **Validate / format / fix:** runs the selected capability-specific tools
-  concurrently via the shared runner and waits for them; an execution error makes
-  the command fail.
+  concurrently via the shared runner and waits for them; an execution error
+  makes the command fail.
 - **npm installs:** installs dependencies for multiple extensions in parallel,
   with as many workers as you have CPU cores (`runtime.NumCPU()`,
   internal/extension/npm.go:70).
