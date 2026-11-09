@@ -18,6 +18,12 @@ import (
 var projectDeploymentCreateCmd = &cobra.Command{
 	Use:   "create [project-directory]",
 	Short: "Create an immutable deployment",
+	Long: `Create an immutable deployment from the project directory for the selected environment.
+The project directory defaults to the current directory. Use --output to choose
+the local archive path and --with-dev-dependencies to include development dependencies.
+
+After creation, the command prints the command to roll out the deployment.
+Pass --rollout to roll it out immediately instead.`,
 	Example: `  shopware-cli project deploy create -e production
   shopware-cli project deploy create ./shop -e production --output ./builds/shop.tar.gz`,
 	Args: cobra.MaximumNArgs(1),

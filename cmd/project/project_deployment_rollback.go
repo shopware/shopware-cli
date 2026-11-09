@@ -12,8 +12,14 @@ import (
 )
 
 var projectDeploymentRollbackCmd = &cobra.Command{
-	Use:               "rollback [deployment-reference]",
-	Short:             "Reactivate a deployment already on the target",
+	Use:   "rollback [deployment-reference]",
+	Short: "Reactivate a deployment already on the target",
+	Long: `Reactivate a deployment retained on the selected target without rebuilding it.
+Provide its deployment reference, or omit it to choose from retained deployments
+interactively. Use -e to select the environment.
+
+The command runs preflight checks and asks for confirmation before activation.
+In non-interactive mode, a reference is required and confirmation is skipped.`,
 	Args:              deploymentSelectionArgs(rollbackSelection),
 	ValidArgsFunction: rollbackReferenceCompletions,
 	RunE: func(cmd *cobra.Command, args []string) error {

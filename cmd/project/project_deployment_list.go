@@ -16,7 +16,13 @@ var projectDeploymentListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List successful deployment rollouts",
-	Args:    cobra.NoArgs,
+	Long: `List successful rollouts for the selected environment, including each deployment's
+active status and deployment time. Use this history to see what is currently
+active and which deployments have been rolled out.
+
+The default output is a table. Pass --format json for structured output, including
+release references. For host groups, the output also identifies each host.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		root, err := resolveDeploymentProjectRoot(nil)
 		if err != nil {

@@ -14,6 +14,12 @@ import (
 var projectDeploymentRolloutCmd = &cobra.Command{
 	Use:   "rollout [deployment-reference]",
 	Short: "Roll out an existing deployment without rebuilding",
+	Long: `Roll out an existing deployment to the selected environment without rebuilding it.
+Provide the reference returned by "project deploy create", or omit it to choose
+an available deployment interactively. Use -e to select the environment.
+
+The command runs preflight checks and asks for confirmation before rollout.
+In non-interactive mode, a reference is required and confirmation is skipped.`,
 	Example: `  # With ssh.directory: /var/www/shop/live, activate /var/www/shop/live
   # and store releases in /var/www/shop/releases.
   shopware-cli project deploy rollout release-name -e production`,
