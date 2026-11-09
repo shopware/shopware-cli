@@ -441,7 +441,7 @@ func (c *ConfigDump) EnableAnonymization() {
 			"last_name":      "faker.Person.LastName()",
 			"company":        "faker.Person.Name()",
 			"title":          "faker.Person.Name()",
-			"email":          "faker.Internet.Email()",
+			"email":          "faker.Internet.SafeEmail()",
 			"remote_address": "faker.Internet.Ipv4()",
 		},
 		"customer_address": {
@@ -458,7 +458,7 @@ func (c *ConfigDump) EnableAnonymization() {
 			"provider": "",
 		},
 		"newsletter_recipient": {
-			"email":      "faker.Internet.Email()",
+			"email":      "faker.Internet.SafeEmail()",
 			"first_name": "faker.Person.FirstName()",
 			"last_name":  "faker.Person.LastName()",
 			"city":       "faker.Address.City()",
@@ -478,11 +478,11 @@ func (c *ConfigDump) EnableAnonymization() {
 			"last_name":      "faker.Person.LastName()",
 			"company":        "faker.Person.Name()",
 			"title":          "faker.Person.Name()",
-			"email":          "faker.Internet.Email()",
+			"email":          "faker.Internet.SafeEmail()",
 			"remote_address": "faker.Internet.Ipv4()",
 		},
 		"product_review": {
-			"email": "faker.Internet.Email()",
+			"email": "faker.Internet.SafeEmail()",
 		},
 	}
 

@@ -198,11 +198,11 @@ func TestMySQLDumpCreateTableHandlingErrorWhenScanningRows(t *testing.T) {
 }
 
 func TestRewriteSelectExpression(t *testing.T) {
-	assert.Equal(t, "'{{- faker.Internet.Email() -}}'", rewriteSelectExpression("{{- faker.Internet.Email() -}}"))
+	assert.Equal(t, "'{{- faker.Internet.SafeEmail() -}}'", rewriteSelectExpression("{{- faker.Internet.SafeEmail() -}}"))
 	assert.Equal(t, "'faker.Person.FirstName()'", rewriteSelectExpression("faker.Person.FirstName()"))
 	assert.Equal(t, "NOW()", rewriteSelectExpression("NOW()"))
 
-	expression := "CASE WHEN `configuration_key` = 'A.config.email' THEN '{\"_value\":\"{{- faker.Internet.Email() -}}\"}' ELSE `configuration_value` END"
+	expression := "CASE WHEN `configuration_key` = 'A.config.email' THEN '{\"_value\":\"{{- faker.Internet.SafeEmail() -}}\"}' ELSE `configuration_value` END"
 	assert.Equal(t, expression, rewriteSelectExpression(expression))
 
 	assert.Equal(t, "'qa+{{- faker.Internet.User() -}}@example.com'", rewriteSelectExpression("qa+{{- faker.Internet.User() -}}@example.com"))
