@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -65,6 +66,6 @@ func init() {
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionJSON, "json", false, "Output as JSON")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("plugin", "app")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("format", "json")
-	_ = accountCompanyProducerExtensionListCmd.Flags().MarkDeprecated("json", "use --format json instead")
+	_ = accountCompanyProducerExtensionListCmd.Flags().MarkDeprecated("json", deprecation.Message("2027-02-10", "--format json"))
 	_ = accountCompanyProducerExtensionListCmd.Flags().MarkHidden("json")
 }

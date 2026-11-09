@@ -21,6 +21,7 @@ import (
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/ai/agent"
 	"github.com/shopware/shopware-cli/internal/cliversion"
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -119,6 +120,15 @@ func init() {
 	cobra.EnableTraverseRunHooks = true
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
+		// Cobra prints the deprecation warnings itself; report their use.
+		if cmd.Deprecated != "" {
+			deprecation.Track("command." + cmd.Name())
+		}
+		cmd.Flags().Visit(func(flag *pflag.Flag) {
+			if flag.Deprecated != "" {
+				deprecation.Track("flag." + flag.Name)
+			}
+		})
 		// Resolve the background before any Bubble Tea program owns stdin;
 		// a lazy query from inside a running program would race its reader.
 		if system.IsInteractionEnabled(cmd.Context()) {

@@ -19,6 +19,7 @@ import (
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -129,7 +130,7 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 			name = filepath.Base(bundlePath)
 		}
 
-		logging.FromContext(ctx).Warnf("Deprecation: Bundle %q is configured via composer.json extra.shopware-bundles. Please move it to the build.bundles section in .config/shopware-project.yml instead.", bundlePath)
+		deprecation.Warn(ctx, "composer.shopware_bundles", fmt.Sprintf("Bundle %q in composer.json extra.shopware-bundles", bundlePath), "2027-02-10", "build.bundles in .config/shopware-project.yml")
 		logging.FromContext(ctx).Infof("Found bundle in project: %s (path: %s)", name, bundlePath)
 
 		bundleConfig, err := readExtensionConfig(ctx, bundlePath)

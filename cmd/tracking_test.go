@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -404,4 +405,14 @@ func TestTrackCommandExecution_CommandTags(t *testing.T) {
 			assert.Equal(t, tt.result, (*events)[0][tracking.TagResult])
 		})
 	}
+}
+
+func TestTrackCommandExecution_DeprecatedTag(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	deprecation.Track("flag.reporter")
+
+	trackCommandExecution(t.Context(), []string{"project", "console"}, 0, nil, "")
+
+	require.Len(t, *events, 1)
+	assert.Contains(t, (*events)[0][tracking.TagDeprecated], "flag.reporter")
 }

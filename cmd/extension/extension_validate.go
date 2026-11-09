@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
@@ -140,10 +141,10 @@ func init() {
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
-	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
-	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", "use validation.store_compliance in the extension configuration")
-	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
-	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", deprecation.Message("2027-02-10", ""))
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", deprecation.Message("2027-02-10", "validation.store_compliance in the extension configuration"))
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", deprecation.Message("2027-02-10", "--format"))
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("no-copy", deprecation.Message("2027-02-10", ""))
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if _, err := extensionValidationFormat(cmd); err != nil {

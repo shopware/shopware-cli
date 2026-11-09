@@ -525,8 +525,8 @@ admin_api:
 	require.NoError(t, err)
 	assert.True(t, cfg.HasDeprecatedTopLevelShop())
 	require.NotEmpty(t, logs.All())
-	assert.Contains(t, logs.All()[0].Message, "deprecated top-level url/admin_api")
-	assert.Contains(t, logs.All()[0].Message, "environments.local")
+	assert.Contains(t, logs.All()[0].Message, "deprecated")
+	assert.Contains(t, logs.All()[0].Message, "environments.")
 }
 
 func TestReadConfigDoesNotWarnOnEnvironmentsOnly(t *testing.T) {

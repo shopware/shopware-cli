@@ -11,6 +11,7 @@ import (
 
 	"charm.land/huh/v2"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -72,6 +73,9 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	var failedStep *tracking.FailedStepError
 	if result != tracking.ResultSuccess && errors.As(runErr, &failedStep) {
 		tags[tracking.TagFailedStep] = failedStep.Step
+	}
+	if used := deprecation.Used(); len(used) > 0 {
+		tags[tracking.TagDeprecated] = strings.Join(used, ",")
 	}
 	if shopwareVersion != "" {
 		tags[tracking.TagShopwareVersion] = shopwareVersion

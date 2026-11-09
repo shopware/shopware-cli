@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/archiver"
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -25,16 +26,11 @@ var (
 )
 
 var extensionPackageCmd = &cobra.Command{
-	Use:     "package path [branch]",
-	Short:   "Build a distributable extension ZIP",
-	Long:    "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag-or-branch>.zip when a tag or branch is available, or <name>.zip otherwise, unless --filename is set.",
-	Aliases: []string{"zip"},
-	Args:    cobra.RangeArgs(1, 2),
+	Use:   "package path [branch]",
+	Short: "Build a distributable extension ZIP",
+	Long:  "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag-or-branch>.zip when a tag or branch is available, or <name>.zip otherwise, unless --filename is set.",
+	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if cmd.CalledAs() == "zip" {
-			logging.FromContext(cmd.Context()).Warnf("`extension zip` is deprecated, use `extension package` instead")
-		}
-
 		extPath, err := filepath.Abs(args[0])
 		if err != nil {
 			return err
@@ -240,6 +236,16 @@ func init() {
 	extensionPackageCmd.Flags().String("output-directory", "", "Directory for the ZIP file (created if missing)")
 	extensionPackageCmd.Flags().String("git-commit", "", "Git commit hash, tag, or branch to package (default: the current tag or branch)")
 	extensionPackageCmd.Flags().String("filename", "", "Name of the ZIP file (default: <name>-<tag>.zip when tagged, otherwise <name>.zip)")
+
+	extensionZipCmd := &cobra.Command{
+		Use:        "zip path [branch]",
+		Short:      extensionPackageCmd.Short,
+		Args:       extensionPackageCmd.Args,
+		RunE:       extensionPackageCmd.RunE,
+		Deprecated: deprecation.Message("2027-02-10", `"extension package"`),
+	}
+	extensionZipCmd.Flags().AddFlagSet(extensionPackageCmd.Flags())
+	extensionRootCmd.AddCommand(extensionZipCmd)
 }
 
 func getStringOnStringError(val string, _ error) string {
