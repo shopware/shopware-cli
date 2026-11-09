@@ -4,8 +4,11 @@ status: Accepted
 tags: [deprecation, telemetry, release]
 ---
 
-- Related: [Issue #1407](https://github.com/shopware/shopware-cli/issues/1407),
-  deprecation tracking [issue #1859](https://github.com/shopware/shopware-cli/issues/1859)
+- Related: [Issue #1407][issue-1407], deprecation tracking
+  [issue #1859][issue-1859]
+
+[issue-1407]: https://github.com/shopware/shopware-cli/issues/1407
+[issue-1859]: https://github.com/shopware/shopware-cli/issues/1859
 
 ## Context
 
