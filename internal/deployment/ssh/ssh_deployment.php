@@ -50,6 +50,22 @@ function deploymentRun(array $command, string $directory): void
     }
 }
 
+/** Run every post-hook before reporting failures, including during cleanup. */
+function deploymentRunPostHooks(array $scripts, string $directory): void
+{
+    $errors = [];
+    foreach ($scripts as $script) {
+        try {
+            deploymentRun(['sh', '-eu', '-c', $script], $directory);
+        } catch (Throwable $error) {
+            $errors[] = $error->getMessage();
+        }
+    }
+    if ($errors !== []) {
+        throw new RuntimeException("cannot run post hooks: " . implode("; ", $errors));
+    }
+}
+
 function deploymentLog(string $message): void
 {
     fwrite(STDERR, "$message\n");
@@ -702,9 +718,7 @@ try {
         deploymentReportReset("Deployment activated, but OPcache reset failed: {$error->getMessage()}");
     }
     $postHooksAttempted = true;
-    foreach ($input['hooks']['post'] ?? [] as $script) {
-        deploymentRun(['sh', '-eu', '-c', $script], $root);
-    }
+    deploymentRunPostHooks($input['hooks']['post'] ?? [], $root);
     echo "ACTIVE $id\n";
     deploymentActivationResult($input, $metadata, false);
     fflush(STDOUT);
@@ -724,13 +738,11 @@ try {
     $exitCode = 1;
 } finally {
     if ($hooksStarted && !$postHooksAttempted) {
-        foreach ($input['hooks']['post'] ?? [] as $script) {
-            try {
-                deploymentRun(['sh', '-eu', '-c', $script], $root);
-            } catch (Throwable $error) {
-                deploymentReportReset("Cannot run post hook: {$error->getMessage()}");
-                $exitCode = 1;
-            }
+        try {
+            deploymentRunPostHooks($input['hooks']['post'] ?? [], $root);
+        } catch (Throwable $error) {
+            deploymentReportReset($error->getMessage());
+            $exitCode = 1;
         }
     }
     deploymentCachetoolCleanup($cachetool);
