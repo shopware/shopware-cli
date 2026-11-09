@@ -190,6 +190,9 @@ func planConversion(ctx context.Context, path string, parse func([]byte) (conver
 	// Convert local XML files referenced by imports as well and rewrite the
 	// import to the new YAML file.
 	for _, reference := range config.importReferences() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		resource := *reference.resource
 
 		if !strings.HasSuffix(strings.ToLower(resource), ".xml") || strings.ContainsAny(resource, "*?[{") || filepath.IsAbs(resource) {

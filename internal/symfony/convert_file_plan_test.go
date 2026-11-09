@@ -10,6 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestXMLPlanningStopsBeforeScanningMissingImports(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "services.xml")
+	require.NoError(t, os.WriteFile(source, []byte(`<container><imports><import resource="missing.xml"/></imports></container>`), 0o600))
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	err := planConversion(ctx, source, func(content []byte) (convertibleXMLConfig, error) {
+		config, err := ParseServicesXML(content)
+		cancel()
+		return config, err
+	}, map[string][]byte{}, map[string]string{})
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestCanceledXMLConversionPreservesSources(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "source.xml")
