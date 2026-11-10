@@ -34,6 +34,10 @@ func (p PHPCSFixer) Name() string {
 	return "php-cs-fixer"
 }
 
+func (p PHPCSFixer) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+	return p.Format(ctx, config, execution, true)
+}
+
 func (p PHPCSFixer) getConfigPath(toolDirectory, rootDir string) string {
 	if _, err := os.Stat(path.Join(rootDir, ".php-cs-fixer.dist.php")); err == nil {
 		return path.Join(rootDir, ".php-cs-fixer.dist.php")

@@ -47,6 +47,10 @@ func (r Rector) Name() string {
 	return "rector"
 }
 
+func (r Rector) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+	return r.Fix(ctx, config, execution, true)
+}
+
 func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	if result, applicable := preparePHPTool(config, execution); !applicable {
 		return result

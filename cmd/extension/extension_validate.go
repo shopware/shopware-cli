@@ -17,6 +17,9 @@ var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
 	Short: "Validate extension metadata, assets, and code quality",
 	Long: `Validate an extension folder or ZIP file.
+Prettier, PHP-CS-Fixer and Rector run in dry mode by default. Their findings fail validation and may fail previously passing CI jobs.
+Run "extension format" to apply formatting and "extension fix" to apply Rector changes. Use "--exclude rector" to skip Rector.
+Rector always checks against the lowest supported dependencies in var/cache/shopware-cli; --check-against selects PHPStan's baseline.
 Store compliance checks that Administration and Storefront source files have matching compiled assets.
 Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.
 A folder is validated in place; PHPStan's composer dependencies are always resolved inside var/cache/shopware-cli for the requested --check-against baseline.
@@ -105,7 +108,7 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
 
 func requiresToolSetup(tool verifier.CheckTool) bool {
 	switch tool.(type) {
-	case verifier.PhpStan, verifier.Eslint, verifier.StyleLint:
+	case verifier.PhpStan, verifier.Eslint, verifier.StyleLint, verifier.Prettier, verifier.PHPCSFixer, verifier.Rector:
 		return true
 	default:
 		return false
