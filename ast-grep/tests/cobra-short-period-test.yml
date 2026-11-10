@@ -1,0 +1,18 @@
+id: cobra-short-period
+valid:
+  - 'var cmd = &cobra.Command{Short: "Build assets"}'
+  - 'var cmd = &cobra.Command{Short: "Waiting..."}'
+  - 'var cmd = &cobra.Command{Short: "Build \"quoted\" assets."}'
+  - 'var cmd = &cobra.Command{Short: `Build assets.`}'
+  - 'var cmd = &cobra.Command{Short: generator.Short}'
+  - 'var cmd = &cobra.Command{Short: "Build " + "assets."}'
+  - 'var other = Other{Short: "Keep this."}'
+  - 'var cmd = &cobra.Command{Other: Other{Short: "Keep this."}}'
+invalid:
+  - 'var cmd = &cobra.Command{Short: "Build assets."}'
+  - |
+    var cmd = &cobra.Command{
+      Use: "build",
+      Short: "Build assets.", // Keep this comment
+      Long: "Keep this description.",
+    }

@@ -1,0 +1,16 @@
+package example
+
+var first = &cobra.Command{ Use: "build"}
+var middle = &cobra.Command{Use: "build",  Short: "Build assets"}
+var last = &cobra.Command{Use: "build", }
+var only = &cobra.Command{}
+var trailingComma = &cobra.Command{
+
+}
+var comments = &cobra.Command{
+	Use: "build",
+	// Keep this comment
+	 // Keep this one too
+	Short: "Build assets", // Keep this comment too
+}
+var nested = &cobra.Command{ Other: Other{Long: "", Short: "Keep this."}}
