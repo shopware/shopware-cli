@@ -193,7 +193,9 @@ Notes:
 - Comparing `cpu_ms` with `duration_ms` shows whether a run kept the CPU busy
   or mostly waited, for example on downloads.
 - The command _name_ is captured (e.g. `project.create`), but **not** its
-  arguments, flags, paths, or any free-text input. `checked_shopware_version`
+  arguments, flags, paths, or any free-text input. The only exception is the
+  `deprecated` tag, which names deprecated flags that were used, never their
+  values. `checked_shopware_version`
   and `check_against` are the version and mode the tools actually used, not
   the flag as typed.
 - The root command alone (running `shopware-cli` with no sub-command) is not

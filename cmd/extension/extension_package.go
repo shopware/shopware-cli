@@ -240,6 +240,7 @@ func init() {
 	extensionZipCmd := &cobra.Command{
 		Use:        "zip path [branch]",
 		Short:      extensionPackageCmd.Short,
+		Long:       extensionPackageCmd.Long,
 		Args:       extensionPackageCmd.Args,
 		RunE:       extensionPackageCmd.RunE,
 		Deprecated: deprecation.Message("2027-02-10", `"extension package"`),
