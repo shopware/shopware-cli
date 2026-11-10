@@ -17,6 +17,8 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'jdx/mise-action@v5.2.6'
         - 'step-security/harden-runner@v2.22.3'
+    '.github/workflows/deprecation-reminder.yml':
+        - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/env-bridge-docker.yml':
         - 'actions/checkout@v7.0.1'
         - 'docker/build-push-action@v7.4.0'
