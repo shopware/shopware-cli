@@ -17,12 +17,20 @@ var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
 	Short: "Validate extension metadata, assets, and code quality",
 	Long: `Validate an extension folder or ZIP file.
-Prettier and PHP-CS-Fixer run in dry mode by default. Their findings fail validation and may fail previously passing CI jobs.
-Run "extension format" to apply formatting. Use "--exclude prettier,php-cs-fixer" to skip formatting checks.
+Prettier and PHP-CS-Fixer check formatting without changing source files. Formatting violations fail validation.
+
 Store compliance checks that Administration and Storefront source files have matching compiled assets.
 Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.
 A folder is validated in place; PHPStan's composer dependencies are always resolved inside var/cache/shopware-cli for the requested --check-against baseline.
 The extension's vendor/ and composer.lock are preserved. Custom PHPStan configurations that load vendor/autoload.php themselves still load local dependencies.`,
+	Example: `  # Validate an extension
+  shopware-cli extension validate ./my-extension
+
+  # Apply formatting automatically
+  shopware-cli extension format ./my-extension
+
+  # Validate without formatting checks
+  shopware-cli extension validate ./my-extension --exclude prettier,php-cs-fixer`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
