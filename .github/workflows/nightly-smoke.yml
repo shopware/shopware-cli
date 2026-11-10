@@ -149,7 +149,12 @@ jobs:
         run: |
           set -o pipefail
           id=$(shopware-cli project sql --format json "SELECT LOWER(HEX(id)) AS id FROM sales_channel WHERE type_id = UNHEX('8A243080F92E4C719546314B577CF82B') ORDER BY created_at LIMIT 1" | jq -r '.[0].id')
-          ../scripts/smoke/watch-probe.sh storefront-watch http://127.0.0.1:9998/ 900 shopware-cli project storefront-watch --sales-channel="$id"
+          # Probe the watcher selected by the generated Compose configuration.
+          url=http://127.0.0.1:9998/
+          if docker compose port web 5175 >/dev/null 2>&1; then
+            url=http://127.0.0.1:5175/@vite/client
+          fi
+          ../scripts/smoke/watch-probe.sh storefront-watch "$url" 900 shopware-cli project storefront-watch --sales-channel="$id"
 
       - name: Show container logs
         if: failure()

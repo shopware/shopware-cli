@@ -512,7 +512,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			if msg.err == nil && exists {
 				m.overview.sfWatchRunning = true
 				m.overview.sfWatchReady = false
-				return m, probeWatcher(m.commandContext(), watcherStorefront, m.overview.sfWatchURL)
+				return m, probeWatcher(m.commandContext(), watcherStorefront, m.overview.sfWatchProbeURL)
 			}
 		}
 		return m, nil

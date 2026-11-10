@@ -69,18 +69,24 @@ func publishOrRoute(spec *composeService, e *Environment, svc service) {
 	}
 }
 
-// webProxyRoutes returns the web service's routes in proxy mode: the shop root,
-// the admin watcher, and the deprecated webpack storefront watcher's three
-// endpoints (HTML proxy, asset/HMR server, and /bundles/ served from the app).
-// It returns nil for a nil (plain-mode) proxy.
-func webProxyRoutes(p *Proxy) []proxyRoute {
-	if p == nil {
+// webProxyRoutes describes the web routes for the selected watcher. Vite uses
+// its dev-server port, while webpack keeps its HTML, asset, and bundle routes.
+func webProxyRoutes(e *Environment) []proxyRoute {
+	if e == nil || e.proxy == nil {
 		return nil
+	}
+
+	if e.storefrontUsesVite {
+		return []proxyRoute{
+			{subdomain: "", containerPort: 8000},
+			{subdomain: subdomainAdminWatch, containerPort: e.proxy.AdminWatchPort},
+			{subdomain: subdomainStorefrontWatch, containerPort: mustEndpoint(ServiceWeb, PortStorefrontVite).ContainerPort},
+		}
 	}
 
 	return []proxyRoute{
 		{subdomain: "", containerPort: 8000},
-		{subdomain: subdomainAdminWatch, containerPort: p.AdminWatchPort},
+		{subdomain: subdomainAdminWatch, containerPort: e.proxy.AdminWatchPort},
 		// The deprecated webpack storefront watcher runs two servers under one
 		// hostname: the HTML proxy on websecure and the asset+HMR server on the
 		// dedicated sfassets entrypoint.

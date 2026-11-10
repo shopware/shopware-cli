@@ -97,4 +97,24 @@ func TestWatchURLs(t *testing.T) {
 	proxied := &Environment{proxy: &Proxy{Hostname: "my-shop.shopware.local"}}
 	assert.Equal(t, "https://admin-watch.my-shop.shopware.local", proxied.AdminWatchURL())
 	assert.Equal(t, "https://storefront-watch.my-shop.shopware.local", proxied.StorefrontWatchURL())
+
+	vite := &Environment{storefrontUsesVite: true}
+	assert.Equal(t, "http://127.0.0.1:5175", vite.StorefrontWatchURL())
+
+	viteOverride := &Environment{
+		storefrontUsesVite: true,
+		settings:           Settings{ServiceWeb: {Ports: Ports{PortStorefrontVite: 15180}}},
+	}
+	assert.Equal(t, "http://127.0.0.1:15180", viteOverride.StorefrontWatchURL(), "host port overrides remain configurable")
+	viteDisabled := &Environment{
+		storefrontUsesVite: true,
+		settings:           Settings{ServiceWeb: {Ports: Ports{PortStorefrontVite: PortDisabled}}},
+	}
+	assert.Empty(t, viteDisabled.StorefrontWatchURL())
+
+	proxiedVite := &Environment{
+		proxy:              &Proxy{Hostname: "vite-shop.shopware.local"},
+		storefrontUsesVite: true,
+	}
+	assert.Equal(t, "https://storefront-watch.vite-shop.shopware.local", proxiedVite.StorefrontWatchURL())
 }
