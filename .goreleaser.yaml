@@ -141,15 +141,17 @@ changelog:
       - '^test:'
       - '^Merge pull request:'
   groups:
+    # Listed first so its titles are not taken by the looser expressions below;
+    # order sets the position in the changelog.
+    - title: "⚠️ Deprecations (removal dates: #1859)"
+      regexp: '^(deprecate|remove)(\([^)]+\))?!?:.+$'
+      order: 2
     - title: 🚀 Features
       regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
       order: 0
     - title: "🐛 Bug Fixes"
       regexp: '^.*?bug(\([[:word:]]+\))??!?:.+$'
       order: 1
-    - title: "⚠️ Deprecations (removal dates: #1859)"
-      regexp: '^(deprecate|remove)(\([^)]+\))?!?:.+$'
-      order: 2
     - title: 🧰 Maintenance
       order: 999
 
