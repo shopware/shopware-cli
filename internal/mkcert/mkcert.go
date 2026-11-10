@@ -11,21 +11,20 @@
 //
 // The code is adapted from mkcert's cert.go and main.go: it returns errors
 // instead of exiting, and the PKCS#12, CSR and client-certificate paths are
-// removed.
+// removed. New keys use ECDSA P-256, while existing RSA CAs remain supported.
+// Key identifiers and serial numbers use the crypto/x509 defaults.
 package mkcert
 
 import (
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha1" //nolint:gosec // mkcert uses SHA-1 for the Subject Key Identifier, which is not a security-sensitive use.
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/asn1"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
 	"net"
 	"os"
 	"os/user"
@@ -167,29 +166,13 @@ func LoadOrCreateCA() (*CA, bool, error) {
 }
 
 func (c *CA) newCA() error {
-	priv, err := generateKey(true)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return fmt.Errorf("failed to generate the CA key: %w", err)
+		return fmt.Errorf("cannot generate CA key: %w", err)
 	}
-	pub := priv.(crypto.Signer).Public()
-
-	spkiASN1, err := x509.MarshalPKIXPublicKey(pub)
-	if err != nil {
-		return fmt.Errorf("failed to encode public key: %w", err)
-	}
-
-	var spki struct {
-		Algorithm        pkix.AlgorithmIdentifier
-		SubjectPublicKey asn1.BitString
-	}
-	if _, err := asn1.Unmarshal(spkiASN1, &spki); err != nil {
-		return fmt.Errorf("failed to decode public key: %w", err)
-	}
-
-	skid := sha1.Sum(spki.SubjectPublicKey.Bytes) //nolint:gosec // see import comment
+	pub := priv.Public()
 
 	tpl := &x509.Certificate{
-		SerialNumber: randomSerialNumber(),
 		Subject: pkix.Name{
 			Organization:       []string{"mkcert development CA"},
 			OrganizationalUnit: []string{getUserAndHostname()},
@@ -199,7 +182,6 @@ func (c *CA) newCA() error {
 			// https://github.com/FiloSottile/mkcert/issues/47
 			CommonName: "mkcert " + getUserAndHostname(),
 		},
-		SubjectKeyId: skid[:],
 
 		NotAfter:  time.Now().AddDate(10, 0, 0),
 		NotBefore: time.Now(),
@@ -240,11 +222,11 @@ func (c *CA) MakeCert(hosts []string, certFile, keyFile string) error {
 		return fmt.Errorf("can't create new certificates because the CA key (%s) is missing", rootKeyName)
 	}
 
-	priv, err := generateKey(false)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return fmt.Errorf("failed to generate certificate key: %w", err)
+		return fmt.Errorf("cannot generate certificate key: %w", err)
 	}
-	pub := priv.(crypto.Signer).Public()
+	pub := priv.Public()
 
 	// Certificates last for 2 years and 3 months, which is always less than
 	// 825 days, the limit that macOS/iOS apply to all certificates,
@@ -252,7 +234,6 @@ func (c *CA) MakeCert(hosts []string, certFile, keyFile string) error {
 	expiration := time.Now().AddDate(2, 3, 0)
 
 	tpl := &x509.Certificate{
-		SerialNumber: randomSerialNumber(),
 		Subject: pkix.Name{
 			Organization:       []string{"mkcert development certificate"},
 			OrganizationalUnit: []string{getUserAndHostname()},
@@ -260,7 +241,7 @@ func (c *CA) MakeCert(hosts []string, certFile, keyFile string) error {
 
 		NotBefore: time.Now(), NotAfter: expiration,
 
-		KeyUsage: x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage: x509.KeyUsageDigitalSignature,
 	}
 
 	for _, h := range hosts {
@@ -295,23 +276,6 @@ func (c *CA) MakeCert(hosts []string, certFile, keyFile string) error {
 	}
 
 	return nil
-}
-
-func generateKey(rootCA bool) (crypto.PrivateKey, error) {
-	if rootCA {
-		return rsa.GenerateKey(rand.Reader, 3072)
-	}
-	return rsa.GenerateKey(rand.Reader, 2048)
-}
-
-func randomSerialNumber() *big.Int {
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		// crypto/rand failing is not recoverable in any meaningful way.
-		panic(fmt.Sprintf("failed to generate serial number: %v", err))
-	}
-	return serialNumber
 }
 
 func pathExists(path string) bool {
