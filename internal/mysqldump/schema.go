@@ -869,6 +869,23 @@ func (d *Dumper) fetchAllForeignKeys(ctx context.Context) error {
 }
 
 func (d *Dumper) fetchAllCheckConstraints(ctx context.Context) error {
+	var hasTableNameColumn bool
+	if err := d.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = 'information_schema'
+			AND TABLE_NAME = 'CHECK_CONSTRAINTS'
+			AND COLUMN_NAME = 'TABLE_NAME'`).Scan(&hasTableNameColumn); err != nil {
+		return fmt.Errorf("cannot inspect check constraint metadata: %w", err)
+	}
+
+	// MariaDB allows CHECK constraint names to repeat across tables. MySQL
+	// does not expose TABLE_NAME in CHECK_CONSTRAINTS, so only join on it when available.
+	tableNameJoin := ""
+	if hasTableNameColumn {
+		tableNameJoin = " AND tc.TABLE_NAME = cc.TABLE_NAME"
+	}
+
 	query := `
 		SELECT DISTINCT
 			tc.TABLE_NAME,
@@ -877,7 +894,7 @@ func (d *Dumper) fetchAllCheckConstraints(ctx context.Context) error {
 		FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
 		JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
 			ON tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
-			AND tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA
+			AND tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA` + tableNameJoin + `
 		WHERE tc.TABLE_SCHEMA = DATABASE()
 			AND tc.CONSTRAINT_TYPE = 'CHECK'
 		ORDER BY tc.TABLE_NAME, LENGTH(tc.CONSTRAINT_NAME) DESC`

@@ -2,6 +2,8 @@ package mysqldump
 
 import (
 	"database/sql"
+	"errors"
+	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -406,6 +408,9 @@ func TestFetchTableSchema(t *testing.T) {
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
 		}))
 
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_NAME = 'CHECK_CONSTRAINTS'.*COLUMN_NAME = 'TABLE_NAME'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
+
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
@@ -541,6 +546,9 @@ func TestFetchTableSchemaMariaDB(t *testing.T) {
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
 		}))
 
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_NAME = 'CHECK_CONSTRAINTS'.*COLUMN_NAME = 'TABLE_NAME'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(1))
+
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
@@ -648,6 +656,9 @@ func TestGetCreateTableStatement_Integration(t *testing.T) {
 			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
 		}))
+
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_NAME = 'CHECK_CONSTRAINTS'.*COLUMN_NAME = 'TABLE_NAME'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
 
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -812,4 +823,86 @@ func TestFetchAllForeignKeys_NumericName(t *testing.T) {
 
 	require.Len(t, dumper.schemaCache["product"].ForeignKeys, 1)
 	assert.Equal(t, "fk.product.product_manufacturer_id", dumper.schemaCache["product"].ForeignKeys[0].Name)
+}
+
+func TestFetchCheckConstraintsTableScope(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		hasTableNameColumn bool
+	}{
+		{name: "MariaDB", hasTableNameColumn: true},
+		{name: "MySQL"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock := getDB(t)
+			defer func() { _ = db.Close() }()
+			dumper := getInternalMySQLInstance(db)
+			dumper.schemaCache = map[string]*TableSchema{
+				"supplier_order": {
+					Name: "supplier_order", Engine: "InnoDB",
+					Columns: []ColumnSchema{{Name: "warehouse_snapshot", Type: "longtext"}},
+				},
+				"shipping_config": {
+					Name: "shipping_config", Engine: "InnoDB",
+					Columns: []ColumnSchema{{Name: "shipment_config", Type: "longtext"}},
+				},
+			}
+			mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_NAME = 'CHECK_CONSTRAINTS'.*COLUMN_NAME = 'TABLE_NAME'").
+				WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(tc.hasTableNameColumn))
+
+			// Match the full query so removing the table join on MariaDB or adding
+			// the unsupported column on MySQL fails the test.
+			query := "SELECT DISTINCT tc.TABLE_NAME, tc.CONSTRAINT_NAME, cc.CHECK_CLAUSE " +
+				"FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc " +
+				"ON tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME AND tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA"
+			if tc.hasTableNameColumn {
+				query += " AND tc.TABLE_NAME = cc.TABLE_NAME"
+			}
+			query += " WHERE tc.TABLE_SCHEMA = DATABASE() AND tc.CONSTRAINT_TYPE = 'CHECK' ORDER BY tc.TABLE_NAME, LENGTH(tc.CONSTRAINT_NAME) DESC"
+			shippingConstraint := "CONSTRAINT_2"
+			if !tc.hasTableNameColumn {
+				shippingConstraint = "CONSTRAINT_3"
+			}
+			mock.ExpectQuery("^" + regexp.QuoteMeta(query) + "$").
+				WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE"}).
+					AddRow("supplier_order", "CONSTRAINT_2", "json_valid(`warehouse_snapshot`)").
+					AddRow("shipping_config", shippingConstraint, "json_valid(`shipment_config`)").
+					AddRow("excluded_table", "CONSTRAINT_2", "json_valid(`other_column`)"))
+
+			require.NoError(t, dumper.fetchAllCheckConstraints(t.Context()))
+			require.NoError(t, mock.ExpectationsWereMet())
+			supplier := dumper.schemaCache["supplier_order"]
+			shipping := dumper.schemaCache["shipping_config"]
+			assert.Equal(t, []CheckConstraintSchema{{Name: "CONSTRAINT_2", Expression: "json_valid(`warehouse_snapshot`)"}}, supplier.CheckConstraints)
+			assert.Equal(t, []CheckConstraintSchema{{Name: shippingConstraint, Expression: "json_valid(`shipment_config`)"}}, shipping.CheckConstraints)
+			assert.Contains(t, supplier.BuildCreateTableSQL(), "CHECK (json_valid(`warehouse_snapshot`))")
+			assert.NotContains(t, supplier.BuildCreateTableSQL(), "shipment_config")
+			assert.NotContains(t, shipping.BuildCreateTableSQL(), "warehouse_snapshot")
+		})
+	}
+}
+
+func TestFetchCheckConstraintsMetadataError(t *testing.T) {
+	db, mock := getDB(t)
+	defer func() { _ = db.Close() }()
+	dumper := getInternalMySQLInstance(db)
+	expected := errors.New("metadata unavailable")
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS").
+		WillReturnError(expected)
+
+	assert.ErrorIs(t, dumper.fetchAllCheckConstraints(t.Context()), expected)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestFetchCheckConstraintsUnsupported(t *testing.T) {
+	db, mock := getDB(t)
+	defer func() { _ = db.Close() }()
+	dumper := getInternalMySQLInstance(db)
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS").
+		WillReturnError(errors.New("unknown table CHECK_CONSTRAINTS"))
+
+	assert.NoError(t, dumper.fetchAllCheckConstraints(t.Context()))
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
