@@ -35,15 +35,25 @@ func (s *SSH) PruneDeployments(ctx context.Context, options DeploymentPruneOptio
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
-	if err != nil {
-		err = errors.Join(ctx.Err(), err)
-		if message := strings.TrimSpace(stderr.String()); message != "" {
-			return result, fmt.Errorf("prune SSH deployments: %s: %w", message, err)
+	// A failed remote cleanup can still report confirmed removals.
+	var decodeErr error
+	if len(output) > 0 {
+		decodeErr = json.Unmarshal(output, &result)
+		if decodeErr != nil {
+			result = DeploymentPruneResult{}
 		}
-		return result, fmt.Errorf("prune SSH deployments: %w", err)
+	} else if err == nil {
+		decodeErr = errors.New("empty response")
 	}
-	if err := json.Unmarshal(output, &result); err != nil {
-		return DeploymentPruneResult{}, fmt.Errorf("decode SSH prune result: %w", err)
+	if err != nil {
+		err = errors.Join(ctx.Err(), err, decodeErr)
+		if message := strings.TrimSpace(stderr.String()); message != "" {
+			return result, fmt.Errorf("cannot prune SSH deployments: %s: %w", message, err)
+		}
+		return result, fmt.Errorf("cannot prune SSH deployments: %w", err)
+	}
+	if decodeErr != nil {
+		return DeploymentPruneResult{}, fmt.Errorf("cannot decode SSH prune result: %w", decodeErr)
 	}
 	return result, nil
 }

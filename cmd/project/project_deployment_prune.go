@@ -15,7 +15,13 @@ import (
 var projectDeploymentPruneCmd = &cobra.Command{
 	Use:   "prune",
 	Short: "Remove old deployments on the target",
-	Args:  cobra.NoArgs,
+	Long: `Remove old SSH deployments and unreferenced cached artifacts from the target.
+Keep the most recent distinct deployments according to --keep. Active, failed,
+and incomplete deployments are protected; interrupted cleanup is resumed.
+Related runtime data, metadata, and logs are removed with each deployment.
+Artifact cleanup is skipped when archive references cannot be determined safely.
+Use --dry-run to preview cleanup without changing the target.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		keep, err := cmd.Flags().GetInt("keep")
 		if err != nil {
@@ -47,7 +53,7 @@ func runProjectDeploymentPrune(cmd *cobra.Command, target deployment.Backend, op
 	}
 	result, err := backend.PruneDeployments(cmd.Context(), options)
 	if err != nil {
-		err = fmt.Errorf("prune deployments: %w", err)
+		err = fmt.Errorf("cannot prune deployments: %w", err)
 	}
 	verb := "Pruned"
 	if options.DryRun {
@@ -55,21 +61,31 @@ func runProjectDeploymentPrune(cmd *cobra.Command, target deployment.Backend, op
 	}
 	if len(result.Hosts) > 0 {
 		for _, host := range result.Hosts {
-			hostResult := deployment.DeploymentPruneResult{Deployments: host.Deployments, Artifacts: host.Artifacts}
+			hostResult := deployment.DeploymentPruneResult{Deployments: host.Deployments, Artifacts: host.Artifacts, ArtifactSkipReasons: host.ArtifactSkipReasons, IncompleteDeployments: host.IncompleteDeployments}
 			if writeErr := writeDeploymentPruneResult(cmd.OutOrStdout(), hostResult, verb, "["+host.Host+"] "); writeErr != nil {
 				return errors.Join(err, writeErr)
 			}
 		}
 		return err
 	}
-	if err != nil && len(result.Deployments) == 0 && len(result.Artifacts) == 0 {
+	if err != nil && len(result.Deployments) == 0 && len(result.Artifacts) == 0 && len(result.ArtifactSkipReasons) == 0 && len(result.IncompleteDeployments) == 0 {
 		return err
 	}
 	return errors.Join(err, writeDeploymentPruneResult(cmd.OutOrStdout(), result, verb, ""))
 }
 
 func writeDeploymentPruneResult(output io.Writer, result deployment.DeploymentPruneResult, verb, prefix string) error {
-	if len(result.Deployments) == 0 && len(result.Artifacts) == 0 {
+	for _, reason := range result.ArtifactSkipReasons {
+		if _, err := fmt.Fprintf(output, "%sSkipped cached artifact cleanup: %s\n", prefix, reason); err != nil {
+			return err
+		}
+	}
+	for _, name := range result.IncompleteDeployments {
+		if _, err := fmt.Fprintf(output, "%sCleanup incomplete for deployment %q; run prune again to resume.\n", prefix, name); err != nil {
+			return err
+		}
+	}
+	if len(result.Deployments) == 0 && len(result.Artifacts) == 0 && len(result.ArtifactSkipReasons) == 0 && len(result.IncompleteDeployments) == 0 {
 		_, err := fmt.Fprintf(output, "%sNo deployments or cached artifacts to prune.\n", prefix)
 		return err
 	}

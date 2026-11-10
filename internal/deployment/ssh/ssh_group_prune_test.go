@@ -125,3 +125,15 @@ func TestSSHGroupPruneCancelled(t *testing.T) {
 		assert.NoFileExists(t, filepath.Join(requests, host.name+".request"))
 	}
 }
+
+func TestSSHGroupPrunePreservesFailedHostProgress(t *testing.T) {
+	g, bin := fakePruneGroup(t, 2)
+	worker := filepath.Join(bin, "m-failed")
+	require.NoError(t, os.WriteFile(worker, []byte("#!/bin/sh\necho '{\"deployments\":[{\"reference\":\"removed\"}],\"artifacts\":[],\"artifact_skip_reasons\":[\"unknown metadata\"],\"incomplete_deployments\":[\"unfinished\"]}'\nexit 42\n"), 0755))
+	result, err := g.PruneDeployments(t.Context(), DeploymentPruneOptions{})
+	require.Error(t, err)
+	require.Len(t, result.Hosts, 3)
+	assert.Equal(t, []Deployment{{Reference: "removed"}}, result.Hosts[1].Deployments)
+	assert.Equal(t, []string{"unfinished"}, result.Hosts[1].IncompleteDeployments)
+	assert.Equal(t, []string{"unknown metadata"}, result.Hosts[1].ArtifactSkipReasons)
+}

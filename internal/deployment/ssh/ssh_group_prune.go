@@ -19,16 +19,19 @@ func (g *sshGroup) PruneDeployments(ctx context.Context, options DeploymentPrune
 	err := g.parallel(ctx, func(i int) error {
 		host := g.hosts[i]
 		pruned, err := host.backend.PruneDeployments(ctx, options)
-		if err != nil {
-			return fmt.Errorf("prune failed; cleanup may be partial or unknown: %w", err)
+		if err == nil || len(pruned.Deployments)+len(pruned.Artifacts)+len(pruned.ArtifactSkipReasons)+len(pruned.IncompleteDeployments) > 0 {
+			rows[i] = &DeploymentPruneHostResult{
+				Host: host.name, Deployments: pruned.Deployments, Artifacts: pruned.Artifacts,
+				ArtifactSkipReasons: pruned.ArtifactSkipReasons, IncompleteDeployments: pruned.IncompleteDeployments,
+			}
 		}
-		rows[i] = &DeploymentPruneHostResult{
-			Host: host.name, Deployments: pruned.Deployments, Artifacts: pruned.Artifacts,
+		if err != nil {
+			return fmt.Errorf("cannot prune deployments; cleanup may be partial or unknown: %w", err)
 		}
 		return nil
 	})
 	// newSSHGroup sorts hosts; collect after all workers finish, preserving empty
-	// successful results while excluding failed or cancelled hosts.
+	// successful results and confirmed progress from failed hosts.
 	for _, row := range rows {
 		if row != nil {
 			result.Hosts = append(result.Hosts, *row)

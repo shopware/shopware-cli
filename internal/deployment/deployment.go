@@ -63,16 +63,20 @@ type DeploymentPruneOptions struct {
 
 // DeploymentPruneResult lists removals, or planned removals for a dry run.
 type DeploymentPruneResult struct {
-	Deployments []Deployment                `json:"deployments"`
-	Artifacts   []string                    `json:"artifacts"`
-	Hosts       []DeploymentPruneHostResult `json:"hosts,omitempty"`
+	ArtifactSkipReasons   []string                    `json:"artifact_skip_reasons,omitempty"`
+	IncompleteDeployments []string                    `json:"incomplete_deployments,omitempty"`
+	Deployments           []Deployment                `json:"deployments"`
+	Artifacts             []string                    `json:"artifacts"`
+	Hosts                 []DeploymentPruneHostResult `json:"hosts,omitempty"`
 }
 
-// DeploymentPruneHostResult records a successful host-local prune, including no-op results.
+// DeploymentPruneHostResult records confirmed host-local progress, including partial failures.
 type DeploymentPruneHostResult struct {
-	Host        string       `json:"host"`
-	Deployments []Deployment `json:"deployments"`
-	Artifacts   []string     `json:"artifacts"`
+	ArtifactSkipReasons   []string     `json:"artifact_skip_reasons,omitempty"`
+	IncompleteDeployments []string     `json:"incomplete_deployments,omitempty"`
+	Host                  string       `json:"host"`
+	Deployments           []Deployment `json:"deployments"`
+	Artifacts             []string     `json:"artifacts"`
 }
 
 type DeploymentPruner interface {
