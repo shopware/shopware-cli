@@ -15,9 +15,9 @@ var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Run static analysis and Shopware checks on a project",
 	Long: `Validate the project's own code, such as extensions in custom/ and configured bundles.
-Packages that Composer installs into vendor/ are not validated, but PHPStan and Rector need them, so run composer install first.
-Prettier, PHP-CS-Fixer and Rector run in dry mode by default. Their findings fail validation and may fail previously passing CI jobs.
-Run "project format" to apply formatting and "project fix" to apply Rector changes. Use "--exclude rector" to skip Rector.`,
+Packages that Composer installs into vendor/ are not validated, but PHPStan needs them, so run composer install first.
+Prettier and PHP-CS-Fixer run in dry mode by default. Their findings fail validation and may fail previously passing CI jobs.
+Run "project format" to apply formatting. Use "--exclude prettier,php-cs-fixer" to skip formatting checks.`,
 	Args: cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {

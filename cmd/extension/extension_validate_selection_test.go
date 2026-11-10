@@ -14,12 +14,12 @@ func TestExtensionValidationSelection(t *testing.T) {
 	t.Run("default runs all checkers", func(t *testing.T) {
 		tools, statuses, err := selectExtensionValidationTools("", "")
 		require.NoError(t, err)
-		assert.Len(t, tools, 8)
+		assert.Len(t, tools, 7)
 		assert.Empty(t, statuses)
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
 	})
 
-	for _, name := range []string{"prettier", "php-cs-fixer", "rector"} {
+	for _, name := range []string{"prettier", "php-cs-fixer"} {
 		t.Run("only "+name, func(t *testing.T) {
 			tools, _, err := selectExtensionValidationTools(name, "")
 			require.NoError(t, err)
@@ -44,10 +44,10 @@ func TestExtensionValidationSelection(t *testing.T) {
 	})
 
 	t.Run("default exclusion is reported", func(t *testing.T) {
-		tools, statuses, err := selectExtensionValidationTools("", "rector")
+		tools, statuses, err := selectExtensionValidationTools("", "php-cs-fixer")
 		require.NoError(t, err)
-		assert.NotContains(t, toolNamesForValidation(tools), "rector")
-		assert.Contains(t, statuses, verifier.ToolResult{Name: "rector", SkipReason: "excluded by --exclude"})
+		assert.NotContains(t, toolNamesForValidation(tools), "php-cs-fixer")
+		assert.Contains(t, statuses, verifier.ToolResult{Name: "php-cs-fixer", SkipReason: "excluded by --exclude"})
 	})
 
 	t.Run("exclude applies after only", func(t *testing.T) {
@@ -64,9 +64,9 @@ func TestExtensionValidationSelection(t *testing.T) {
 	})
 
 	t.Run("unsupported operation lists checkers", func(t *testing.T) {
-		_, _, err := selectExtensionValidationTools("symfony-xml", "")
-		require.ErrorContains(t, err, `tool with name "symfony-xml" not found, possible tools:`)
-		assert.NotContains(t, err.Error(), "symfony-xml,")
+		_, _, err := selectExtensionValidationTools("rector", "")
+		require.ErrorContains(t, err, `tool with name "rector" not found, possible tools:`)
+		assert.NotContains(t, err.Error(), "rector,")
 		assert.Contains(t, err.Error(), "phpstan")
 	})
 
@@ -75,7 +75,7 @@ func TestExtensionValidationSelection(t *testing.T) {
 		require.ErrorContains(t, err, `tool with name "phpsta" not found, possible tools:`)
 		assert.Contains(t, err.Error(), "phpstan")
 		assert.Contains(t, err.Error(), "prettier")
-		assert.Contains(t, err.Error(), "rector")
+		assert.NotContains(t, err.Error(), "rector")
 	})
 
 	t.Run("empty selection fails", func(t *testing.T) {

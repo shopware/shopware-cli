@@ -29,7 +29,7 @@ func toolNames[T Tool](list ToolList[T]) []string {
 }
 
 func TestToolsByCapability(t *testing.T) {
-	assert.ElementsMatch(t, []string{"eslint", "phpstan", "storefront-twig", "stylelint", "builtin", "prettier", "php-cs-fixer", "rector"}, toolNames(GetToolsOf[CheckTool]()))
+	assert.ElementsMatch(t, []string{"eslint", "phpstan", "storefront-twig", "stylelint", "builtin", "prettier", "php-cs-fixer"}, toolNames(GetToolsOf[CheckTool]()))
 	assert.ElementsMatch(t, []string{"eslint", "rector", "stylelint", "symfony-xml"}, toolNames(GetToolsOf[FixTool]()))
 	assert.ElementsMatch(t, []string{"php-cs-fixer", "prettier"}, toolNames(GetToolsOf[FormatTool]()))
 }

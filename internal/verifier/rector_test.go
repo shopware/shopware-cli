@@ -389,13 +389,8 @@ exit 2`, "src")
 	file := filepath.Join(root, "src", "file.php")
 	require.NoError(t, os.WriteFile(file, []byte("<?php // unchanged\n"), 0o600))
 	config := ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories}
-	for _, check := range []bool{false, true} {
-		var result validation.ToolReport
-		if check {
-			result = runCheckTool(t, Rector{}, config)
-		} else {
-			result = runFixToolWithDryRun(t, Rector{}, config, true)
-		}
+	for range 2 {
+		result := runFixToolWithDryRun(t, Rector{}, config, true)
 		assert.Empty(t, result.Errors)
 		assert.Equal(t, "custom rules from rector.php", result.Note)
 		assert.ElementsMatch(t, []validation.CheckResult{{
@@ -409,7 +404,7 @@ exit 2`, "src")
 	}
 }
 
-func TestRectorCheckOutcomes(t *testing.T) {
+func TestRectorFixDryRunOutcomes(t *testing.T) {
 	for _, scenario := range []struct {
 		name, output, exit string
 		failed             bool
@@ -436,7 +431,7 @@ func TestRectorCheckOutcomes(t *testing.T) {
 			t.Setenv("RECTOR_DRY_RUN_OUTPUT", scenario.output)
 			t.Setenv("RECTOR_DRY_RUN_EXIT", scenario.exit)
 			t.Setenv("RECTOR_STDERR", "diagnostic")
-			result := runCheckTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
+			result := runFixToolWithDryRun(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories}, true)
 			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 			assert.ElementsMatch(t, scenario.findings, result.Findings)
 			assert.Equal(t, "custom rules from rector.php", result.Note)

@@ -169,16 +169,16 @@ name is an error, and `ToolList[T]` preserves the capability type through
 filtering.
 
 - **Checkers**: `builtin` (legacy alias: `sw-cli`), PHPStan, ESLint, Stylelint,
-  Storefront Twig, PHP-CS-Fixer, Prettier, Rector
+  Storefront Twig, PHP-CS-Fixer, Prettier
 - **Fixers**: Rector, ESLint, Stylelint, Symfony XML conversion
 - **Formatters**: PHP-CS-Fixer, Prettier
 
 `extension validate` and `project validate` run all checkers by default,
-including formatting and Rector dry runs. These findings can fail previously
-passing CI jobs; use `--exclude rector` to skip Rector, `format` to apply
-formatting, and `fix` to apply Rector changes. Rector uses the lowest supported
-dependencies for extensions and installed dependencies for projects. The
-deprecated `--full` flag remains accepted but has no effect; use `--only` or
+including formatting dry runs. These findings can fail previously passing CI
+jobs; use `--exclude prettier,php-cs-fixer` to skip formatting checks and
+`format` to apply formatting. Rector remains a fixer and is not run by
+validation. The deprecated `--full` flag remains accepted but has no effect;
+use `--only` or
 `--exclude` to select checkers. Tools report findings and failures through a
 `ToolExecution` helper and return a `ToolResult` with an optional note or skip
 reason; the shared runner (`RunTools`) filters and collects findings, and
