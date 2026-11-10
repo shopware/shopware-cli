@@ -2,6 +2,7 @@ package archiver
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,11 +10,14 @@ import (
 	"strings"
 )
 
-// Unzip extracts a zip archive to a destination directory.
-func Unzip(r *zip.Reader, dest string) error {
+// Unzip extracts an archive, checking cancellation between entries.
+func Unzip(ctx context.Context, r *zip.Reader, dest string) error {
 	errorFormat := "unzip: %w"
 
 	for _, f := range r.File {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		// Store filename/path for returning and using later on
 		fpath := filepath.Join(dest, f.Name) //nolint:gosec
 

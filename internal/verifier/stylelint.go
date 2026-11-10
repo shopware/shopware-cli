@@ -67,8 +67,8 @@ func (s StyleLint) run(
 	changedFiles := make(map[string]struct{})
 	ran, failed := false, false
 
-	runDirectories(paths, func(directory string) {
-		hasSCSS, err := hasSCSSFiles(directory)
+	runDirectories(ctx, paths, func(directory string) {
+		hasSCSS, err := hasSCSSFiles(ctx, directory)
 		if err != nil {
 			execution.Fail(&ToolError{Err: fmt.Errorf("cannot find SCSS files: %w", err)})
 			summaryMu.Lock()
@@ -240,9 +240,12 @@ func init() {
 	AddTool(StyleLint{})
 }
 
-func hasSCSSFiles(dir string) (bool, error) {
+func hasSCSSFiles(ctx context.Context, dir string) (bool, error) {
 	var found bool
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}

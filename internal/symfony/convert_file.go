@@ -1,6 +1,7 @@
 package symfony
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -83,8 +84,8 @@ func (r *Routes) toYAML() ([]byte, error) {
 // are written next to the XML files and the XML files are removed afterwards.
 // Nothing is written when one of the involved files cannot be converted.
 // It returns a map of the XML files to the created YAML files.
-func ConvertServicesXMLFile(path string) (map[string]string, error) {
-	return convertXMLConfigFile(path, func(content []byte) (convertibleXMLConfig, error) {
+func ConvertServicesXMLFile(ctx context.Context, path string) (map[string]string, error) {
+	return convertXMLConfigFile(ctx, path, func(content []byte) (convertibleXMLConfig, error) {
 		return ParseServicesXML(content)
 	}, false)
 }
@@ -92,29 +93,30 @@ func ConvertServicesXMLFile(path string) (map[string]string, error) {
 // ConvertRoutesXMLFile converts a Symfony routes.xml file and any local XML
 // files referenced through imports, with the same guarantees as
 // ConvertServicesXMLFile.
-func ConvertRoutesXMLFile(path string) (map[string]string, error) {
-	return convertXMLConfigFile(path, func(content []byte) (convertibleXMLConfig, error) {
+func ConvertRoutesXMLFile(ctx context.Context, path string) (map[string]string, error) {
+	return convertXMLConfigFile(ctx, path, func(content []byte) (convertibleXMLConfig, error) {
 		return ParseRoutesXML(content)
 	}, false)
 }
 
 // PlanServicesXMLFile validates conversion of a services file and its local XML
 // imports, returning the planned XML-to-YAML paths without changing any files.
-func PlanServicesXMLFile(path string) (map[string]string, error) {
-	return convertXMLConfigFile(path, func(content []byte) (convertibleXMLConfig, error) {
+func PlanServicesXMLFile(ctx context.Context, path string) (map[string]string, error) {
+	return convertXMLConfigFile(ctx, path, func(content []byte) (convertibleXMLConfig, error) {
 		return ParseServicesXML(content)
 	}, true)
 }
 
 // PlanRoutesXMLFile validates conversion of a routes file and its local XML
 // imports, returning the planned XML-to-YAML paths without changing any files.
-func PlanRoutesXMLFile(path string) (map[string]string, error) {
-	return convertXMLConfigFile(path, func(content []byte) (convertibleXMLConfig, error) {
+func PlanRoutesXMLFile(ctx context.Context, path string) (map[string]string, error) {
+	return convertXMLConfigFile(ctx, path, func(content []byte) (convertibleXMLConfig, error) {
 		return ParseRoutesXML(content)
 	}, true)
 }
 
 func convertXMLConfigFile(
+	ctx context.Context,
 	path string,
 	parse func([]byte) (convertibleXMLConfig, error),
 	dryRun bool,
@@ -122,13 +124,18 @@ func convertXMLConfigFile(
 	contents := map[string][]byte{}
 	targets := map[string]string{}
 
-	if err := planConversion(path, parse, contents, targets); err != nil {
+	if err := planConversion(ctx, path, parse, contents, targets); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if dryRun {
 		return targets, nil
 	}
 
+	// Once writes begin, finish this conversion so cancellation cannot leave
+	// imports split between XML and YAML. Stop at the next conversion boundary.
 	for xmlPath, target := range targets {
 		if err := os.WriteFile(target, contents[xmlPath], 0o644); err != nil {
 			return nil, err
@@ -144,7 +151,10 @@ func convertXMLConfigFile(
 	return targets, nil
 }
 
-func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error), contents map[string][]byte, targets map[string]string) error {
+func planConversion(ctx context.Context, path string, parse func([]byte) (convertibleXMLConfig, error), contents map[string][]byte, targets map[string]string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if _, planned := targets[path]; planned {
 		return nil
 	}
@@ -180,6 +190,9 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 	// Convert local XML files referenced by imports as well and rewrite the
 	// import to the new YAML file.
 	for _, reference := range config.importReferences() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		resource := *reference.resource
 
 		if !strings.HasSuffix(strings.ToLower(resource), ".xml") || strings.ContainsAny(resource, "*?[{") || filepath.IsAbs(resource) {
@@ -194,7 +207,7 @@ func planConversion(path string, parse func([]byte) (convertibleXMLConfig, error
 			continue
 		}
 
-		if err := planConversion(importPath, parse, contents, targets); err != nil {
+		if err := planConversion(ctx, importPath, parse, contents, targets); err != nil {
 			return err
 		}
 

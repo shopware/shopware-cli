@@ -20,6 +20,9 @@ func SetupExtensionToolConfig(ctx context.Context, version string, ext extension
 }
 
 func ConvertExtensionToToolConfig(ctx context.Context, ext extension.Extension) (*ToolConfig, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var ignores []validation.ToolConfigIgnore
 
 	for _, ignore := range ext.GetExtensionConfig().Validation.Ignore {
@@ -45,7 +48,7 @@ func ConvertExtensionToToolConfig(ctx context.Context, ext extension.Extension) 
 		return nil, err
 	}
 
-	if err := determineVersionRange(cfg, constraint); err != nil {
+	if err := determineVersionRange(ctx, cfg, constraint); err != nil {
 		return nil, err
 	}
 
@@ -57,8 +60,8 @@ func ConvertExtensionToToolConfig(ctx context.Context, ext extension.Extension) 
 // variable so tests can replace it with a fake that does not hit the network.
 var getShopwareVersions = extension.GetShopwareVersions
 
-func determineVersionRange(cfg *ToolConfig, versionConstraint *version.Constraints) error {
-	versions, err := getShopwareVersions(context.Background())
+func determineVersionRange(ctx context.Context, cfg *ToolConfig, versionConstraint *version.Constraints) error {
+	versions, err := getShopwareVersions(ctx)
 	if err != nil {
 		return err
 	}

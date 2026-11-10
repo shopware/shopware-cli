@@ -37,6 +37,9 @@ func preparePHPTool(config ToolConfig, execution *ToolExecution) (ToolSummary, b
 // cache on every run, so validation never touches vendor/, composer.json or
 // composer.lock.
 func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *ToolExecution) (string, *ToolError) {
+	if err := ctx.Err(); err != nil {
+		return "", &ToolError{Err: err}
+	}
 	if config.IsProject {
 		_, err := os.Stat(path.Join(config.RootDir, "vendor"))
 		if err == nil {
@@ -107,6 +110,10 @@ func lockComposerCache(ctx context.Context, lockFile string) (func(), error) {
 
 	waiting := false
 	for {
+		if err := ctx.Err(); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
 		err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
 			// Closing the file releases the lock.

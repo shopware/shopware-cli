@@ -88,12 +88,33 @@ func validateExtensionIcon(ext Extension, check validation.Check) {
 // RunValidation uses phpVersion as the default PHP target unless the extension
 // sets validation.php_version. An empty target uses the Shopware minimum.
 func RunValidation(ctx context.Context, ext Extension, check validation.Check, phpVersion string) {
-	runDefaultValidate(ext, check)
+	if ctx.Err() != nil {
+		return
+	}
+	runDefaultValidate(ctx, ext, check)
+	if ctx.Err() != nil {
+		return
+	}
 	ext.Validate(ctx, check)
+	if ctx.Err() != nil {
+		return
+	}
 	validatePHPFiles(ctx, ext, check, phpVersion)
-	validateAdministrationSnippets(ext, check)
-	validateStorefrontSnippets(ext, check)
+	if ctx.Err() != nil {
+		return
+	}
+	validateAdministrationSnippets(ctx, ext, check)
+	if ctx.Err() != nil {
+		return
+	}
+	validateStorefrontSnippets(ctx, ext, check)
+	if ctx.Err() != nil {
+		return
+	}
 	validateAssets(ext, check)
+	if ctx.Err() != nil {
+		return
+	}
 	validateSymfonyXml(ext, check)
 	// Note: ignores are now applied in the verifier layer
 }
@@ -139,7 +160,7 @@ func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir, root stri
 	}
 }
 
-func runDefaultValidate(ext Extension, check validation.Check) {
+func runDefaultValidate(ctx context.Context, ext Extension, check validation.Check) {
 	_, versionErr := ext.GetVersion()
 	name, nameErr := ext.GetName()
 	_, shopwareVersionErr := ext.GetShopwareVersionConstraint()
@@ -187,7 +208,10 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		})
 	}
 
-	validateZipFiles(ext.GetPath(), check)
+	validateZipFiles(ctx, ext.GetPath(), check)
+	if ctx.Err() != nil {
+		return
+	}
 
 	license, err := ext.GetLicense()
 
@@ -290,10 +314,13 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 }
 
 // validateZipFiles reports files under extensionRoot that a zip must not contain.
-func validateZipFiles(extensionRoot string, check validation.Check) {
+func validateZipFiles(ctx context.Context, extensionRoot string, check validation.Check) {
 	notAllowedErrorFormat := "file %s is not allowed in the zip file"
 	cacheDir := filepath.Join(extensionRoot, ValidationCacheDir)
 	_ = filepath.Walk(extensionRoot, func(p string, info fs.FileInfo, _ error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		// The validation cache is never packed and can hold a whole vendor/.
 		if info != nil && info.IsDir() && p == cacheDir {
 			return filepath.SkipDir
