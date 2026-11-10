@@ -16,7 +16,7 @@ permissions:
 jobs:
   remind:
     name: Report due deprecations
-    if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
+    if: github.repository == 'shopware/shopware-cli'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -36,10 +36,10 @@ jobs:
           TRACKING_ISSUE: '1859'
           DAYS: ${{ inputs.days || 7 }}
         run: |
-          # Forks and repositories without the secret skip the report.
+          # Fail every week rather than only when something is due, so a missing secret is noticed.
           if [ -z "$SLACK_DEPRECATIONS_WORKFLOW_URL" ]; then
-            echo "No Slack webhook is configured, skipping the report"
-            exit 0
+            echo "::error::The SLACK_DEPRECATIONS_WORKFLOW_URL secret is not set"
+            exit 1
           fi
           cutoff=$(jq --null-input --raw-output --argjson days "$DAYS" 'now + $days * 86400 | strftime("%Y-%m-%d")')
           due=""
