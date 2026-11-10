@@ -6,6 +6,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -16,8 +17,14 @@ var (
 )
 
 // Message is the sentence cobra appends to its own "has been deprecated" or
-// "is deprecated" prefix for flags and commands. replacement may be empty.
+// "is deprecated" prefix for flags and commands. removedBy is a YYYY-MM-DD
+// date; Message panics on any other value, as it is only called while
+// commands are registered. replacement may be empty.
 func Message(removedBy, replacement string) string {
+	if _, err := time.Parse(time.DateOnly, removedBy); err != nil {
+		panic("deprecation.Message: removedBy must be a YYYY-MM-DD date, got " + removedBy)
+	}
+
 	message := "it will be removed by " + removedBy
 	if replacement != "" {
 		message += ", use " + replacement + " as replacement"
@@ -27,7 +34,7 @@ func Message(removedBy, replacement string) string {
 }
 
 // Warn logs that subject is deprecated and reports id via telemetry.
-// replacement may be empty.
+// removedBy is a YYYY-MM-DD date. replacement may be empty.
 func Warn(ctx context.Context, id, subject, removedBy, replacement string) {
 	message := subject + " is deprecated and will be removed by " + removedBy
 	if replacement != "" {

@@ -11,6 +11,10 @@ func TestMessageNamesReplacementWhenGiven(t *testing.T) {
 	assert.NotContains(t, Message("2027-02-10", ""), "use")
 }
 
+func TestMessagePanicsOnInvalidDate(t *testing.T) {
+	assert.Panics(t, func() { Message("10-02-2027", "") })
+}
+
 func TestTrackRecordsEachIDOnceSorted(t *testing.T) {
 	t.Cleanup(func() { used = nil })
 
