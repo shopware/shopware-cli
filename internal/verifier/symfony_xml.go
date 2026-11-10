@@ -22,15 +22,15 @@ func (SymfonyXMLConverter) Name() string {
 	return "symfony-xml"
 }
 
-func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
+func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	found := false
 	changed := 0
 	failed := false
 	pendingFiles := make(map[string]struct{})
 	conversions := []struct {
 		fileName string
-		convert  func(string) (map[string]string, error)
-		plan     func(string) (map[string]string, error)
+		convert  func(context.Context, string) (map[string]string, error)
+		plan     func(context.Context, string) (map[string]string, error)
 	}{
 		{"services.xml", symfony.ConvertServicesXMLFile, symfony.PlanServicesXMLFile},
 		{"routes.xml", symfony.ConvertRoutesXMLFile, symfony.PlanRoutesXMLFile},
@@ -38,6 +38,9 @@ func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution
 
 	for _, configDir := range s.collectConfigDirs(config) {
 		for _, conversion := range conversions {
+			if ctx.Err() != nil {
+				return ToolSummary{}
+			}
 			xmlPath := filepath.Join(configDir, conversion.fileName)
 
 			if _, err := os.Stat(xmlPath); err != nil {
@@ -54,7 +57,7 @@ func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig, execution
 				convert = conversion.plan
 			}
 
-			converted, err := convert(xmlPath)
+			converted, err := convert(ctx, xmlPath)
 			if err != nil {
 				if finding, ok := symfonyXMLFinding(err, config.RootDir); ok {
 					execution.AddFindings(finding)

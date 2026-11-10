@@ -255,13 +255,13 @@ func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.R
 	if err != nil {
 		return Rollout{}, fmt.Errorf("negotiate deployment: %w", err)
 	}
-	if input.Action == sshDeploymentActivate && action != "REUSE" && action != "UNCHANGED" {
+	if input.Action == sshDeploymentActivate && action != sshRolloutReuse && action != sshRolloutUnchanged {
 		return Rollout{}, fmt.Errorf("unexpected archive operation %s during retained deployment activation", action)
 	}
-	if action == "UPLOAD" && archive == nil {
+	if action == sshRolloutUpload && archive == nil {
 		return Rollout{}, errors.New("archive upload requested without an archive")
 	}
-	if action == "UNCHANGED" {
+	if action == sshRolloutUnchanged {
 		line, err := stdout.ReadSlice('\n')
 		if err != nil {
 			return Rollout{}, err
@@ -272,12 +272,12 @@ func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.R
 		}
 		return Rollout{Reference: reference, Deployment: Deployment{Reference: input.Deployment}, Active: true, Unchanged: true}, nil
 	}
-	if action == "REUSE" {
+	if action == sshRolloutReuse {
 		section := sections.Section("Reusing prepared release")
-		err = readRolloutMessage(stdout, "READY "+input.Reference)
+		err = readRolloutMessage(stdout, sshRolloutReady+" "+input.Reference)
 		section.End()
 	} else {
-		err = prepareSSHRelease(ctx, stdin, stdout, archive, input, sections, action == "UPLOAD")
+		err = prepareSSHRelease(ctx, stdin, stdout, archive, input, sections, action == sshRolloutUpload)
 	}
 	if err != nil {
 		return Rollout{}, err
@@ -287,10 +287,10 @@ func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.R
 	}
 	activationSection := sections.Section("Activating release")
 	defer activationSection.End()
-	if _, err := fmt.Fprintln(stdin, "ACTIVATE "+input.Reference); err != nil {
+	if _, err := fmt.Fprintln(stdin, sshRolloutActivate+" "+input.Reference); err != nil {
 		return Rollout{}, err
 	}
-	if err := readRolloutMessage(stdout, "ACTIVE "+input.Reference); err != nil {
+	if err := readRolloutMessage(stdout, sshRolloutActive+" "+input.Reference); err != nil {
 		return Rollout{}, err
 	}
 	return Rollout{Reference: input.Reference, Deployment: Deployment{Reference: input.Deployment}, Active: true}, nil
@@ -311,21 +311,35 @@ func prepareSSHRelease(ctx context.Context, stdin io.Writer, stdout *bufio.Reade
 		return fmt.Errorf("upload deployment archive: %w", err)
 	}
 
-	if err := readRolloutMessage(stdout, "PREPARE "+input.Reference); err != nil {
+	if err := readRolloutMessage(stdout, sshRolloutPrepare+" "+input.Reference); err != nil {
 		return fmt.Errorf("start release preparation: %w", err)
 	}
 	prepareSection := sections.Section("Preparing release")
-	if _, err := fmt.Fprintln(stdin, "CONTINUE "+input.Reference); err != nil {
+	if _, err := fmt.Fprintln(stdin, sshRolloutContinue+" "+input.Reference); err != nil {
 		prepareSection.End()
 		return err
 	}
-	err = readRolloutMessage(stdout, "READY "+input.Reference)
+	err = readRolloutMessage(stdout, sshRolloutReady+" "+input.Reference)
 	prepareSection.End()
 	if err != nil {
 		return fmt.Errorf("prepare release: %w", err)
 	}
 	return nil
 }
+
+// SSH rollout wire-protocol actions and acknowledgements.
+const (
+	sshRolloutUpload    = "UPLOAD"
+	sshRolloutCached    = "CACHED"
+	sshRolloutReuse     = "REUSE"
+	sshRolloutUnchanged = "UNCHANGED"
+	sshRolloutPrepare   = "PREPARE"
+	sshRolloutContinue  = "CONTINUE"
+	sshRolloutStaged    = "STAGED"
+	sshRolloutReady     = "READY"
+	sshRolloutActivate  = "ACTIVATE"
+	sshRolloutActive    = "ACTIVE"
+)
 
 func readRolloutAction(reader *bufio.Reader, reference string) (string, error) {
 	line, err := reader.ReadSlice('\n')
@@ -335,7 +349,7 @@ func readRolloutAction(reader *bufio.Reader, reference string) (string, error) {
 	action, id, ok := strings.Cut(strings.TrimSuffix(string(line), "\n"), " ")
 	if ok && id == reference {
 		switch action {
-		case "UPLOAD", "CACHED", "REUSE", "UNCHANGED":
+		case sshRolloutUpload, sshRolloutCached, sshRolloutReuse, sshRolloutUnchanged:
 			return action, nil
 		}
 	}

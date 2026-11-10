@@ -227,7 +227,7 @@ func updateTranslatableXMLElement(parent *xmlpath.Element, name string, translat
 	}
 }
 
-func (a App) Validate(_ context.Context, check validation.Check) {
+func (a App) Validate(ctx context.Context, check validation.Check) {
 	validateTheme(a, check)
 
 	validateExtensionIcon(a, check)
@@ -235,6 +235,9 @@ func (a App) Validate(_ context.Context, check validation.Check) {
 	allowedTwigLocations := []string{filepath.Join(a.GetRootDir(), "Resources", "views"), filepath.Join(a.GetRootDir(), "Resources", "scripts")}
 
 	_ = filepath.Walk(a.GetRootDir(), func(path string, info os.FileInfo, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		relPath := validation.NormalizeSourcePath(path, a.GetPath())
 		if filepath.Ext(path) == ".php" {
 			check.AddResult(validation.CheckResult{
@@ -257,6 +260,9 @@ func (a App) Validate(_ context.Context, check validation.Check) {
 		return nil
 	})
 
+	if ctx.Err() != nil {
+		return
+	}
 	if a.manifest.Meta.Author == "" {
 		check.AddResult(validation.CheckResult{
 			Path:       "manifest.xml",

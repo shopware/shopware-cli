@@ -3,6 +3,7 @@ package archiver
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUnzipDoesNotWriteAfterCancellation(t *testing.T) {
+	var archive bytes.Buffer
+	w := zip.NewWriter(&archive)
+	file, err := w.Create("file.txt")
+	require.NoError(t, err)
+	_, err = file.Write([]byte("contents"))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	r, err := zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	dest := t.TempDir()
+	assert.ErrorIs(t, Unzip(ctx, r, dest), context.Canceled)
+	assert.NoFileExists(t, filepath.Join(dest, "file.txt"))
+}
 
 func TestCreateZip(t *testing.T) {
 	t.Run("creates valid zip file", func(t *testing.T) {
@@ -87,7 +105,7 @@ func TestUnzip(t *testing.T) {
 		// Extract
 		destDir := filepath.Join(tmpDir, "extracted")
 		require.NoError(t, os.MkdirAll(destDir, 0755))
-		err = Unzip(zipReader, destDir)
+		err = Unzip(t.Context(), zipReader, destDir)
 		require.NoError(t, err)
 
 		// Verify extracted files
@@ -120,7 +138,7 @@ func TestUnzip(t *testing.T) {
 		destDir := filepath.Join(tmpDir, "extracted")
 		require.NoError(t, os.MkdirAll(destDir, 0755))
 
-		err = Unzip(zipReader, destDir)
+		err = Unzip(t.Context(), zipReader, destDir)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "illegal file path")
 	})

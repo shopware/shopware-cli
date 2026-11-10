@@ -63,7 +63,7 @@ func GitCopyFolder(ctx context.Context, source, target, commitHash string) (stri
 		return "", fmt.Errorf("cannot open the zip file produced by git archive: %w", err)
 	}
 
-	err = archiver.Unzip(zipReader, target)
+	err = archiver.Unzip(ctx, zipReader, target)
 	if err != nil {
 		return "", fmt.Errorf("cannot unzip the zip archive: %w", err)
 	}

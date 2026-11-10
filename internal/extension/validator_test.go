@@ -51,7 +51,7 @@ func TestLicenseValidationNoLicense(t *testing.T) {
 
 	check := &testCheck{}
 
-	runDefaultValidate(app, check)
+	runDefaultValidate(t.Context(), app, check)
 
 	assert.True(t, len(check.Results) > 0)
 	assert.Equal(t, "Could not validate the license: empty license string", check.Results[0].Message)
@@ -63,7 +63,7 @@ func TestLicenseValidationInvalidLicense(t *testing.T) {
 
 	check := &testCheck{}
 
-	runDefaultValidate(app, check)
+	runDefaultValidate(t.Context(), app, check)
 
 	assert.True(t, len(check.Results) > 0)
 	assert.Equal(t, "Could not validate the license: invalid license factor: \"FUUUU\"", check.Results[0].Message)
@@ -74,7 +74,7 @@ func TestLicenseValidate(t *testing.T) {
 
 	check := &testCheck{}
 
-	runDefaultValidate(app, check)
+	runDefaultValidate(t.Context(), app, check)
 
 	assert.False(t, len(check.Results) > 0)
 }
@@ -95,7 +95,7 @@ func TestDescriptionLengthCountedInCharacters(t *testing.T) {
 
 	check := &testCheck{}
 
-	runDefaultValidate(app, check)
+	runDefaultValidate(t.Context(), app, check)
 
 	assert.Empty(t, check.Results)
 }
@@ -116,7 +116,7 @@ func TestDescriptionTooLongReportsCharacterCount(t *testing.T) {
 
 	check := &testCheck{}
 
-	runDefaultValidate(app, check)
+	runDefaultValidate(t.Context(), app, check)
 
 	assert.Len(t, check.Results, 2)
 	identifiers := make([]string, 0, len(check.Results))
@@ -144,7 +144,7 @@ func TestDescriptionMissingUsesTranslationIdentifier(t *testing.T) {
 	}
 
 	check := &testCheck{}
-	runDefaultValidate(app, check)
+	runDefaultValidate(t.Context(), app, check)
 
 	identifiers := make([]string, 0, len(check.Results))
 	for _, result := range check.Results {
@@ -194,7 +194,7 @@ func TestLabelMissingUsesTranslationIdentifier(t *testing.T) {
 	}
 
 	check := &testCheck{}
-	runDefaultValidate(app, check)
+	runDefaultValidate(t.Context(), app, check)
 
 	identifiers := make([]string, 0, len(check.Results))
 	for _, result := range check.Results {
@@ -350,7 +350,7 @@ func TestLicenseValidationReportedOncePerExtension(t *testing.T) {
 	plugin.Composer.License = ""
 
 	check := &testCheck{}
-	runDefaultValidate(plugin, check)
+	runDefaultValidate(t.Context(), plugin, check)
 
 	assert.Equal(t, 1, countResultsWithMessage(check.Results, "Could not validate the license: empty license string"))
 }
@@ -377,7 +377,7 @@ func TestDefaultValidateSkipsValidationCache(t *testing.T) {
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".DS_Store"), []byte{}, 0o644))
 
 	check := &testCheck{}
-	runDefaultValidate(plugin, check)
+	runDefaultValidate(t.Context(), plugin, check)
 
 	var disallowed []string
 	for _, result := range check.Results {

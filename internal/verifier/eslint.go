@@ -67,7 +67,7 @@ func (e Eslint) run(
 	changedFiles := make(map[string]struct{})
 	failed := false
 
-	runDirectories(paths, func(directory string) {
+	runDirectories(ctx, paths, func(directory string) {
 		report := e.runDirectory(ctx, config, execution, directory, fix)
 		if !fix {
 			return

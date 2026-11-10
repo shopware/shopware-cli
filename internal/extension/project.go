@@ -242,6 +242,9 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 // Composer package failures and invalid extension configs are reported; arbitrary
 // folders under custom/ that are not extensions are ignored.
 func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bool) ([]Extension, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	extensions := make(map[string]Extension)
 	var loadErrors []error
 
@@ -249,6 +252,9 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		composerExtensions, err := addExtensionsByComposer(ctx, project)
 		loadErrors = append(loadErrors, err)
 		for _, ext := range composerExtensions {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			name, err := ext.GetName()
 			if err != nil {
 				continue
@@ -265,6 +271,9 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 	staticPlugins, err := addExtensionsByWildcard(ctx, path.Join(project, "custom", "static-plugins"))
 	loadErrors = append(loadErrors, err)
 	for _, ext := range staticPlugins {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -285,6 +294,9 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 	plugins, err := addExtensionsByWildcard(ctx, path.Join(project, "custom", "plugins"))
 	loadErrors = append(loadErrors, err)
 	for _, ext := range plugins {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -305,6 +317,9 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 	apps, err := addExtensionsByWildcard(ctx, path.Join(project, "custom", "apps"))
 	loadErrors = append(loadErrors, err)
 	for _, ext := range apps {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -341,6 +356,9 @@ func (e *ComposerPackageError) Unwrap() error {
 }
 
 func addExtensionsByComposer(ctx context.Context, project string) ([]Extension, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var list []Extension
 	var loadErrors []error
 
@@ -358,6 +376,9 @@ func addExtensionsByComposer(ctx context.Context, project string) ([]Extension, 
 	}
 
 	for _, pkg := range composer.Packages {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if pkg.PackageType == ComposerTypePlugin || pkg.PackageType == ComposerTypeBundle || pkg.PackageType == ComposerTypeApp {
 			folder := path.Join(project, "vendor", pkg.Name)
 			if _, err := os.Stat(folder); errors.Is(err, os.ErrNotExist) {
@@ -389,6 +410,9 @@ func addExtensionsByComposer(ctx context.Context, project string) ([]Extension, 
 }
 
 func addExtensionsByWildcard(ctx context.Context, extensionDir string) ([]Extension, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var list []Extension
 	var loadErrors []error
 
@@ -401,6 +425,9 @@ func addExtensionsByWildcard(ctx context.Context, extensionDir string) ([]Extens
 	}
 
 	for _, file := range extensions {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		extensionPath := path.Join(extensionDir, file.Name())
 		evaluatedPath, err := filepath.EvalSymlinks(extensionPath)
 		if err != nil {

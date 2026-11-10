@@ -31,7 +31,7 @@ const (
 	// StorefrontAssetsPort is the extra host port and Traefik entrypoint
 	// ("sfassets") exposed for the deprecated storefront webpack watcher's
 	// asset+HMR server. It is routed by hostname, so every shop shares this one
-	// port; the per-shop route lives in internal/docker/compose_override.go.
+	// port; the per-shop route lives in internal/docker/compose_proxy.go.
 	StorefrontAssetsPort = 8443
 )
 

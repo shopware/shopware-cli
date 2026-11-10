@@ -32,6 +32,9 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, config ToolConfig, exec
 	found := false
 
 	for _, p := range config.SourceDirectories {
+		if ctx.Err() != nil {
+			return ToolSummary{}
+		}
 		twigDir := filepath.Join(p, "Resources", "views")
 
 		if _, err := os.Stat(twigDir); err != nil {
@@ -43,6 +46,9 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, config ToolConfig, exec
 		}
 
 		err := filepath.WalkDir(twigDir, func(path string, d fs.DirEntry, err error) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if err != nil {
 				return err
 			}
