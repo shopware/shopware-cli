@@ -36,6 +36,11 @@ When opening a PR, please include:
 
 Please keep PRs focused. Smaller PRs are easier to review and merge.
 
+Start commit titles that deprecate a command, flag, or config key with
+`deprecate:` (or `deprecate(scope):`), so the release changelog lists them
+under Deprecations. See the
+[deprecation policy](docs/adr/2026-11-09-deprecation-policy.md).
+
 ## Development
 
 Branch from `main` and target `main` with your pull request.
