@@ -147,7 +147,7 @@ changelog:
     - title: "🐛 Bug Fixes"
       regexp: '^.*?bug(\([[:word:]]+\))??!?:.+$'
       order: 1
-    - title: "⚠️ Deprecations"
+    - title: "⚠️ Deprecations (removal dates: #1859)"
       regexp: '^(deprecate|remove)(\([^)]+\))?!?:.+$'
       order: 2
     - title: 🧰 Maintenance
