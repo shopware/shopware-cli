@@ -38,7 +38,7 @@ keeps one voice. When a rule and existing code disagree, the code gets fixed.
   `Deprecated: deprecation.Message("2027-02-10", "\"project upgrade\"")`;
   cobra prints `Command "x" is deprecated, it will be removed by 2027-02-10,
   use "project upgrade" as replacement`. The date and telemetry follow
-  `docs/adr/0004-deprecation-policy.md`.
+  `docs/adr/2026-11-09-deprecation-policy.md`.
 
 ## Flags
 

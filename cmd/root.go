@@ -122,11 +122,11 @@ func init() {
 		cmd.SilenceUsage = true
 		// Cobra prints the deprecation warnings itself; report their use.
 		if cmd.Deprecated != "" {
-			deprecation.Track("command." + cmd.Name())
+			deprecation.Track("command." + commandName(cmd))
 		}
 		cmd.Flags().Visit(func(flag *pflag.Flag) {
 			if flag.Deprecated != "" {
-				deprecation.Track("flag." + flag.Name)
+				deprecation.Track("flag." + commandName(cmd) + "." + strings.ReplaceAll(flag.Name, "-", "_"))
 			}
 		})
 		// Resolve the background before any Bubble Tea program owns stdin;

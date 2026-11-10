@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"charm.land/huh/v2"
+	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -95,8 +96,12 @@ func commandEventName(args []string) (string, bool) {
 	if err != nil || cmd == rootCmd || cmd.RunE == nil {
 		return "", false
 	}
+	return commandName(cmd), true
+}
+
+// commandName returns the dotted name of cmd, e.g. extension.validate.
+func commandName(cmd *cobra.Command) string {
 	name := strings.TrimPrefix(cmd.CommandPath(), rootCmd.Name()+" ")
 	name = strings.ReplaceAll(name, " ", ".")
-	name = strings.ReplaceAll(name, "-", "_")
-	return name, true
+	return strings.ReplaceAll(name, "-", "_")
 }

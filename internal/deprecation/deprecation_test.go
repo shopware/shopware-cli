@@ -14,9 +14,9 @@ func TestMessageNamesReplacementWhenGiven(t *testing.T) {
 func TestTrackRecordsEachIDOnceSorted(t *testing.T) {
 	t.Cleanup(func() { used = nil })
 
-	Track("flag.reporter")
-	Track("command.zip")
-	Track("flag.reporter")
+	Track("flag.extension.validate.reporter")
+	Track("command.extension.zip")
+	Track("flag.extension.validate.reporter")
 
-	assert.Equal(t, []string{"command.zip", "flag.reporter"}, Used())
+	assert.Equal(t, []string{"command.extension.zip", "flag.extension.validate.reporter"}, Used())
 }

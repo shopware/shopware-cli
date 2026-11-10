@@ -1,5 +1,5 @@
 // Package deprecation reports use of deprecated commands, flags and config
-// keys as described in docs/adr/0004-deprecation-policy.md.
+// keys as described in docs/adr/2026-11-09-deprecation-policy.md.
 package deprecation
 
 import (

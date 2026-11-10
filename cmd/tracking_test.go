@@ -409,10 +409,10 @@ func TestTrackCommandExecution_CommandTags(t *testing.T) {
 
 func TestTrackCommandExecution_DeprecatedTag(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
-	deprecation.Track("flag.reporter")
+	deprecation.Track("flag.extension.validate.reporter")
 
 	trackCommandExecution(t.Context(), []string{"project", "console"}, 0, nil, "")
 
 	require.Len(t, *events, 1)
-	assert.Contains(t, (*events)[0][tracking.TagDeprecated], "flag.reporter")
+	assert.Contains(t, (*events)[0][tracking.TagDeprecated], "flag.extension.validate.reporter")
 }
