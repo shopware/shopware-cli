@@ -10,6 +10,12 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
+// Deployment constructors define the supported environment types for both
+// backend resolution and interactive environment selection.
+var constructors = map[string]func(string, string, *shop.Config, *shop.EnvironmentConfig) (deployment.Backend, error){
+	executor.TypeSSH: ssh.New,
+}
+
 // ResolveBackend loads the project config and selects a backend for the environment.
 // An empty configPath searches for the config in the project root.
 func ResolveBackend(ctx context.Context, root, configPath, environmentName string) (deployment.Backend, error) {
@@ -34,8 +40,9 @@ func New(root, configPath string, cfg *shop.Config, env *shop.EnvironmentConfig)
 	if env != nil && env.Type != "" {
 		kind = env.Type
 	}
-	if kind != executor.TypeSSH {
+	constructor, ok := constructors[kind]
+	if !ok {
 		return nil, fmt.Errorf("cannot create deployments for environment type %q: %w", kind, deployment.ErrNotSupported)
 	}
-	return ssh.New(root, configPath, cfg, env)
+	return constructor(root, configPath, cfg, env)
 }
