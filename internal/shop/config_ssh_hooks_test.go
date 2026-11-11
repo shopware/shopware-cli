@@ -8,7 +8,7 @@ import (
 )
 
 func TestSSHHostHooksInheritance(t *testing.T) {
-	common := &EnvironmentSSHDeploymentHooks{Pre: []string{"stop"}, Post: []string{"start"}}
+	common := &EnvironmentSSHDeploymentHooks{TimeoutSeconds: 12, Pre: []string{"stop"}, Post: []string{"start"}}
 	cfg := &EnvironmentSSHConfig{Directory: "/srv/shop/current", Hooks: common, MigrationHost: "a", Hosts: map[string]*EnvironmentSSHHostConfig{
 		"a": {Host: "a.example"},
 		"b": {Host: "b.example", Hooks: &EnvironmentSSHDeploymentHooks{}},
@@ -22,4 +22,15 @@ func TestSSHHostHooksInheritance(t *testing.T) {
 	assert.Empty(t, hosts[1].Config.Hooks.Post)
 	assert.Empty(t, hosts[2].Config.Hooks.Pre)
 	assert.Equal(t, []string{"restart"}, hosts[2].Config.Hooks.Post)
+}
+
+func TestSSHHookTimeoutValidation(t *testing.T) {
+	for _, timeout := range []int{-1, 0, 30} {
+		cfg := &EnvironmentSSHConfig{Host: "example.com", Directory: "/srv/shop/current", Hooks: &EnvironmentSSHDeploymentHooks{TimeoutSeconds: timeout}}
+		if timeout < 0 {
+			assert.Error(t, cfg.Validate())
+		} else {
+			assert.NoError(t, cfg.Validate())
+		}
+	}
 }

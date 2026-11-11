@@ -38,8 +38,10 @@ type EnvironmentConfig struct {
 // Post also runs after a failed pre hook or switch, so it can restart stopped workers.
 // Unchanged rollouts do not run hooks.
 type EnvironmentSSHDeploymentHooks struct {
-	Pre  []string `yaml:"pre,omitempty" json:"pre,omitempty"`
-	Post []string `yaml:"post,omitempty" json:"post,omitempty"`
+	// Maximum runtime per hook in seconds. Zero uses 300. Requires timeout with --kill-after support on the remote host; timed-out hooks receive TERM, then KILL after five seconds.
+	TimeoutSeconds int      `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" jsonschema:"minimum=0"`
+	Pre            []string `yaml:"pre,omitempty" json:"pre,omitempty"`
+	Post           []string `yaml:"post,omitempty" json:"post,omitempty"`
 }
 
 type EnvironmentSSHConfig struct {

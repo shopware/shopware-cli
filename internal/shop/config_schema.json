@@ -1018,6 +1018,11 @@
     },
     "EnvironmentSSHDeploymentHooks": {
       "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum runtime per hook in seconds. Zero uses 300. Requires timeout with --kill-after support on the remote host; timed-out hooks receive TERM, then KILL after five seconds."
+        },
         "pre": {
           "items": {
             "type": "string"

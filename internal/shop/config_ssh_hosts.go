@@ -157,6 +157,9 @@ func (c *EnvironmentSSHConfig) ResolveHosts() ([]SSHHost, string, error) {
 
 // validateSSHMember requires a host and directory and validates the resolved shared paths.
 func validateSSHMember(c *EnvironmentSSHConfig) error {
+	if c.Hooks != nil && c.Hooks.TimeoutSeconds < 0 {
+		return errors.New("cannot configure ssh.hooks.timeout_seconds: must be zero or positive")
+	}
 	if c.Host == "" {
 		return errors.New("ssh environment requires ssh.host")
 	}

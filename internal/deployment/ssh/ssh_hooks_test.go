@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,11 +23,16 @@ func TestHostHooksAroundActivation(t *testing.T) {
 		t.Skip("PHP required")
 	}
 	for _, tc := range []struct {
-		name     string
-		failPre  bool
-		failPost bool
+		name        string
+		failPre     bool
+		failPost    bool
+		timeoutPre  bool
+		timeoutPost bool
 	}{
 		{name: "success"},
+		{name: "timed out pre", failPre: true, timeoutPre: true},
+		{name: "timed out post", failPost: true, timeoutPost: true},
+		{name: "timed out cleanup", failPre: true, failPost: true, timeoutPre: true, timeoutPost: true},
 		{name: "failed pre", failPre: true},
 		{name: "failed post", failPost: true},
 		{name: "failed pre and post", failPre: true, failPost: true},
@@ -40,20 +46,32 @@ func TestHostHooksAroundActivation(t *testing.T) {
 			checksum := strings.Repeat("a", 64)
 			testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli", "releases", "release.json"), `{"ready":true,"sha256":"`+checksum+`"}`)
 			pre := "printf pre >> hooks.log"
-			if tc.failPre {
+			if tc.timeoutPre {
+				pre += "; trap '' TERM; sleep 30; printf leaked >> hooks.log"
+			} else if tc.failPre {
 				pre += "; exit 1"
 			}
 			post := "printf post >> hooks.log"
-			if tc.failPost {
+			if tc.timeoutPost {
+				post += "; sleep 30; printf leaked >> hooks.log"
+			} else if tc.failPost {
 				post += "; exit 1"
 			}
+			timeout := 0
+			if tc.timeoutPre || tc.timeoutPost {
+				timeout = 1
+			}
 			payload, err := json.Marshal(sshRolloutInput{Size: 1, Root: root, Reference: "event", Release: "release", Deployment: "release", SHA256: checksum, Hooks: &shop.EnvironmentSSHDeploymentHooks{
-				Pre: []string{pre}, Post: []string{post, post, "printf restart >> hooks.log"},
+				TimeoutSeconds: timeout, Pre: []string{pre}, Post: []string{post, post, "printf restart >> hooks.log"},
 			}})
 			require.NoError(t, err)
-			cmd := exec.CommandContext(t.Context(), php, "-r", strings.TrimPrefix(sshDeploymentScript, "<?php\n"), "--", string(payload))
+			ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, php, "-r", strings.TrimPrefix(sshDeploymentScript, "<?php\n"), "--", string(payload))
 			cmd.Stdin = strings.NewReader("ACTIVATE event\n")
+			cmd.WaitDelay = time.Second
 			output, err := cmd.CombinedOutput()
+			require.NoError(t, ctx.Err(), string(output))
 			if tc.failPre || tc.failPost {
 				require.Error(t, err, string(output))
 				assert.NotContains(t, string(output), "ACTIVE event\n")
@@ -71,6 +89,9 @@ func TestHostHooksAroundActivation(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(root, "hooks.log"))
 			require.NoError(t, err, string(output))
 			assert.Equal(t, "prepostpostrestart", string(data))
+			// A timed-out child must not retain the deployment lock after cleanup.
+			lock := exec.CommandContext(ctx, php, "-r", `$lock = fopen($argv[1], 'r'); exit(flock($lock, LOCK_EX | LOCK_NB) ? 0 : 1);`, filepath.Join(root, ".shopware-cli", "deployment.lock"))
+			require.NoError(t, lock.Run())
 		})
 	}
 }
