@@ -46,7 +46,7 @@ func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *Tool
 		return ToolSummary{SkipReason: "no source directories"}
 	}
 	var changed atomic.Int64
-	runDirectories(config.SourceDirectories, func(directory string) {
+	runDirectories(ctx, config.SourceDirectories, func(directory string) {
 		ignore, err := os.CreateTemp(directory, ".shopware-cli-prettier-ignore-*")
 		if err != nil {
 			execution.Fail(&ToolError{Err: fmt.Errorf("cannot create prettier ignore file: %w", err)})

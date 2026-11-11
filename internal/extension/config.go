@@ -256,7 +256,7 @@ type ColumnSQLMap = map[string]string
 
 // ConfigAnonymize is the extension contribution to `project dump --anonymize`. Project dump.rewrite values take precedence over these rules.
 type ConfigAnonymize struct {
-	// Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.Email() are supported. Write "''" to store an empty string and "NULL" to store NULL. JSON_REMOVE expressions on the same column are merged across extensions, so JSON_REMOVE(custom_fields, '$.first_secret') and JSON_REMOVE(custom_fields, '$.second_secret') remove both keys.
+	// Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.SafeEmail() are supported. Write "''" to store an empty string and "NULL" to store NULL. JSON_REMOVE expressions on the same column are merged across extensions, so JSON_REMOVE(custom_fields, '$.first_secret') and JSON_REMOVE(custom_fields, '$.second_secret') remove both keys.
 	Tables map[string]ColumnSQLMap `yaml:"tables,omitempty"`
 	// SystemConfig anonymizes system_config rows by configuration_key. A string omits that row. An object can omit the row or replace configuration_value with a custom value or a faker expression.
 	SystemConfig []ConfigSystemConfigRule `yaml:"system_config,omitempty"`

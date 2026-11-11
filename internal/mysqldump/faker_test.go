@@ -3,6 +3,8 @@ package mysqldump
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -249,4 +251,13 @@ func Test_service_FakerError(t *testing.T) {
 			},
 		)
 	}
+}
+
+func TestReplaceStringWithFakerSafeEmail(t *testing.T) {
+	t.Parallel()
+
+	got := replaceStringWithFakerWhenRequested("{{- faker.Internet.SafeEmail() -}}")
+
+	assert.NotContains(t, got, "faker.")
+	assert.Regexp(t, `^[^@\s]+@[^@\s]+\.[a-z]+$`, got)
 }

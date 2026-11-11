@@ -110,7 +110,7 @@ system_config:
   - key: SwagExample.config.environment
     value: sandbox
   - key: SwagExample.config.merchantEmail
-    value: faker.Internet.Email()
+    value: faker.Internet.SafeEmail()
 ```
 
 `value` is written to `configuration_value` as `{"_value": value}`. A string
@@ -173,7 +173,7 @@ wipe every shop setting. List keys under `system_config` instead.
 
 | Data                                               | Expression                                                                   |
 | -------------------------------------------------- | ---------------------------------------------------------------------------- |
-| email                                              | `faker.Internet.Email()`                                                     |
+| email                                              | `faker.Internet.SafeEmail()`                                                     |
 | first name                                         | `faker.Person.FirstName()`                                                   |
 | last name                                          | `faker.Person.LastName()`                                                    |
 | company, title, or a person name                   | `faker.Person.Name()`                                                        |
@@ -210,7 +210,7 @@ template with its delimiters in a string literal. It is generated when the row
 is written:
 
 ```yaml
-sender: "JSON_OBJECT('{{- faker.Internet.Email() -}}', '{{- faker.Person.Name() -}}')"
+sender: "JSON_OBJECT('{{- faker.Internet.SafeEmail() -}}', '{{- faker.Person.Name() -}}')"
 company: "IF(company IS NULL, NULL, '{{- faker.Person.Name() -}}')"
 ```
 
@@ -238,13 +238,13 @@ anonymize:
   tables:
     swag_example_token:
       access_token: "''"
-      email: faker.Internet.Email()
+      email: faker.Internet.SafeEmail()
     customer:
       custom_fields: "JSON_REMOVE(custom_fields, '$.swag_example_vat_id')"
   system_config:
     - SwagExample.config.clientSecret
     - key: SwagExample.config.merchantEmail
-      value: faker.Internet.Email()
+      value: faker.Internet.SafeEmail()
     - key: SwagExample.config.environment
       value: sandbox
 ```

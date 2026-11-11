@@ -47,7 +47,7 @@ func (p PHPCSFixer) Format(ctx context.Context, config ToolConfig, execution *To
 		return result
 	}
 	var changed atomic.Int64
-	runDirectories(config.SourceDirectories, func(directory string) {
+	runDirectories(ctx, config.SourceDirectories, func(directory string) {
 		args := []string{
 			"fix", "--show-progress", "dots", "-vv", "--no-ansi", "--format", "json",
 			"--config", p.getConfigPath(config.ToolDirectory, config.RootDir), directory,

@@ -10,13 +10,18 @@ import (
 	"time"
 
 	"charm.land/huh/v2"
+	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 var trackEvent = tracking.Track
+
+var commandTags = tracking.CommandTags
 
 func trackCommandExecution(ctx context.Context, args []string, duration time.Duration, runErr error, shopwareVersion string) {
 	name, ok := commandEventName(args)
@@ -50,6 +55,7 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	}
 	var missing *system.MissingDependenciesError
 	var pinnedPHP *system.PHPVersionNotFoundError
+	var toolReport *validation.ToolReportError
 	switch {
 	case result != tracking.ResultFailure:
 	case errors.As(runErr, &missing):
@@ -57,9 +63,29 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	case errors.As(runErr, &pinnedPHP):
 		// A pinned PHP that is not installed stops the command before the dependency check.
 		tags[tracking.TagMissing] = "php_version"
+	case errors.As(runErr, &toolReport):
+		if len(toolReport.FailedTools) > 0 {
+			tags[tracking.TagFailedTools] = strings.Join(toolReport.FailedTools, ",")
+		}
+		if len(toolReport.ToolsWithErrorFindings) > 0 {
+			tags[tracking.TagToolsWithErrorFindings] = strings.Join(toolReport.ToolsWithErrorFindings, ",")
+		}
+	}
+	var failedStep *tracking.FailedStepError
+	if result != tracking.ResultSuccess && errors.As(runErr, &failedStep) {
+		tags[tracking.TagFailedStep] = failedStep.Step
+	}
+	if used := deprecation.Used(); len(used) > 0 {
+		tags[tracking.TagDeprecated] = strings.Join(used, ",")
 	}
 	if shopwareVersion != "" {
 		tags[tracking.TagShopwareVersion] = shopwareVersion
+	}
+	// Tags the command set itself never replace the ones above.
+	for key, value := range commandTags() {
+		if _, set := tags[key]; !set {
+			tags[key] = value
+		}
 	}
 	trackEvent(trackCtx, tracking.EventCommand, tags)
 }
@@ -70,8 +96,12 @@ func commandEventName(args []string) (string, bool) {
 	if err != nil || cmd == rootCmd || cmd.RunE == nil {
 		return "", false
 	}
+	return commandName(cmd), true
+}
+
+// commandName returns the dotted name of cmd, e.g. extension.validate.
+func commandName(cmd *cobra.Command) string {
 	name := strings.TrimPrefix(cmd.CommandPath(), rootCmd.Name()+" ")
 	name = strings.ReplaceAll(name, " ", ".")
-	name = strings.ReplaceAll(name, "-", "_")
-	return name, true
+	return strings.ReplaceAll(name, "-", "_")
 }

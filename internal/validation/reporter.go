@@ -2,7 +2,6 @@ package validation
 
 import (
 	"cmp"
-	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +11,8 @@ import (
 	"os"
 	"slices"
 	"strings"
+
+	"github.com/zeebo/xxh3"
 )
 
 // ReporterFormats lists the supported validation report formats.
@@ -61,7 +62,7 @@ func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 	slices.SortFunc(tools, func(a, b ToolReport) int { return cmp.Compare(a.Name, b.Name) })
 	findings := make([]CheckResult, 0)
 	statuses := make([]toolInvocationStatus, 0, len(tools))
-	failed := false
+	var failedTools, toolsWithErrorFindings []string
 	for _, tool := range tools {
 		findings = append(findings, tool.Findings...)
 		status := toolInvocationStatus{Name: tool.Name, Status: "invoked", Note: tool.Note, HasFindings: tool.HasFindings}
@@ -69,14 +70,12 @@ func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 			status.Status, status.Reason = "skipped", tool.SkipReason
 		}
 		if len(tool.Errors) > 0 {
-			failed = true
+			failedTools = append(failedTools, tool.Name)
 			status.Errors = tool.Errors
 			status.FindingsIncomplete = tool.HasFindings
 		}
-		for _, finding := range tool.Findings {
-			if finding.Severity == SeverityError {
-				failed = true
-			}
+		if slices.ContainsFunc(tool.Findings, func(finding CheckResult) bool { return finding.Severity == SeverityError }) {
+			toolsWithErrorFindings = append(toolsWithErrorFindings, tool.Name)
 		}
 		statuses = append(statuses, status)
 	}
@@ -101,8 +100,8 @@ func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 	if err != nil {
 		return err
 	}
-	if failed {
-		return ErrToolReportFailed
+	if len(failedTools) > 0 || len(toolsWithErrorFindings) > 0 {
+		return &ToolReportError{FailedTools: failedTools, ToolsWithErrorFindings: toolsWithErrorFindings}
 	}
 	return nil
 }
@@ -238,7 +237,7 @@ func doGitLabReport(findings []CheckResult, tools []ToolReport, title string) er
 
 		// Create fingerprint (unique identifier for the issue)
 		fingerprintData := fmt.Sprintf("%s:%d:%s:%s", r.Path, r.Line, r.Identifier, r.Message)
-		fingerprint := fmt.Sprintf("%x", md5.Sum([]byte(fingerprintData)))
+		fingerprint := fmt.Sprintf("%x", xxh3.HashString128(fingerprintData).Bytes())
 
 		description := r.Message
 		if r.Tip != "" {

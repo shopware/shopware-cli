@@ -88,9 +88,9 @@ func TestSSHInitializationValues(t *testing.T) {
 	assert.Len(t, secret, 64)
 }
 
-func TestSSHInitializationWithoutSharedEnvLocal(t *testing.T) {
-	backend := localDeploymentSSH(t)
-	backend.env.SSH.Shared = &shop.EnvironmentSSHSharedConfig{Files: new([]string{})}
+func TestSSHInitializationWithoutRuntimeConfig(t *testing.T) {
+	store := &memoryInitializationStore{}
+	backend := &SSH{initStore: store}
 	called := false
 	err := backend.initializeDeployment(t.Context(), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
 		called = true
@@ -98,6 +98,8 @@ func TestSSHInitializationWithoutSharedEnvLocal(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, called)
+	require.Len(t, store.writes, 1)
+	assert.Equal(t, "prod", store.writes[0].RuntimeValues["APP_ENV"])
 }
 
 func TestSSHInitializationCancellationDoesNotWrite(t *testing.T) {

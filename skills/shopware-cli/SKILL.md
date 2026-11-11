@@ -216,11 +216,24 @@ shopware-cli extension validate [path] [flags]
 
 The extension path is required; use `.` for the current extension.
 
-A folder is validated in place. When it has no `vendor/`, PHPStan's composer
-dependencies are installed into `var/cache/shopware-cli/` inside the extension.
+A folder is validated in place. PHPStan's composer dependencies are always
+resolved in `var/cache/shopware-cli/` inside the extension for the requested
+`--check-against` baseline, even when a local `vendor/` exists.
 That directory ignores itself in git, is not packed into the zip, and is kept
-between runs; composer updates it on every run. An existing `vendor/` is used as
-it is, so `--check-against` has no effect then.
+between runs; composer updates it on every run, which requires dependency
+resolution even with local dependencies installed. The extension's `vendor/`,
+`composer.json`, and `composer.lock` are preserved. Custom PHPStan
+configurations that explicitly load `vendor/autoload.php` still load local
+dependencies; remove that bootstrap to use the CLI-provided baseline autoloader.
+PHPStan runs from the selected dependency cache so it discovers the matching
+Composer metadata. Custom configs are loaded from the extension root; use paths
+relative to the config file rather than `%currentWorkingDirectory%` for
+extension files.
+
+For `--check-against lowest`, advisory blocking is disabled only for the cached
+validation dependencies, allowing historical Shopware releases and their
+dependencies to be analysed. Audit reporting and other dependency policies
+remain enabled.
 
 Normal extension validation runs the built-in checks implemented by the current
 CLI. Store compliance checks that Administration and Storefront source files
@@ -254,6 +267,25 @@ Each command selects only tools that support its operation. For example,
 does not check; the error lists available checkers. The extension command
 summaries show `invoked` or `skipped`: these describe selection and invocation,
 not whether files were applicable, findings were produced, or fixes were made.
+
+### Extension fixes
+
+`shopware-cli extension fix path --only rector` always resolves the lowest
+compatible dependencies in `var/cache/shopware-cli/composer-lowest`, shared with
+PHPStan's lowest validation baseline. Both tools preserve Composer autoload
+mappings with paths pointing to the extension, so custom configurations can
+load extension classes and bootstrap files using the cached dependencies.
+Advisory blocking is disabled for these historical dependencies.
+The extension's `vendor/`, `composer.json`, and
+`composer.lock` are preserved; no `--check-against` option is needed.
+
+Rector reports the loaded Shopware version and the selected rules. A local
+`rector.php` takes precedence; otherwise the bundled rules target the minimum
+supported Shopware minor version. Both tools run from the dependency cache.
+Custom Rector configs should use `__DIR__` for extension-relative paths rather
+than `getcwd()`. Custom configs that explicitly load local dependencies can
+override this isolation. Project fixes use the project's existing `vendor/` and
+require `composer install` first if it is missing.
 
 ### Fresh results beat saved reports
 

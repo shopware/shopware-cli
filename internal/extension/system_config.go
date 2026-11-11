@@ -77,7 +77,7 @@ func (ConfigSystemConfigRule) JSONSchema() *jsonschema.Schema {
 		Description: "When true, the dump skips rows with this configuration_key.",
 	})
 	object.Set("value", &jsonschema.Schema{
-		Description: "Replacement stored as {\"_value\": value}. A string starting with faker. is generated per row, for example faker.Internet.Email().",
+		Description: "Replacement stored as {\"_value\": value}. A string starting with faker. is generated per row, for example faker.Internet.SafeEmail().",
 	})
 
 	return &jsonschema.Schema{

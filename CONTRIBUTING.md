@@ -36,6 +36,12 @@ When opening a PR, please include:
 
 Please keep PRs focused. Smaller PRs are easier to review and merge.
 
+Start commit titles that deprecate anything the
+[deprecation policy](docs/adr/2026-11-09-deprecation-policy.md) covers with
+`deprecate:` and titles that remove it with `remove:` (both also with a scope,
+such as `deprecate(extension):`), so the release changelog lists them under
+Deprecations.
+
 ## Development
 
 Branch from `main` and target `main` with your pull request.
@@ -75,10 +81,13 @@ mise run build        # Build the shopware-cli binary
 mise run test         # Run the network-isolated test suite (Linux/macOS only)
 mise run test-unit    # Run Go tests without the sandbox wrapper (works everywhere)
 mise run vet          # Run go vet
-mise run lint         # Lint Go and Markdown files
+mise run lint         # Lint Go, Markdown, and project conventions
 mise run format-markdown # Format Markdown and report remaining lint findings
 mise run lint-markdown # Check Markdown without changing files
 mise run lint-workflows # Validate GitHub Actions workflows
+mise run lint-conventions # Check project conventions
+mise run test-lint-rules # Test lint rules and their fixes
+mise run fix-conventions # Apply convention fixes locally
 ```
 
 For machine-specific settings, create `mise.local.toml`. This file is ignored

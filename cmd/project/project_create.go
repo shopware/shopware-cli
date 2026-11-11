@@ -7,6 +7,7 @@ import (
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/proxy"
@@ -20,6 +21,30 @@ import (
 const (
 	// projectNameHelp is the help text shown under the project name input.
 	projectNameHelp = "The name of the project directory to create (leave empty to use the current directory)"
+)
+
+// failed_step values of the command event, in the order the steps run; see docs/TELEMETRY.md.
+const (
+	createStepValidateComposeProjectName       = "validate_compose_project_name"
+	createStepValidateDocker                   = "validate_docker"
+	createStepValidatePHPVersion               = "validate_php_version"
+	createStepPackagistFetchVersions           = "packagist_fetch_versions"
+	createStepWizardQuestions                  = "wizard_questions"
+	createStepWizardDockerCheck                = "wizard_docker_check"
+	createStepWizardConfirm                    = "wizard_confirm"
+	createStepPreflightResolveVersion          = "preflight_resolve_version"
+	createStepPreflightValidateProjectSettings = "preflight_validate_project_settings"
+	createStepPreflightPHPVersion              = "preflight_php_version"
+	createStepPreflightDependencies            = "preflight_dependencies"
+	createStepPreflightSecurityAdvisories      = "preflight_security_advisories"
+	createStepPreflightIncompatibilities       = "preflight_incompatibilities"
+	createStepScaffold                         = "scaffold"
+	createStepComposerInstall                  = "composer_install"
+	createStepComposerSecurityAdvisories       = "composer_security_advisories"
+	createStepDockerSetup                      = "docker_setup"
+	createStepDockerSetupWriteCompose          = "docker_setup_write_compose"
+	createStepWriteConfig                      = "write_config"
+	createStepGitInit                          = "git_init"
 )
 
 // errCreateCancelled stops the creation when the user declines to continue.
@@ -123,13 +148,13 @@ var projectCreateCmd = &cobra.Command{
 		// validateAndPreflight keeps a final safety net.
 		if cmd.PersistentFlags().Changed("docker") && opts.useDocker {
 			if missing := dockerAvailabilityForCreate(cmd.Context()); len(missing) > 0 {
-				return dockerUnavailableError(missing)
+				return tracking.FailedAt(createStepValidateDocker, dockerUnavailableError(missing))
 			}
 		}
 
 		if opts.phpVersionExplicit {
 			if err := shop.ValidatePHPVersion(opts.phpVersion); err != nil {
-				return err
+				return tracking.FailedAt(createStepValidatePHPVersion, err)
 			}
 		}
 
@@ -139,7 +164,7 @@ var projectCreateCmd = &cobra.Command{
 
 		pkg, err := repository.New(packagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
 		if err != nil {
-			return err
+			return tracking.FailedAt(createStepPackagistFetchVersions, err)
 		}
 		releases := pkg.Versions
 		filteredVersions := shop.FilterInstallVersions(releases)
@@ -171,7 +196,7 @@ var projectCreateCmd = &cobra.Command{
 
 		folder, err := scaffoldProject(cmd.Context(), &opts, chosenVersion)
 		if err != nil {
-			return err
+			return tracking.FailedAt(createStepScaffold, err)
 		}
 		if err := installAndFinalize(cmd, &opts, phpConstraint, chosenVersion); err != nil {
 			if errors.Is(err, executor.ErrDockerCleanup) {
@@ -189,7 +214,7 @@ var projectCreateCmd = &cobra.Command{
 				if cmd.Context().Err() != nil {
 					return folder.Rollback(cmd.Context(), cmd.Context().Err())
 				}
-				return fmt.Errorf("cannot initialize git repository: %w", err)
+				return tracking.FailedAt(createStepGitInit, fmt.Errorf("cannot initialize git repository: %w", err))
 			}
 		}
 		if err := cmd.Context().Err(); err != nil {
@@ -222,7 +247,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) (createOptions, error) 
 	composeProjectName, _ := cmd.PersistentFlags().GetString("compose-project-name")
 	if cmd.PersistentFlags().Changed("compose-project-name") {
 		if err := shop.ValidateComposeProjectName(composeProjectName); err != nil {
-			return createOptions{}, err
+			return createOptions{}, tracking.FailedAt(createStepValidateComposeProjectName, err)
 		}
 	}
 
@@ -290,7 +315,7 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker for the project environment")
 	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Add Elasticsearch or OpenSearch support to the project (enabled by default in non-interactive mode)")
 	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
-	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch=false instead")
+	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", deprecation.Message("2027-02-10", "--with-elasticsearch=false"))
 	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Add AMQP queue support via Symfony's Messenger component")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Continue when dependencies are blocked by known security advisories")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository for a Shopware project")

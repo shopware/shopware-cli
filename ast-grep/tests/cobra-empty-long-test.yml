@@ -1,0 +1,18 @@
+id: cobra-empty-long
+valid:
+  - 'var cmd = &cobra.Command{Short: "Build assets"}'
+  - 'var cmd = &cobra.Command{Long: "Build assets"}'
+  - 'var other = Other{Long: ""}'
+  - 'var cmd = &cobra.Command{Other: Other{Long: ""}}'
+invalid:
+  - 'var cmd = &cobra.Command{Long: "", Use: "build"}'
+  - 'var cmd = &cobra.Command{Use: "build", Long: "", Short: "Build assets"}'
+  - 'var cmd = &cobra.Command{Use: "build", Long: ""}'
+  - 'var cmd = &cobra.Command{Long: ""}'
+  - |
+    var cmd = &cobra.Command{
+      Use: "build",
+      // Keep this comment
+      Long: "", // Keep this one too
+      Short: "Build assets",
+    }

@@ -71,14 +71,20 @@ type OverviewModel struct {
 	// proxy.RegisteredHostname (which reads registry.json and resolves
 	// symlinks) per render would block the render loop.
 	proxyHost string
-	// domainsSetupDone is whether the one-time machine setup (DNS + HTTPS
-	// trust, via `proxy setup`) is in place. Drives the Domains block's Setup
-	// status and whether the `s` action is offered.
+	// domainsSetupDone is whether the DNS resolver from the one-time
+	// `proxy setup` is configured. Drives the Domains block's domains row and
+	// whether the `s` action is offered.
 	domainsSetupDone bool
-	shopwareVersion  string
-	securityEnd      time.Time
-	health           []healthCheck
-	healthLoading    bool
+	// certTrusted is whether the system trusts the certificate the proxy serves
+	// for proxyHost. Drives the Domains block's certificate row.
+	certTrusted     bool
+	shopwareVersion string
+	securityEnd     time.Time
+	health          []healthCheck
+	healthLoading   bool
+	// sfWatchProbeURL targets the watcher server. sfWatchURL is the link shown
+	// to users, which is the shop itself when Vite injects its assets there.
+	sfWatchProbeURL string
 	// Instances: the projects registered with the shared proxy, with per-instance
 	// status/memory/uptime and their combined memory. Shown only for proxy
 	// projects, under Setup health.
@@ -281,8 +287,10 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		shopCfg:          shopCfg,
 		adminWatchURL:    localAdminWatchURL(projectRoot),
 		sfWatchURL:       localStorefrontWatchURL,
+		sfWatchProbeURL:  localStorefrontWatchURL,
 		proxyHost:        registeredHostname(projectRoot),
 		domainsSetupDone: overviewSetupDone(projectRoot),
+		certTrusted:      overviewCertTrusted(projectRoot),
 		instancesLoading: registeredHostname(projectRoot) != "",
 		loading:          true,
 		healthLoading:    true,
@@ -298,9 +306,9 @@ func registeredHostname(projectRoot string) string {
 	return host
 }
 
-// overviewSetupDone reports whether the machine's one-time proxy setup (DNS +
-// HTTPS trust) is in place for a proxy project. Non-proxy projects report
-// false (the Domains block is not shown for them anyway).
+// overviewSetupDone reports whether the DNS resolver from the machine's
+// one-time proxy setup is configured for a proxy project. Non-proxy projects
+// report false (the Domains block is not shown for them anyway).
 func overviewSetupDone(projectRoot string) bool {
 	if registeredHostname(projectRoot) == "" {
 		return false
@@ -312,6 +320,14 @@ func overviewSetupDone(projectRoot string) bool {
 	}
 
 	return proxy.CheckResolverConfigured(baseDomain).Configured
+}
+
+// overviewCertTrusted reports whether the system trusts the certificate the
+// proxy serves for the project's hostname.
+func overviewCertTrusted(projectRoot string) bool {
+	hostname := registeredHostname(projectRoot)
+	dir, err := proxy.StateDir()
+	return hostname != "" && err == nil && proxy.CertificateTrusted(dir, hostname)
 }
 
 // localStorefrontWatchURL is the classic local hot-proxy port of the
@@ -326,16 +342,35 @@ func localAdminWatchURL(projectRoot string) string {
 }
 
 // setEnvironment adopts the project's Docker dev environment and resolves the
-// watcher URLs for its mode: the proxy subdomains when proxied, otherwise the
-// local dev-server ports the readiness probes reach directly.
+// visible watcher links and readiness probe URLs for its mode.
 func (m *OverviewModel) setEnvironment(env *dockerpkg.Environment) {
 	m.env = env
 	m.adminWatchURL = localAdminWatchURL(m.projectRoot)
 	m.sfWatchURL = localStorefrontWatchURL
-	if env != nil && env.ProxyHost() != "" {
+	m.sfWatchProbeURL = localStorefrontWatchURL
+	if env == nil {
+		if !extension.StorefrontUsesVite(m.projectRoot) {
+			return
+		}
+
+		m.sfWatchProbeURL = localStorefrontViteURL()
+	} else {
 		m.adminWatchURL = env.AdminWatchURL()
 		m.sfWatchURL = env.StorefrontWatchURL()
+		m.sfWatchProbeURL = m.sfWatchURL
+		if !env.StorefrontUsesVite() {
+			return
+		}
 	}
+
+	if m.shopURL != "" {
+		m.sfWatchURL = m.shopURL
+	}
+}
+
+// localStorefrontViteURL returns the host URL of the Vite server outside Docker.
+func localStorefrontViteURL() string {
+	return fmt.Sprintf("http://127.0.0.1:%d", extension.StorefrontVitePort)
 }
 
 func (m OverviewModel) Init() tea.Cmd {
@@ -766,16 +801,22 @@ func (m OverviewModel) renderDomains() string {
 	s.WriteString("\n")
 
 	// The DNS resolver and the trusted certificate both come from the one-time
-	// `proxy setup`, tracked by a single flag. When done the row shows a green
-	// checkmark; while pending the whole row is dimmed with an empty checkbox, so
-	// it never reads as already configured. The `s` action runs the setup.
-	rows := []string{"Default domains configured", "Local certificate trusted"}
-	for _, label := range rows {
-		if m.domainsSetupDone {
+	// `proxy setup`. A done row shows a green checkmark; a pending row is dimmed
+	// with an empty checkbox, so it never reads as already configured. The `s`
+	// action runs the setup.
+	rows := []struct {
+		label string
+		done  bool
+	}{
+		{"Default domains configured", m.domainsSetupDone},
+		{"Local certificate trusted", m.certTrusted},
+	}
+	for _, row := range rows {
+		if row.done {
 			check := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("x")
-			fmt.Fprintf(&s, "  [%s] %s\n", check, label)
+			fmt.Fprintf(&s, "  [%s] %s\n", check, row.label)
 		} else {
-			fmt.Fprintf(&s, "  %s %s\n", tui.DimStyle.Render("[ ]"), tui.DimStyle.Render(label))
+			fmt.Fprintf(&s, "  %s %s\n", tui.DimStyle.Render("[ ]"), tui.DimStyle.Render(row.label))
 		}
 	}
 
@@ -926,19 +967,11 @@ func (m OverviewModel) renderAccess() string {
 }
 
 func (m OverviewModel) renderWatchers() string {
-	// Outside Docker the watchers bind directly on the host, so the local
-	// dev-server URLs apply. In Docker the environment resolves them for its
-	// mode and honors docker.services.web.ports; a disabled port has no URL.
-	adminURL, storefrontURL := m.adminWatchURL, m.sfWatchURL
-	if m.env != nil {
-		adminURL, storefrontURL = m.env.AdminWatchURL(), m.env.StorefrontWatchURL()
-	}
-
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, adminURL, m.cursor == 0))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, storefrontURL, m.cursor == 1))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, m.adminWatchURL, m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, m.sfWatchURL, m.cursor == 1))
 	return s.String()
 }
 
@@ -990,6 +1023,18 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	opts = storefrontWatchOptions(projectRoot, opts)
 
 	return startWatcher(watcherStorefront, m.ctx, opts.ProxyHostname != "", func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+		opts.VitePublicPort = int(shopCfg.DockerPorts(dockerpkg.ServiceWeb)[dockerpkg.PortStorefrontVite])
+
+		// When proxied, use the shared storefront-watch hostname. Do not start
+		// with local-port settings if the registry cannot be read.
+		host, err := proxy.RegisteredHostname(projectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read the shared proxy registry: %w", err)
+		}
+		if host != "" {
+			opts.ProxyHostname = "storefront-watch." + host
+		}
+
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, &extension.WatcherStepError{Step: extension.WatcherStepPluginsJSON, Err: fmt.Errorf("preparing plugins.json: %w", err)}

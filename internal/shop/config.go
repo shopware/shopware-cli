@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -419,6 +420,8 @@ func (c *ConfigDump) EnableClean() {
 		"version_commit",
 		"version_commit_data",
 		"webhook_event_log",
+		"webhook_delivery",
+		"webhook_stream",
 	}
 	for _, table := range cleanTables {
 		if !slices.Contains(c.NoData, table) {
@@ -439,7 +442,7 @@ func (c *ConfigDump) EnableAnonymization() {
 			"last_name":      "faker.Person.LastName()",
 			"company":        "faker.Person.Name()",
 			"title":          "faker.Person.Name()",
-			"email":          "faker.Internet.Email()",
+			"email":          "faker.Internet.SafeEmail()",
 			"remote_address": "faker.Internet.Ipv4()",
 		},
 		"customer_address": {
@@ -456,7 +459,7 @@ func (c *ConfigDump) EnableAnonymization() {
 			"provider": "",
 		},
 		"newsletter_recipient": {
-			"email":      "faker.Internet.Email()",
+			"email":      "faker.Internet.SafeEmail()",
 			"first_name": "faker.Person.FirstName()",
 			"last_name":  "faker.Person.LastName()",
 			"city":       "faker.Address.City()",
@@ -476,11 +479,11 @@ func (c *ConfigDump) EnableAnonymization() {
 			"last_name":      "faker.Person.LastName()",
 			"company":        "faker.Person.Name()",
 			"title":          "faker.Person.Name()",
-			"email":          "faker.Internet.Email()",
+			"email":          "faker.Internet.SafeEmail()",
 			"remote_address": "faker.Internet.Ipv4()",
 		},
 		"product_review": {
-			"email": "faker.Internet.Email()",
+			"email": "faker.Internet.SafeEmail()",
 		},
 	}
 
@@ -1041,10 +1044,7 @@ func warnDeprecatedTopLevelShop(ctx context.Context, fileName string, c *Config)
 		return
 	}
 
-	logging.FromContext(ctx).Warnf(
-		"Config %s uses deprecated top-level url/admin_api; move shop URL and Admin API credentials to environments (empty -e defaults to environments.local)",
-		fileName,
-	)
+	deprecation.Warn(ctx, "config.top_level_shop", "Top-level url/admin_api in "+fileName, "2027-02-10", "environments.<name>.url and environments.<name>.admin_api")
 }
 
 func fillEmptyConfig(c *Config) *Config {

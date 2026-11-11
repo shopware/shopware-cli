@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func TestToolReportOutcomes(t *testing.T) {
@@ -64,6 +66,7 @@ func TestToolReportOutcomes(t *testing.T) {
 				]`, string(report["tools"]))
 				assert.Empty(t, stderr, "JSON already contains execution errors")
 			case "gitlab":
+				assert.Contains(t, stderr, tools[0].Note)
 				var issues []GitLabCodeQualityIssue
 				require.NoError(t, json.Unmarshal([]byte(stdout), &issues))
 				require.Len(t, issues, 2)
@@ -72,6 +75,7 @@ func TestToolReportOutcomes(t *testing.T) {
 				assert.Contains(t, stderr, "cannot parse output")
 				assert.Contains(t, stderr, "process diagnostic")
 			case "junit":
+				assert.Contains(t, stderr, tools[0].Note)
 				var suite JUnitTestSuite
 				require.NoError(t, xml.Unmarshal([]byte(stdout), &suite))
 				assert.Equal(t, 4, suite.Tests)
@@ -116,6 +120,27 @@ func TestToolReportExitConditions(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestToolReportNamesFailingTools(t *testing.T) {
+	tools := []ToolReport{
+		{ToolResult: ToolResult{Name: "stylelint", HasFindings: true}, Findings: []CheckResult{{Severity: SeverityWarning}}},
+		{ToolResult: ToolResult{Name: "phpstan", HasFindings: true}, Findings: []CheckResult{{Severity: SeverityError}}},
+		{ToolResult: ToolResult{Name: "eslint", HasFindings: true, Errors: []ToolError{{Err: errors.New("cannot parse output")}}}, Findings: []CheckResult{{Severity: SeverityError}}},
+		{ToolResult: ToolResult{Name: "storefront-twig", SkipReason: "no templates"}},
+		{ToolResult: ToolResult{Name: "builtin", HasFindings: true}, Findings: []CheckResult{{Severity: SeverityError}}},
+	}
+
+	var reportErr error
+	captureOutput(func() { reportErr = ReportTools(tools, "summary", "Checkers") })
+
+	var toolReport *ToolReportError
+	require.ErrorAs(t, reportErr, &toolReport)
+	assert.Equal(t, []string{"eslint"}, toolReport.FailedTools)
+	assert.Equal(t, []string{"builtin", "eslint", "phpstan"}, toolReport.ToolsWithErrorFindings)
+	assert.ErrorIs(t, reportErr, ErrToolReportFailed)
+	var silent logging.SilenceError
+	assert.ErrorAs(t, reportErr, &silent)
 }
 
 func TestToolReportIncludesAllFailuresAndPartialFindings(t *testing.T) {

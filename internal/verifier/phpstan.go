@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -40,21 +41,20 @@ func (p PhpStan) Name() string {
 	return "phpstan"
 }
 
-func (p PhpStan) configExists(pluginPath string) bool {
+func (p PhpStan) configFile(pluginPath string) string {
 	for _, config := range possiblePHPStanConfigs {
 		if _, err := os.Stat(path.Join(pluginPath, config)); err == nil {
-			return true
+			return path.Join(pluginPath, config)
 		}
 	}
 
-	return false
+	return ""
 }
 
 func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
 	if result, applicable := preparePHPTool(config, execution); !applicable {
 		return result
 	}
-	_, vendorErr := os.Stat(path.Join(config.RootDir, "vendor"))
 	autoloadFile, toolErr := prepareComposerAutoload(ctx, config, execution)
 	if toolErr != nil {
 		execution.Fail(toolErr)
@@ -63,8 +63,16 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	result := ToolSummary{}
 	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
 		result.Note = "Shopware " + installed
-		if errors.Is(vendorErr, os.ErrNotExist) && config.CheckAgainst != "" {
-			result.Note += " (" + config.CheckAgainst + ")"
+		if version := tracking.ReportableShopwareVersion(installed); version != "" {
+			tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
+		}
+		if !config.IsProject {
+			mode := CheckAgainstHighest
+			if config.CheckAgainst == CheckAgainstLowest {
+				mode = CheckAgainstLowest
+			}
+			result.Note += " (" + mode + ")"
+			tracking.SetCommandTag(tracking.TagCheckAgainst, mode)
 		}
 	}
 	// All source directories go into one run, so PHPStan knows the classes of
@@ -72,22 +80,26 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	args := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", "--autoload-file", autoloadFile}
 	args = append(args, config.SourceDirectories...)
 	env := append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
+	// Select the extension's configuration explicitly because PHPStan runs from
+	// the dependency directory so it discovers the matching Composer metadata.
+	configFile := p.configFile(config.RootDir)
 	// A local phpstan.neon brings its own tmpDir.
-	if !p.configExists(config.RootDir) {
+	if configFile == "" {
 		cacheDir, err := ensureValidationCacheDir(config.RootDir)
 		if err != nil {
 			execution.Fail(&ToolError{Err: err})
 			return result
 		}
-		args = append(args, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
+		configFile = path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon")
 		env = append(env, "SHOPWARE_CLI_PHPSTAN_TMP_DIR="+path.Join(cacheDir, "phpstan"))
 	}
+	args = append(args, "--configuration", configFile)
 	if logging.IsVerbose(ctx) {
 		args = append(args, "-v")
 	}
 	cmd := CommandContext(ctx, "php", args...)
 	cmd.Env = env
-	cmd.Dir = config.RootDir
+	cmd.Dir = path.Dir(path.Dir(autoloadFile))
 	subprocess := execution.Run(OperationAnalyse, cmd)
 	stdout, stderr, runErr := subprocess.Stdout, subprocess.Stderr, subprocess.Err
 	if !expectedExit(runErr, 1) {

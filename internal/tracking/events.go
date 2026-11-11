@@ -22,6 +22,7 @@ const (
 
 	// The project.dev.* events are sent by the interactive dev TUI (internal/tui/dev).
 	EventDevSession         = "project.dev.session"
+	EventDevSessionStart    = "project.dev.session_start"
 	EventDevInstall         = "project.dev.install"
 	EventDevMigrationWizard = "project.dev.migration_wizard"
 	EventDevDockerStart     = "project.dev.docker_start"
@@ -45,6 +46,7 @@ const (
 
 	// Every event, set by Track
 	TagCLIVersion = "cli_version"
+	TagSessionID  = "session_id"
 
 	// EventCommand
 	TagCommandName = "command_name"
@@ -57,6 +59,28 @@ const (
 	TagMissing     = "missing"
 	// TagShopwareVersion is the project's Shopware version, on project commands run inside a project.
 	TagShopwareVersion = "shopware_version"
+	// Tools behind a failed tool report (validate, fix, format), sorted and comma-separated.
+	TagFailedTools            = "failed_tools"
+	TagToolsWithErrorFindings = "tools_with_error_findings"
+	// TagFailedStep is the step a failed or cancelled run stopped at, from FailedAt here.
+	// Also on EventProjectUpgrade, EventDevInstall and EventDevWatcher.
+	TagFailedStep = "failed_step"
+	// TagDeprecated lists the deprecated items a run used, sorted and comma-separated.
+	TagDeprecated = "deprecated"
+	// Input counts of validate, fix and format, set by RunTools with SetCommandTag.
+	// Configured bundles are not extensions, so they only count as directories.
+	TagExtensionCount     = "extension_count"
+	TagSourceDirCount     = "source_dir_count"
+	TagAdminDirCount      = "admin_dir_count"
+	TagStorefrontDirCount = "storefront_dir_count"
+	// The Shopware version extension validate or fix ran against and its
+	// --check-against mode, set by PHPStan and Rector with SetCommandTag.
+	TagCheckedShopwareVersion = "checked_shopware_version"
+	TagCheckAgainst           = "check_against"
+	// CPU use of the same runs: the tool subprocesses' CPU time and the logical CPUs the CLI can run on.
+	// TagCPUMS is also on EventToolSubprocess, for that one subprocess, and is not sent on Windows.
+	TagCPUMS    = "cpu_ms"
+	TagCPUCount = "cpu_count"
 
 	// EventProjectCreate
 	TagVersion           = "version"
@@ -67,7 +91,7 @@ const (
 	TagWithAMQP          = "with_amqp"
 	TagInteractive       = "interactive"
 
-	// EventProjectUpgrade
+	// EventProjectUpgrade (reuses TagFailedStep)
 	TagFromVersion    = "from_version"
 	TagTargetVersion  = "target_version"
 	TagBlockingChecks = "blocking_checks"
@@ -81,9 +105,8 @@ const (
 	TagDryRun      = "dry_run"     // preview run; nothing changed on disk
 	TagRemoved     = "removed"     // remove only: the integration was actually present
 
-	// EventDevInstall
+	// EventDevInstall (reuses TagFailedStep)
 	TagAbandonedAt       = "abandoned_at"
-	TagFailedStep        = "failed_step"
 	TagFailureCategory   = "failure_category"
 	TagLanguage          = "language"
 	TagCurrency          = "currency"
@@ -93,13 +116,13 @@ const (
 	TagPHPVersion            = "php_version"
 	TagDeploymentHelperAdded = "deployment_helper_added"
 
-	// EventDevDockerStart
+	// EventDevDockerStart (reuses TagFailureCategory)
 	TagTrigger = "trigger"
 
 	// EventDevAction
 	TagAction = "action"
 
-	// EventDevWatcher
+	// EventDevWatcher (reuses TagFailedStep)
 	TagWatcher = "watcher"
 	TagProxied = "proxied"
 	TagPhase   = "phase"
@@ -107,8 +130,10 @@ const (
 	// EventDevHealth
 	TagCheck = "check"
 
+	// EventDevSession and EventDevSessionStart
+	TagExecutor = "executor"
+
 	// EventDevSession
-	TagExecutor     = "executor"
 	TagTabsVisited  = "tabs_visited"
 	TagActions      = "actions"
 	TagWatchersUsed = "watchers_used"

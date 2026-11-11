@@ -1,0 +1,281 @@
+name: Nightly Smoke Test
+on:
+  schedule:
+    # An odd minute avoids the start-of-hour load that delays scheduled runs.
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+    inputs:
+      retry:
+        description: Set by the workflow itself when it retries a failed scheduled run
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  docker:
+    name: Docker ${{ matrix.line }}
+    if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 6.6 serves the admin watcher with webpack, the newest release with Vite.
+          # SwagExtensionStore develops 6.6 on its 6.6.x branch and the newest line on trunk.
+          - line: '6.6'
+            admin_port: 8080
+            store_ref: '6.6.x'
+          - line: latest
+            admin_port: 5173
+            store_ref: trunk
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version: '1.27'
+          cache: true
+          check-latest: true
+
+      - name: Compile shopware-cli
+        run: go build
+
+      - name: Move to usr/bin
+        run: mv shopware-cli /usr/local/bin/
+
+      # The CLI resolves latest itself, 6.6 needs an exact version.
+      - name: Find the newest 6.6 release
+        id: versions
+        if: matrix.line == '6.6'
+        uses: shopware/github-actions/versions@main
+        with:
+          lts-major: v6.6.
+
+      # The project commands run Composer and npm in the web container, extension build uses the runner's Node.
+      - name: Create Docker project
+        env:
+          SW_VERSION: ${{ steps.versions.outputs.lts-latest-version || matrix.line }}
+        run: |
+          if [ "$SW_VERSION" = 6.6 ]; then
+            echo "::error::shopware/github-actions/versions found no 6.6 release"
+            exit 1
+          fi
+          shopware-cli project create --docker --no-audit shop "${SW_VERSION#v}"
+
+      - name: Install Shopware
+        working-directory: shop
+        run: shopware-cli project dev install
+
+      - name: Development environment reports up
+        working-directory: shop
+        run: shopware-cli project dev status
+
+      - name: Shop responds over HTTP
+        working-directory: shop
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8000/admin || true)
+            echo "attempt $i: HTTP $code"
+            case "$code" in
+              200|301|302) exit 0 ;;
+            esac
+            sleep 5
+          done
+          echo "::error::shop did not respond on http://127.0.0.1:8000/admin"
+          exit 1
+
+      - name: Checkout SwagExtensionStore
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          repository: shopware/SwagExtensionStore
+          ref: ${{ matrix.store_ref }}
+          path: shop/custom/plugins/SwagExtensionStore
+
+      - name: Build SwagExtensionStore
+        working-directory: shop
+        env:
+          SHOPWARE_PROJECT_ROOT: ${{ github.workspace }}/shop
+        run: |
+          shopware-cli extension build custom/plugins/SwagExtensionStore
+          if [ -z "$(find custom/plugins/SwagExtensionStore/src/Resources/public/administration -name '*.js')" ]; then
+            echo "::error::extension build wrote no Administration bundle for SwagExtensionStore"
+            exit 1
+          fi
+
+      # The Administration and Storefront steps below then include the active extension.
+      - name: Install SwagExtensionStore
+        working-directory: shop
+        run: |
+          set -o pipefail
+          # install does not refresh the extensions Shopware knows, list does.
+          shopware-cli project extension list
+          shopware-cli project extension install --activate SwagExtensionStore
+          if ! shopware-cli project extension list --format json | jq -e 'any(.[]; .name == "SwagExtensionStore" and .active)' >/dev/null; then
+            echo "::error::SwagExtensionStore is not active after the install"
+            exit 1
+          fi
+
+      - name: Build Administration
+        working-directory: shop
+        run: shopware-cli project admin-build
+
+      - name: Build Storefront
+        working-directory: shop
+        run: shopware-cli project storefront-build
+
+      - name: Admin watcher answers
+        working-directory: shop
+        run: ../scripts/smoke/watch-probe.sh admin-watch "http://127.0.0.1:${{ matrix.admin_port }}/" 900 shopware-cli project admin-watch
+
+      # Without a terminal the watcher needs the sales channel, and the value must follow "=".
+      - name: Storefront watcher answers
+        working-directory: shop
+        run: |
+          set -o pipefail
+          id=$(shopware-cli project sql --format json "SELECT LOWER(HEX(id)) AS id FROM sales_channel WHERE type_id = UNHEX('8A243080F92E4C719546314B577CF82B') ORDER BY created_at LIMIT 1" | jq -r '.[0].id')
+          # Probe the watcher selected by the generated Compose configuration.
+          url=http://127.0.0.1:9998/
+          if docker compose port web 5175 >/dev/null 2>&1; then
+            url=http://127.0.0.1:5175/@vite/client
+          fi
+          ../scripts/smoke/watch-probe.sh storefront-watch "$url" 900 shopware-cli project storefront-watch --sales-channel="$id"
+
+      - name: Show container logs
+        if: failure()
+        working-directory: shop
+        run: |
+          docker compose ps
+          docker compose logs --tail=200 web
+
+      - name: Stop the development environment
+        if: always()
+        working-directory: shop
+        run: shopware-cli project dev stop --remove-data
+
+  ci:
+    name: Project CI ${{ matrix.line }}
+    if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        line: ['6.6', latest]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version: '1.27'
+          cache: true
+          check-latest: true
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@2.40.0
+        with:
+          php-version: '8.3'
+
+      - name: Setup Node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Compile shopware-cli
+        run: go build
+
+      - name: Move to usr/bin
+        run: mv shopware-cli /usr/local/bin/
+
+      - name: Find the newest 6.6 release
+        id: versions
+        if: matrix.line == '6.6'
+        uses: shopware/github-actions/versions@main
+        with:
+          lts-major: v6.6.
+
+      - name: Create Composer project
+        env:
+          SW_VERSION: ${{ steps.versions.outputs.lts-latest-version || matrix.line }}
+        run: |
+          if [ "$SW_VERSION" = 6.6 ]; then
+            echo "::error::shopware/github-actions/versions found no 6.6 release"
+            exit 1
+          fi
+          shopware-cli project create --no-audit shop "${SW_VERSION#v}"
+
+      - name: Build for production
+        working-directory: shop
+        run: shopware-cli project ci . --force
+
+  report:
+    name: Retry or report failure
+    needs: [docker, ci]
+    # A failed scheduled run is retried once; only a failure of that retry reaches Slack.
+    if: always() && (needs.docker.result == 'failure' || needs.ci.result == 'failure') && (github.event_name == 'schedule' || inputs.retry == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Retry the scheduled run once
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run nightly-smoke.yml --ref "$GITHUB_REF_NAME" -f retry=true
+
+      - name: Report the failure to Slack
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SLACK_CI_FAILURES_WORKFLOW_URL: ${{ secrets.SLACK_CI_FAILURES_WORKFLOW_URL }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          # Forks and repositories without the secret skip the report.
+          if [ -z "$SLACK_CI_FAILURES_WORKFLOW_URL" ]; then
+            echo "No Slack webhook is configured, skipping the report"
+            exit 0
+          fi
+          # The jobs API names the failed matrix legs, for example "Docker latest".
+          failed_jobs=$(gh api "/repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '[.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name] | join(", ")' || true)
+          payload=$(jq --null-input \
+            --arg summary "$GH_REPO: nightly smoke test failed on $REF_NAME after a retry" \
+            --arg run_url "$RUN_URL" \
+            --arg commit "${COMMIT:0:8}" \
+            --arg failed_jobs "${failed_jobs:-unknown}" \
+            '{summary: $summary, run_url: $run_url, commit: $commit, failed_jobs: $failed_jobs}')
+          curl --fail --silent --show-error --request POST --url "$SLACK_CI_FAILURES_WORKFLOW_URL" --header "Content-Type: application/json" --data "$payload"

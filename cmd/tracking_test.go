@@ -14,9 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 // useTrackingTestRoot swaps rootCmd for a minimal tree containing
@@ -284,6 +286,60 @@ func TestTrackCommandExecution_PlainFailureHasNoMissingTag(t *testing.T) {
 	assert.NotContains(t, (*events)[0], tracking.TagMissing)
 }
 
+func TestTrackCommandExecution_ToolReportTags(t *testing.T) {
+	tests := []struct {
+		name                   string
+		cancelled              bool
+		report                 *validation.ToolReportError
+		failedTools            string
+		toolsWithErrorFindings string
+	}{
+		{
+			name:                   "findings only",
+			report:                 &validation.ToolReportError{ToolsWithErrorFindings: []string{"builtin", "phpstan"}},
+			toolsWithErrorFindings: "builtin,phpstan",
+		},
+		{
+			name:                   "tool failure and findings",
+			report:                 &validation.ToolReportError{FailedTools: []string{"eslint"}, ToolsWithErrorFindings: []string{"builtin", "eslint"}},
+			failedTools:            "eslint",
+			toolsWithErrorFindings: "builtin,eslint",
+		},
+		{
+			name:        "tool failure only",
+			report:      &validation.ToolReportError{FailedTools: []string{"phpstan"}},
+			failedTools: "phpstan",
+		},
+		{
+			name:      "cancelled run",
+			cancelled: true,
+			report:    &validation.ToolReportError{FailedTools: []string{"phpstan"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := useTrackingTestRoot(t, "shopware-cli")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tt.cancelled {
+				cancel()
+			}
+
+			trackCommandExecution(ctx, []string{"extension", "build-me"}, 0, fmt.Errorf("cannot validate: %w", tt.report), "")
+
+			require.Len(t, *events, 1)
+			tags := (*events)[0]
+			for key, want := range map[string]string{tracking.TagFailedTools: tt.failedTools, tracking.TagToolsWithErrorFindings: tt.toolsWithErrorFindings} {
+				if want == "" {
+					assert.NotContains(t, tags, key)
+				} else {
+					assert.Equal(t, want, tags[key])
+				}
+			}
+		})
+	}
+}
+
 func TestTrackCommandExecution_PinnedPHPNotFound(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 	runErr := fmt.Errorf("cannot start the development environment: %w", &system.PHPVersionNotFoundError{Pin: "8.3"})
@@ -304,4 +360,59 @@ func TestTrackCommandExecution_ShopwareVersionTag(t *testing.T) {
 	require.Len(t, *events, 2)
 	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagShopwareVersion])
 	assert.NotContains(t, (*events)[1], tracking.TagShopwareVersion)
+}
+
+func TestTrackCommandExecution_FailedStep(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	runErr := errors.Join(tracking.FailedAt("composer_install", errors.New("exit status 2")), errors.New("cannot remove created directory"))
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	trackCommandExecution(t.Context(), []string{"project", "create"}, 0, runErr, "")
+	trackCommandExecution(cancelled, []string{"project", "create"}, 0, runErr, "")
+	trackCommandExecution(t.Context(), []string{"project", "create"}, 0, errors.New("boom"), "")
+
+	require.Len(t, *events, 3)
+	assert.Equal(t, "composer_install", (*events)[0][tracking.TagFailedStep])
+	assert.Equal(t, tracking.ResultCancelled, (*events)[1][tracking.TagResult])
+	assert.Equal(t, "composer_install", (*events)[1][tracking.TagFailedStep], "a cancelled run keeps the step it stopped at")
+	assert.NotContains(t, (*events)[2], tracking.TagFailedStep)
+}
+
+func TestTrackCommandExecution_CommandTags(t *testing.T) {
+	originalTags := commandTags
+	t.Cleanup(func() { commandTags = originalTags })
+	commandTags = func() map[string]string {
+		return map[string]string{tracking.TagExtensionCount: "3", tracking.TagResult: "replaced"}
+	}
+
+	tests := []struct {
+		name   string
+		runErr error
+		result string
+	}{
+		{name: "success", result: tracking.ResultSuccess},
+		{name: "failure", runErr: errors.New("boom"), result: tracking.ResultFailure},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := useTrackingTestRoot(t, "shopware-cli")
+
+			trackCommandExecution(t.Context(), []string{"project", "console"}, 0, tt.runErr, "")
+
+			require.Len(t, *events, 1)
+			assert.Equal(t, "3", (*events)[0][tracking.TagExtensionCount])
+			assert.Equal(t, tt.result, (*events)[0][tracking.TagResult])
+		})
+	}
+}
+
+func TestTrackCommandExecution_DeprecatedTag(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	deprecation.Track("flag.extension.validate.reporter")
+
+	trackCommandExecution(t.Context(), []string{"project", "console"}, 0, nil, "")
+
+	require.Len(t, *events, 1)
+	assert.Contains(t, (*events)[0][tracking.TagDeprecated], "flag.extension.validate.reporter")
 }

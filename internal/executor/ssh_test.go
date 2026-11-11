@@ -392,7 +392,8 @@ func TestSSHExecutorDatabaseConnection(t *testing.T) {
 	assert.Equal(t, "secret", conn.Password)
 	assert.Equal(t, "shopware_prod", conn.Database)
 
-	cfg := conn.MySQLConfig()
+	cfg, err := conn.MySQLConfig()
+	require.NoError(t, err)
 	assert.NotEqual(t, "tcp", cfg.Net, "SSH connections must be tunneled through a registered dialer network")
 	assert.True(t, strings.HasPrefix(cfg.Net, "shopware-cli-ssh-"))
 	assert.Equal(t, "db.internal:3307", cfg.Addr, "the dialer receives the remote address")
@@ -447,7 +448,9 @@ func TestSSHExecutorDatabaseConnectionDefaults(t *testing.T) {
 	assert.Equal(t, "127.0.0.1", conn.Host)
 	assert.Equal(t, "3306", conn.Port)
 	assert.Equal(t, "shopware", conn.Database)
-	assert.NotEqual(t, "tcp", conn.MySQLConfig().Net)
+	cfg, err := conn.MySQLConfig()
+	require.NoError(t, err)
+	assert.NotEqual(t, "tcp", cfg.Net)
 }
 
 func TestSSHExecutorDatabaseConnectionLocalhostSocket(t *testing.T) {

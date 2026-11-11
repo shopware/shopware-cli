@@ -14,6 +14,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
+	github.com/dustin/go-humanize v1.0.1
 	github.com/evanw/esbuild v0.28.2
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/gorilla/schema v1.4.1
@@ -35,7 +36,7 @@ require (
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
 	github.com/smallstep/truststore v0.13.0
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/stretchr/testify v1.12.1
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
 	github.com/vulcand/oxy/v2 v2.3.0
@@ -74,7 +75,6 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

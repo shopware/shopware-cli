@@ -54,6 +54,8 @@ func TestTrackSendsUDPPayload(t *testing.T) {
 	assert.Equal(t, "shopware_cli.test_event", received.Event)
 	assert.Equal(t, "value", received.Tags["key"])
 	assert.Equal(t, cliversion.Version, received.Tags[TagCLIVersion])
+	assert.NotEmpty(t, received.Tags[TagSessionID])
+	assert.Equal(t, sessionID, received.Tags[TagSessionID], "every event of a run carries the same session ID")
 	assert.NotEmpty(t, received.UserID)
 	assert.NotEmpty(t, received.Timestamp)
 }

@@ -1,0 +1,30 @@
+id: cobra-short-period
+language: Go
+severity: error
+message: Command Short must not end with a period
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  kind: interpreted_string_literal
+  pattern: $TEXT
+  # Plain quoted strings only; leave escapes and ellipses alone.
+  regex: '^"[^"\\]*[^."\\]\."$'
+  inside:
+    kind: literal_element
+    inside:
+      pattern:
+        context: 'cobra.Command{Short: $VALUE}'
+        selector: keyed_element
+      inside:
+        kind: literal_value
+        inside:
+          pattern: cobra.Command{$$$FIELDS}
+
+transform:
+  FIXED:
+    replace:
+      source: $TEXT
+      replace: '\."$'
+      by: '"'
+
+fix: $FIXED

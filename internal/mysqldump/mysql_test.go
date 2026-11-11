@@ -53,6 +53,9 @@ func mockPrefetchSchemas(mock sqlmock.Sqlmock) {
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
 		}))
 
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_NAME = 'CHECK_CONSTRAINTS'.*COLUMN_NAME = 'TABLE_NAME'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
+
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
@@ -164,6 +167,9 @@ func TestMySQLDumpCreateTable(t *testing.T) {
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
 		}))
 
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_NAME = 'CHECK_CONSTRAINTS'.*COLUMN_NAME = 'TABLE_NAME'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
+
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
@@ -198,11 +204,11 @@ func TestMySQLDumpCreateTableHandlingErrorWhenScanningRows(t *testing.T) {
 }
 
 func TestRewriteSelectExpression(t *testing.T) {
-	assert.Equal(t, "'{{- faker.Internet.Email() -}}'", rewriteSelectExpression("{{- faker.Internet.Email() -}}"))
+	assert.Equal(t, "'{{- faker.Internet.SafeEmail() -}}'", rewriteSelectExpression("{{- faker.Internet.SafeEmail() -}}"))
 	assert.Equal(t, "'faker.Person.FirstName()'", rewriteSelectExpression("faker.Person.FirstName()"))
 	assert.Equal(t, "NOW()", rewriteSelectExpression("NOW()"))
 
-	expression := "CASE WHEN `configuration_key` = 'A.config.email' THEN '{\"_value\":\"{{- faker.Internet.Email() -}}\"}' ELSE `configuration_value` END"
+	expression := "CASE WHEN `configuration_key` = 'A.config.email' THEN '{\"_value\":\"{{- faker.Internet.SafeEmail() -}}\"}' ELSE `configuration_value` END"
 	assert.Equal(t, expression, rewriteSelectExpression(expression))
 
 	assert.Equal(t, "'qa+{{- faker.Internet.User() -}}@example.com'", rewriteSelectExpression("qa+{{- faker.Internet.User() -}}@example.com"))
@@ -937,6 +943,9 @@ func Test_mySQL_noDataTableWildcard(t *testing.T) {
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
 		}))
 
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_NAME = 'CHECK_CONSTRAINTS'.*COLUMN_NAME = 'TABLE_NAME'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
+
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
@@ -1328,4 +1337,38 @@ func TestStagingTableNameStaysWithinIdentifierLimit(t *testing.T) {
 	assert.LessOrEqual(t, len(name), 64)
 	assert.True(t, strings.HasPrefix(name, "_sw_cli_kept_"))
 	assert.True(t, strings.HasSuffix(name, "_deadbeef"))
+}
+
+func TestDumpBuildsExclusionsFromSchemaIncludingIgnoredTables(t *testing.T) {
+	for _, withLimit := range []bool{false, true} {
+		name := "ignored table"
+		if withLimit {
+			name = "ignored table with row limit"
+		}
+		t.Run(name, func(t *testing.T) {
+			db, mock := getDB(t)
+			t.Cleanup(func() { _ = db.Close() })
+			dumper := NewMySQLDumper(db)
+			dumper.Ignore = []string{"app"}
+			if withLimit {
+				dumper.LimitMap = map[string]TableLimit{"app": {Rows: 1}}
+			}
+			called := false
+			dumper.BuildRowExclusions = func(schemas map[string]*TableSchema) map[string]string {
+				called = true
+				assert.Contains(t, schemas, "app")
+				return map[string]string{"app": "`app_secret` IS NOT NULL"}
+			}
+			mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
+				sqlmock.NewRows([]string{"table", "type"}).AddRow("app", "BASE TABLE"))
+			mockPrefetchSchemas(mock)
+			mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"table", "type"}))
+			mock.ExpectQuery("SHOW TRIGGERS").WillReturnRows(sqlmock.NewRows([]string{"trigger"}))
+
+			var output bytes.Buffer
+			assert.NoError(t, dumper.Dump(t.Context(), &output))
+			assert.True(t, called)
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }

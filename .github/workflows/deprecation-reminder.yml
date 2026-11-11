@@ -1,0 +1,64 @@
+name: Deprecation Reminder
+on:
+  schedule:
+    # Mondays; an odd minute avoids the start-of-hour load that delays scheduled runs.
+    - cron: '17 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Report deprecations due within this many days
+        type: number
+        default: 7
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    name: Report due deprecations
+    if: github.repository == 'shopware/shopware-cli'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Report due deprecations to Slack
+        env:
+          SLACK_DEPRECATIONS_WORKFLOW_URL: ${{ secrets.SLACK_DEPRECATIONS_WORKFLOW_URL }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Every deprecation is a sub-issue of this issue, see docs/adr/2026-11-09-deprecation-policy.md.
+          TRACKING_ISSUE: '1859'
+          DAYS: ${{ inputs.days || 7 }}
+        run: |
+          # Fail every week rather than only when something is due, so a missing secret is noticed.
+          if [ -z "$SLACK_DEPRECATIONS_WORKFLOW_URL" ]; then
+            echo "::error::The SLACK_DEPRECATIONS_WORKFLOW_URL secret is not set"
+            exit 1
+          fi
+          cutoff=$(jq --null-input --raw-output --argjson days "$DAYS" 'now + $days * 86400 | strftime("%Y-%m-%d")')
+          due=""
+          while IFS=$'\t' read -r number title url; do
+            # The removal date is the "Target date" issue field; overdue issues are reported every week until closed.
+            date=$(gh api "/repos/$GH_REPO/issues/$number/issue-field-values" --jq '.[] | select(.issue_field_name == "Target date") | .value')
+            if [ -z "$date" ]; then
+              due+="• no target date: $title $url"$'\n'
+            elif [[ ! "$date" > "$cutoff" ]]; then
+              due+="• $date: $title $url"$'\n'
+            fi
+          done < <(gh api --paginate "/repos/$GH_REPO/issues/$TRACKING_ISSUE/sub_issues?per_page=100" --jq '.[] | select(.state == "open") | [.number, .title, .html_url] | @tsv')
+          if [ -z "$due" ]; then
+            echo "No deprecations are due by $cutoff"
+            exit 0
+          fi
+          echo "$due"
+          payload=$(jq --null-input \
+            --arg summary "$GH_REPO: deprecations due for removal by $cutoff" \
+            --arg issues "$due" \
+            '{summary: $summary, issues: $issues}')
+          curl --fail --silent --show-error --request POST --url "$SLACK_DEPRECATIONS_WORKFLOW_URL" --header "Content-Type: application/json" --data "$payload"

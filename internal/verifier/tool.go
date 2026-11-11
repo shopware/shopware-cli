@@ -7,7 +7,9 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
@@ -35,6 +37,11 @@ func GetToolsOf[T Tool]() ToolList[T] {
 	}
 	return tools
 }
+
+const (
+	CheckAgainstHighest = "highest"
+	CheckAgainstLowest  = "lowest"
+)
 
 type ToolConfig struct {
 	// Path to the tool directory
@@ -108,7 +115,8 @@ type CheckTool interface {
 
 type FixTool interface {
 	Tool
-	Fix(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
+	// Fix reports pending changes without applying them when dryRun is true.
+	Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
 }
 
 type FormatTool interface {
@@ -129,7 +137,7 @@ func WarnOnDeprecatedToolName(ctx context.Context, values ...string) {
 	for _, value := range values {
 		for _, name := range strings.Split(value, ",") {
 			if strings.TrimSpace(name) == "sw-cli" {
-				logging.FromContext(ctx).Warnf("The tool name %q is deprecated as input; use %q instead", "sw-cli", "builtin")
+				deprecation.Warn(ctx, "tool_name.sw_cli", `Tool name "sw-cli"`, "2027-02-10", `"builtin"`)
 				return
 			}
 		}
@@ -269,7 +277,11 @@ func (tl ToolList[T]) CompleteNames(toComplete string) []string {
 // CommandContext logs the command before creating it with exec.CommandContext.
 func CommandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
 	logging.FromContext(ctx).Debugf("Executing command: %s %s", name, strings.Join(arg, " "))
-	return exec.CommandContext(ctx, name, arg...)
+	cmd := exec.CommandContext(ctx, name, arg...)
+	// Bound output draining if a descendant keeps a pipe open after cancellation.
+	cmd.WaitDelay = time.Second
+	configureToolCancellation(cmd)
+	return cmd
 }
 
 func expectedExit(err error, codes ...int) bool {

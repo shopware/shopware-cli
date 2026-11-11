@@ -1,6 +1,7 @@
 package symfony
 
 import (
+	"encoding/xml"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -38,7 +39,7 @@ func TestConvertXMLFileFixtures(t *testing.T) {
 				convert = ConvertRoutesXMLFile
 			}
 
-			converted, err := convert(entryFile)
+			converted, err := convert(t.Context(), entryFile)
 			require.NoError(t, err)
 			require.NotEmpty(t, converted)
 
@@ -107,7 +108,7 @@ func TestConvertServicesXMLFileRefusesWhenYamlExists(t *testing.T) {
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container/>`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "services.yaml"), []byte("services:\n"), 0o644))
 
-	_, err := ConvertServicesXMLFile(servicesXML)
+	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "exists already")
 
 	assert.FileExists(t, servicesXML)
@@ -120,7 +121,7 @@ func TestConvertServicesXMLFileRefusesWhenYmlExists(t *testing.T) {
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container/>`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "services.yml"), []byte("services:\n"), 0o644))
 
-	_, err := ConvertServicesXMLFile(servicesXML)
+	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "exists already")
 
 	assert.FileExists(t, servicesXML)
@@ -146,8 +147,12 @@ func TestConvertServicesXMLFileKeepsEverythingOnError(t *testing.T) {
     </services>
 </container>`), 0o644))
 
-	_, err := ConvertServicesXMLFile(servicesXML)
+	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "unsupported element <stack>")
+	var conversionErr *XMLConversionError
+	require.ErrorAs(t, err, &conversionErr)
+	assert.Equal(t, importedXML, conversionErr.Path)
+	assert.Equal(t, XMLConversionUnsupported, conversionErr.Kind)
 
 	assert.FileExists(t, servicesXML)
 	assert.FileExists(t, importedXML)
@@ -161,7 +166,38 @@ func TestConvertServicesXMLFileUnparsableXML(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container`), 0o644))
 
-	_, err := ConvertServicesXMLFile(servicesXML)
+	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
 	assert.Error(t, err)
+	var conversionErr *XMLConversionError
+	require.ErrorAs(t, err, &conversionErr)
+	assert.Equal(t, servicesXML, conversionErr.Path)
+	assert.Equal(t, XMLConversionInvalidXML, conversionErr.Kind)
+	var syntaxErr *xml.SyntaxError
+	assert.ErrorAs(t, err, &syntaxErr)
 	assert.FileExists(t, servicesXML)
+}
+
+func TestConvertServicesXMLFileReportsStatFailures(t *testing.T) {
+	for _, scenario := range []struct {
+		name, content, link string
+	}{
+		{"target", `<container/>`, "services.yaml"},
+		{"import", `<container><imports><import resource="broken.xml"/></imports></container>`, "broken.xml"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			root := t.TempDir()
+			xmlPath := filepath.Join(root, "services.xml")
+			require.NoError(t, os.WriteFile(xmlPath, []byte(scenario.content), 0o644))
+			// A symlink loop produces a stat error even when tests run as root.
+			require.NoError(t, os.Symlink(scenario.link, filepath.Join(root, scenario.link)))
+			converted, err := ConvertServicesXMLFile(t.Context(), xmlPath)
+			var pathErr *os.PathError
+			require.ErrorAs(t, err, &pathErr)
+			assert.Equal(t, filepath.Join(root, scenario.link), pathErr.Path)
+			assert.Empty(t, converted)
+			original, err := os.ReadFile(xmlPath)
+			require.NoError(t, err)
+			assert.Equal(t, scenario.content, string(original))
+		})
+	}
 }

@@ -99,6 +99,12 @@ func TestProjectShopwareVersion(t *testing.T) {
 	assert.Empty(t, projectShopwareVersion())
 }
 
+func TestReportableShopwareVersion(t *testing.T) {
+	assert.Equal(t, "6.6.0.0", ReportableShopwareVersion("6.6.0.0"))
+	assert.Equal(t, "dev-trunk", ReportableShopwareVersion("dev-trunk"))
+	assert.Empty(t, ReportableShopwareVersion("dev-feature-xyz"))
+}
+
 func TestShopwareVersionLookupUnavailable(t *testing.T) {
 	enableVersionLookup(t)
 	synctest.Test(t, func(t *testing.T) {

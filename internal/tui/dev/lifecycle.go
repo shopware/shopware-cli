@@ -44,7 +44,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m, nil
 
 	case dockerStartedMsg:
-		if tags, ok := m.telemetry.dockerStartTags(msg.err); ok {
+		if tags, ok := m.telemetry.dockerStartTags(msg.err, msg.output); ok {
 			trackEvent(tracking.EventDevDockerStart, tags)
 		}
 		if msg.err != nil {

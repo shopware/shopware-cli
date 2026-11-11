@@ -135,6 +135,48 @@ func TestSessionTagsSentOnce(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestSessionStartTagsSentOnce(t *testing.T) {
+	tel := newTelemetryState(true)
+
+	tags, ok := tel.sessionStartTags()
+	assert.True(t, ok)
+	assert.Equal(t, "docker", tags["executor"])
+
+	_, ok = tel.sessionStartTags()
+	assert.False(t, ok)
+}
+
+func TestSessionStartNotSentAfterTheSessionEnded(t *testing.T) {
+	tel := newTelemetryState(true)
+	tel.sessionTags()
+
+	_, ok := tel.sessionStartTags()
+	assert.False(t, ok)
+}
+
+func TestExitTagsEndAnOpenSessionWithTheResult(t *testing.T) {
+	tel := newTelemetryState(false)
+	tel.sessionStartTags()
+
+	tags, ok := tel.exitTags("panic")
+	assert.True(t, ok)
+	assert.Equal(t, "panic", tags["result"])
+}
+
+func TestExitTagsSkipSessionsThatEndedOrNeverOpened(t *testing.T) {
+	neverOpened := newTelemetryState(false)
+	_, ok := neverOpened.exitTags("terminated")
+	assert.False(t, ok, "a normal quit before the dashboard also returns nil")
+
+	ended := newTelemetryState(false)
+	ended.sessionStartTags()
+	ended.setExitChoice("stop_containers")
+	ended.sessionTags()
+	_, ok = ended.exitTags("panic")
+	assert.False(t, ok)
+	assert.Equal(t, "stop_containers", ended.exitChoice, "an ended session keeps how it ended")
+}
+
 func TestSessionTagsDefaults(t *testing.T) {
 	tel := newTelemetryState(false)
 	tags, ok := tel.sessionTags()
@@ -164,20 +206,22 @@ func TestTaskTagsRoundTrip(t *testing.T) {
 
 func TestDockerStartTagsRequireBegin(t *testing.T) {
 	tel := newTelemetryState(true)
-	_, ok := tel.dockerStartTags(nil)
+	_, ok := tel.dockerStartTags(nil, nil)
 	assert.False(t, ok)
 
 	tel.beginDockerStart()
-	tags, ok := tel.dockerStartTags(assert.AnError)
+	tags, ok := tel.dockerStartTags(assert.AnError, []string{"Error response from daemon: Bind for 0.0.0.0:3306 failed: port is already allocated"})
 	assert.True(t, ok)
 	assert.Equal(t, "initial", tags["trigger"])
 	assert.Equal(t, "failure", tags["result"])
+	assert.Equal(t, "port_in_use", tags["failure_category"])
 
 	tel.beginConfigRestart()
-	tags, ok = tel.configRestartTags(nil)
+	tags, ok = tel.configRestartTags(nil, nil)
 	assert.True(t, ok)
 	assert.Equal(t, "config_change", tags["trigger"])
 	assert.Equal(t, "success", tags["result"])
+	assert.NotContains(t, tags, "failure_category")
 }
 
 func TestHealthEventTagsOnePerCheck(t *testing.T) {
@@ -232,11 +276,15 @@ func TestNilTelemetryStateIsSafe(t *testing.T) {
 
 	_, ok := tel.sessionTags()
 	assert.False(t, ok)
+	_, ok = tel.sessionStartTags()
+	assert.False(t, ok)
+	_, ok = tel.exitTags("terminated")
+	assert.False(t, ok)
 	_, ok = tel.taskTags("success")
 	assert.False(t, ok)
-	_, ok = tel.dockerStartTags(nil)
+	_, ok = tel.dockerStartTags(nil, nil)
 	assert.False(t, ok)
-	_, ok = tel.configRestartTags(nil)
+	_, ok = tel.configRestartTags(nil, nil)
 	assert.False(t, ok)
 }
 

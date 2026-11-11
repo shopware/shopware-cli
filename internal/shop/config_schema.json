@@ -573,6 +573,10 @@
                   "$ref": "#/$defs/Port",
                   "description": "Host port for Storefront watcher. Defaults to 9998."
                 },
+                "storefront_vite": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Storefront watcher (Vite). Defaults to 5175."
+                },
                 "admin_watcher": {
                   "$ref": "#/$defs/Port",
                   "description": "Host port for Admin watcher (Vite). Defaults to 5173."

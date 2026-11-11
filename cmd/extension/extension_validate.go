@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
@@ -19,7 +20,8 @@ var extensionValidateCmd = &cobra.Command{
 	Long: `Validate an extension folder or ZIP file.
 Store compliance checks that Administration and Storefront source files have matching compiled assets.
 Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.
-A folder is validated in place; without an existing vendor/, the composer dependencies for PHPStan are installed inside var/cache/shopware-cli.`,
+A folder is validated in place; PHPStan's composer dependencies are always resolved inside var/cache/shopware-cli for the requested --check-against baseline.
+The extension's vendor/ and composer.lock are preserved. Custom PHPStan configurations that load vendor/autoload.php themselves still load local dependencies.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
@@ -130,19 +132,19 @@ func init() {
 	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Enable Store compliance (deprecated: use validation.store_compliance in the extension configuration)")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
-	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
+	extensionValidateCmd.PersistentFlags().String("check-against", verifier.CheckAgainstHighest, "Check against Shopware Version (highest, lowest)")
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
-	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{"highest", "lowest"}, cobra.ShellCompDirectiveNoFileComp))
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{verifier.CheckAgainstHighest, verifier.CheckAgainstLowest}, cobra.ShellCompDirectiveNoFileComp))
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
-	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
-	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", "use validation.store_compliance in the extension configuration")
-	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
-	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", deprecation.Message("2027-02-10", ""))
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", deprecation.Message("2027-02-10", "validation.store_compliance in the extension configuration"))
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", deprecation.Message("2027-02-10", "--format"))
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("no-copy", deprecation.Message("2027-02-10", ""))
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if _, err := extensionValidationFormat(cmd); err != nil {
@@ -150,7 +152,7 @@ func init() {
 		}
 
 		mode, _ := cmd.Flags().GetString("check-against")
-		if mode != "highest" && mode != "lowest" {
+		if mode != verifier.CheckAgainstHighest && mode != verifier.CheckAgainstLowest {
 			return fmt.Errorf("invalid --check-against value %q, allowed values: highest, lowest", mode)
 		}
 

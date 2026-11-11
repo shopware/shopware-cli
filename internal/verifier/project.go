@@ -13,10 +13,10 @@ import (
 
 	"github.com/shyim/go-version"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 func IsProject(root string) bool {
@@ -85,12 +85,21 @@ func getShopwareConstraint(root string) (*version.Constraints, error) {
 }
 
 func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*ToolConfig, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	constraint, err := getShopwareConstraint(root)
 	if err != nil {
 		return nil, err
 	}
 
-	extensions, _ := extension.FindExtensionsFromProject(ctx, root, onlyLocal)
+	extensions, discoveryErr := extension.FindExtensionsFromProject(ctx, root, onlyLocal)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if errors.Is(discoveryErr, context.Canceled) || errors.Is(discoveryErr, context.DeadlineExceeded) {
+		return nil, discoveryErr
+	}
 
 	sourceDirectories := []string{}
 	adminDirectories := []string{}
@@ -115,6 +124,9 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 	checkExtensions := []extension.Extension{}
 
 	for _, ext := range extensions {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		extName, err := ext.GetName()
 		if err != nil {
 			return nil, err
@@ -156,7 +168,7 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 	// Use the build.bundles section in .config/shopware-project.yml instead.
 	seenBundlePaths := make(map[string]bool)
 	for bundlePath := range rootComposerJsonData.Extra.Bundles {
-		logging.FromContext(ctx).Warnf("Deprecation: Bundle %q is configured via composer.json extra.shopware-bundles. Please move it to the build.bundles section in %s instead.", bundlePath, shopCfg.GetStorageLocation())
+		deprecation.Warn(ctx, "composer.shopware_bundles", fmt.Sprintf("Bundle %q in composer.json extra.shopware-bundles", bundlePath), "2027-02-10", "build.bundles in "+shopCfg.GetStorageLocation())
 		sourceDirectories = append(sourceDirectories, path.Join(root, bundlePath))
 
 		expectedAdminPath := path.Join(root, bundlePath, "Resources", "app", "administration")
@@ -218,7 +230,7 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		toolCfg.PHPVersion = shopCfg.Validation.PhpVersion
 	}
 
-	if err := determineVersionRange(toolCfg, constraint); err != nil {
+	if err := determineVersionRange(ctx, toolCfg, constraint); err != nil {
 		return nil, err
 	}
 
