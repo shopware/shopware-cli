@@ -166,10 +166,8 @@ discovered from the supplied path; project validation discovers project
 extensions and source directories, excluding vendor extensions and configured
 ignored extensions. Project validation also offers `--local-only`.
 
-Both commands accept `--only` and `--exclude` to select tools, and
-`--format` to select a report. Supported report formats include summary, JSON,
-GitHub, GitLab, JUnit and Markdown. The older `--reporter` flag remains an
-accepted deprecated alias for `--format`.
+Supported report formats include summary, JSON, GitHub, GitLab, JUnit and 
+Markdown.
 
 The runner normalizes finding paths relative to the analysis root and filters
 findings according to configured ignores. A tool can report execution errors
