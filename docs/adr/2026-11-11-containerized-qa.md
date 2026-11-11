@@ -6,7 +6,7 @@ tags: [tooling, qa, containers]
 
 - Related: [Issue #1713](https://github.com/shopware/shopware-cli/issues/1713),
   [Issue #1672](https://github.com/shopware/shopware-cli/issues/1672)
-- Depends on: [Execution and runtime model](2026-11-10-execution-runtime-model.md)
+- Related: [Execution and runtime model](2026-11-10-execution-runtime-model.md)
 - Related: [Unified tool results and output](2026-10-22-unified-tool-results.md)
 
 ## Context
@@ -45,11 +45,11 @@ Two existing images are suitable starting points:
 | Development image used by project creation and the local stack (`docker-dev`) | Provides the PHP and Node.js environment, with QA tooling prepared for execution there. |
 
 Start with the Shopware CLI image. Always select the tag
-`<cli-version>-php-<php-version>`, matching the currently running CLI version and
-the PHP version selected for the QA run. Wrapping the existing QA command
+`<cli-version>-php-<php-version>`, matching the currently running CLI version
+and the PHP version selected for the QA run. Wrapping the existing QA command
 requires few changes and preserves tool preparation and reporting inside the
-CLI. The image choice is separate from the executor contract. A possible second phase
-could migrate QA to the development image, but that decision remains open.
+CLI. The image choice is separate from the executor contract. A possible second
+phase could migrate QA to the development image, but that decision remains open.
 Such a change would adapt the image contents and target setup while retaining
 the wrapped CLI command as the execution boundary.
 

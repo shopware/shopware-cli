@@ -7,7 +7,7 @@ tags: [architecture, execution, tooling, containers]
 - Related: [Issue #1713](https://github.com/shopware/shopware-cli/issues/1713),
   [Issue #1672](https://github.com/shopware/shopware-cli/issues/1672),
   [Issue #1534](https://github.com/shopware/shopware-cli/issues/1534)
-- First adoption: [Containerized QA execution](2026-11-11-containerized-qa.md)
+- Related: [Containerized QA execution](2026-11-11-containerized-qa.md)
 
 ## Context
 
@@ -21,8 +21,8 @@ configuration, Admin API clients, database connections and log access.
 The requirement to run QA tools in containers adds another execution target to
 these workflows. QA should work without depending on host PHP and Node.js
 installations, with consistent tooling across development and CI.
-[Containerized QA execution](2026-11-11-containerized-qa.md) describes that first
-application of the shared model.
+[Containerized QA execution](2026-11-11-containerized-qa.md) describes that
+first application of the shared model.
 
 Implementing this through more command-specific Docker calls would spread
 execution logic further across the CLI. A shared execution boundary instead
@@ -40,8 +40,8 @@ until their replacements are ready.
 
 Adopt shared executor and runtime contracts as the boundary for external process
 execution across the CLI. Group the implementations under
-`internal/orchestration`. Introduce the model through local and containerized QA,
-then migrate other consumers in independently reviewable stages.
+`internal/orchestration`. Introduce the model through local and containerized
+QA, then migrate other consumers in independently reviewable stages.
 
 ### Architecture
 
@@ -218,7 +218,8 @@ func installDependencies(ctx context.Context, executor *executor.Executor,
 }
 ```
 
-Node and generic commands use the same shape, as these independent examples show:
+Node and generic commands use the same shape, as these independent examples
+show:
 
 ```go
 _, err := executor.Node().NPM("run", "build").Run(ctx, streams)
@@ -226,10 +227,10 @@ _, err := executor.Node().NPM("run", "build").Run(ctx, streams)
 result, err := executor.Command("git", "rev-parse", "HEAD").Capture(ctx)
 ```
 
-`Run` starts and waits. `Start` returns the process handle for asynchronous work.
-`Capture` and `CombinedOutput` provide the two capture modes. Executor defaults
-and per-command overrides return copies, allowing consumers to vary a directory
-or environment without changing shared settings.
+`Run` starts and waits. `Start` returns the process handle for asynchronous
+work. `Capture` and `CombinedOutput` provide the two capture modes. Executor
+defaults and per-command overrides return copies, allowing consumers to vary a
+directory or environment without changing shared settings.
 
 #### Target wiring and workspace
 
@@ -421,9 +422,9 @@ _, err = provider.Start(ctx, runtime.Options{})
 
 The same engine supplies both container capabilities. The provider would expose
 `stack.Lifecycle` and `stack.Remover` to its consumers. Consumers use the same
-stack API as Compose, without needing service execution or engine-specific calls.
-`Stop` retains resources, while `Remove` applies the provider's retention policy.
-The services outlive each management call.
+stack API as Compose, without needing service execution or engine-specific
+calls. `Stop` retains resources, while `Remove` applies the provider's retention
+policy. The services outlive each management call.
 
 These contracts also allow a reusable managed-stack provider later. Supporting
 another engine requires implementations of the container and network
