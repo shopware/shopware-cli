@@ -11,6 +11,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func confirmDeployment(cmd *cobra.Command, artifact deployment.Deployment, kind deploymentSelectionKind) (bool, error) {
@@ -46,5 +47,5 @@ func deploymentConfirmationForm(cmd *cobra.Command, artifact deployment.Deployme
 			Title(fmt.Sprintf("%s deployment %q on environment %q?", action, artifact.DisplayName(), environment)).
 			Options(huh.NewOption("Yes", true), huh.NewOption("No", false)).
 			Value(confirmed),
-	)).WithInput(cmd.InOrStdin()).WithOutput(cmd.ErrOrStderr())
+	)).WithTheme(tui.ShopwareTheme()).WithInput(cmd.InOrStdin()).WithOutput(cmd.ErrOrStderr())
 }

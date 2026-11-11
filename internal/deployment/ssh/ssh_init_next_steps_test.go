@@ -52,7 +52,7 @@ func TestInitializationNextStepsPreserveCommandContext(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"project", "deploy", "create", "-e", environment,
-		"--project-config", filepath.Join(caller, config), "--", root,
+		"--project-config", filepath.Join(caller, config), "--rollout", "--", root,
 	}, strings.Split(strings.TrimSuffix(string(recorded), "\x00"), "\x00"))
 	assert.NoFileExists(t, filepath.Join(caller, "unexpected"))
 }
@@ -82,4 +82,19 @@ func TestInitializationNextStepsIncludeAllTargets(t *testing.T) {
 	require.NoError(t, reader.Close())
 	require.NoError(t, writer.Close())
 	require.ErrorIs(t, guide.WriteInitializationNextSteps("", writer), io.ErrClosedPipe)
+}
+
+func TestInitializationNextStepsUseShortCommandInProject(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	backend, err := New(root, filepath.Join(root, ".config", "shopware-project.yml"), &shop.Config{}, &shop.EnvironmentConfig{
+		Type: "ssh", SSH: &shop.EnvironmentSSHConfig{Host: "example.invalid", Directory: "/srv/shop/current"},
+	})
+	require.NoError(t, err)
+	var output bytes.Buffer
+	require.NoError(t, backend.(deployment.InitializationGuide).WriteInitializationNextSteps("production", &output))
+	assert.Contains(t, output.String(), "shopware-cli project deploy create -e 'production' --rollout\n")
+	assert.NotContains(t, output.String(), "--project-config")
+	assert.NotContains(t, output.String(), root)
+	assert.NotContains(t, output.String(), "\x1b[")
 }
