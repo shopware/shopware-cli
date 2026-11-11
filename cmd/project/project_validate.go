@@ -15,16 +15,29 @@ import (
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Run static analysis and Shopware checks on a project",
-	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated, but PHPStan needs them, so run composer install first.",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Validate the project's own code, such as extensions in custom/ and configured bundles.
+Packages that Composer installs into vendor/ are not validated, but PHPStan needs them, so run composer install first.
+
+Prettier and PHP-CS-Fixer check formatting without changing source files. Formatting violations fail validation.
+Use --exclude-formatters to skip formatting checks.`,
+	Example: `  # Validate a project
+  shopware-cli project validate ./my-project
+
+  # Apply formatting automatically
+  shopware-cli project format ./my-project
+
+  # Validate without formatting checks
+  shopware-cli project validate ./my-project --exclude-formatters`,
+	Args: cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
 			return err
 		}
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		excludeFormatters, _ := cmd.Flags().GetBool("exclude-formatters")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
-		_, _, err := selectProjectValidationTools(only, exclude)
+		_, _, err := selectProjectValidationTools(only, exclude, excludeFormatters)
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -34,9 +47,10 @@ var projectValidateCmd = &cobra.Command{
 		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		excludeFormatters, _ := cmd.Flags().GetBool("exclude-formatters")
 
 		// Tool selection was validated in PreRunE.
-		tools, statuses, _ := selectProjectValidationTools(only, exclude)
+		tools, statuses, _ := selectProjectValidationTools(only, exclude, excludeFormatters)
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
 		var err error
@@ -96,6 +110,7 @@ func init() {
 	projectValidateCmd.PersistentFlags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	projectValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	projectValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
+	projectValidateCmd.PersistentFlags().Bool("exclude-formatters", false, "Exclude validation checks that also support formatting")
 	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the project directory itself, not a temporary copy")
 	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Validate only extensions in custom/* folders")

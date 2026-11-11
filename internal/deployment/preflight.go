@@ -8,6 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"charm.land/lipgloss/v2"
+
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type PreflightAction string
@@ -68,14 +72,22 @@ func WritePreflight(ctx context.Context, backend Backend, options PreflightOptio
 	if environment == "" {
 		environment = "local"
 	}
+
 	var summary strings.Builder
-	summary.WriteString("Deployment preflight\n")
+	summary.WriteString(tui.SectionTitleStyle.Render("Deployment preflight") + "\n")
 	field := func(label, value string) {
 		// Keep paths and configuration values on one line in terminal output.
 		if strings.ContainsFunc(value, func(r rune) bool { return !unicode.IsPrint(r) }) {
 			value = strconv.Quote(value)
 		}
-		fmt.Fprintf(&summary, "  %s: %s\n", label, value)
+		valueStyle := lipgloss.NewStyle()
+		switch label {
+		case "Environment", "Deployment", "SSH target", "SSH host":
+			valueStyle = tui.SectionTitleStyle
+		case "Active path":
+			valueStyle = tui.BoldStyle
+		}
+		fmt.Fprintf(&summary, "  %s %s\n", tui.DimStyle.Render(label+":"), valueStyle.Render(value))
 	}
 	field("Action", string(options.Action))
 	field("Working directory", cwd)
@@ -95,7 +107,7 @@ func WritePreflight(ctx context.Context, backend Backend, options PreflightOptio
 		}
 	}
 	summary.WriteByte('\n')
-	if _, err := io.WriteString(output, summary.String()); err != nil {
+	if _, err := lipgloss.Fprint(output, summary.String()); err != nil {
 		return fmt.Errorf("cannot display deployment preflight: %w", err)
 	}
 	return nil

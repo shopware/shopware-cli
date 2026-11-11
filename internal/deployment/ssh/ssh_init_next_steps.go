@@ -3,11 +3,15 @@ package ssh
 import (
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/shopware/shopware-cli/internal/deployment"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var _ deployment.InitializationGuide = (*SSH)(nil)
@@ -45,12 +49,20 @@ func writeSSHInitializationNextSteps(source *SSH, targets []*SSH, environment st
 		if err != nil {
 			return fmt.Errorf("cannot resolve project config for next steps: %w", err)
 		}
-		args = append(args, "--project-config", quote(configPath))
+		if configPath != filepath.Join(root, ".config", "shopware-project.yml") {
+			args = append(args, "--project-config", quote(configPath))
+		}
 	}
-	args = append(args, "--", quote(root))
+	args = append(args, "--rollout")
+	cwd, err := os.Getwd()
+	if err != nil || cwd != root {
+		args = append(args, "--", quote(root))
+	}
 
+	heading := func(text string) string { return tui.SectionTitleStyle.Render(text) }
 	var summary strings.Builder
-	summary.WriteString("\nRuntime configuration (add custom environment variables here):\n")
+	fmt.Fprintln(&summary, "\n"+lipgloss.NewStyle().Foreground(tui.SuccessColor).Bold(true).Render("✓ Deployment environment is ready"))
+	fmt.Fprintln(&summary, "\n"+heading("Runtime configuration"))
 	for _, target := range targets {
 		deploymentRoot, err := target.deploymentRoot()
 		if err != nil {
@@ -58,20 +70,26 @@ func writeSSHInitializationNextSteps(source *SSH, targets []*SSH, environment st
 		}
 		fmt.Fprintf(&summary, "  %q: %q\n", target.env.SSH.Host, path.Join(deploymentRoot, "shared", ".env.local"))
 	}
-	summary.WriteString("These files are shared by deployment releases.\n")
-	summary.WriteString("Initialization runs once. Edit these files directly for later configuration changes.\n")
-	summary.WriteString("\nNext steps:\n")
-	summary.WriteString("  1. Ensure the configured database and database user exist and are reachable from the SSH hosts.\n")
-	summary.WriteString("  2. Configure each web server's document root:\n")
+	fmt.Fprintln(&summary, tui.DimStyle.Render("  Edit custom environment variables here. This file is shared across releases."))
+	fmt.Fprintln(&summary, "\n"+heading("1. Prepare your server"))
+	fmt.Fprintln(&summary, "  Make sure the database and database user exist and are reachable.")
+	fmt.Fprintln(&summary, "  Point your web server's document root to:")
 	for _, target := range targets {
-		fmt.Fprintf(&summary, "     %q: %q\n", target.env.SSH.Host, path.Join(target.directory, "public"))
+		fmt.Fprintf(&summary, "    %q: %q\n", target.env.SSH.Host, path.Join(target.directory, "public"))
 	}
-	summary.WriteString("     For a first deployment, this path becomes available during rollout.\n")
-	summary.WriteString("  3. Build a deployment archive from your local machine:\n     ")
-	summary.WriteString(strings.Join(args, " "))
-	summary.WriteString("\n     Archive creation does not upload or activate a release.\n  4. Configure background workers and scheduled tasks to run from the active release path (ssh.directory).\n")
-	summary.WriteString("  5. After rollout, open your application URL and verify the storefront and Administration.\n")
-	if _, err := io.WriteString(output, summary.String()); err != nil {
+	fmt.Fprintln(&summary, tui.DimStyle.Render("  This directory becomes available during the first rollout."))
+	fmt.Fprintln(&summary, "\n"+heading("2. Build and roll out your first deployment"))
+	fmt.Fprintln(&summary, "  Run locally:")
+	fmt.Fprintln(&summary)
+	fmt.Fprintln(&summary, "    "+tui.BoldStyle.Render(strings.Join(args, " ")))
+	fmt.Fprintln(&summary, "\n  This builds the archive and rolls it out to the selected environment.")
+	fmt.Fprintln(&summary, "\n"+heading("3. Finish setup"))
+	fmt.Fprintln(&summary, "  Configure background workers and scheduled tasks to use the active release:")
+	for _, target := range targets {
+		fmt.Fprintf(&summary, "    %q: %q\n", target.env.SSH.Host, target.directory)
+	}
+	fmt.Fprintln(&summary, "  Open your application URL and check the storefront and Administration.")
+	if _, err := lipgloss.Fprint(output, summary.String()); err != nil {
 		return fmt.Errorf("cannot display deployment next steps: %w", err)
 	}
 	return nil

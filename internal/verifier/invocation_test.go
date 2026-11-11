@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 // fakeTool runs without external tool installations or network access.
@@ -27,8 +28,9 @@ func fakeTools(t *testing.T, scripts map[string]string) {
 }
 
 func TestPrettierInvocation(t *testing.T) {
-	for _, dryRun := range []bool{false, true} {
-		t.Run(map[bool]string{false: "write", true: "dry run"}[dryRun], func(t *testing.T) {
+	for _, mode := range []string{"write", "dry run", "check"} {
+		t.Run(mode, func(t *testing.T) {
+			dryRun := mode != "write"
 			script := "printf 'file.js 1ms\\n'; exit 0\n"
 			if dryRun {
 				script = "printf 'file.js\\n'; exit 1\n"
@@ -39,7 +41,13 @@ func TestPrettierInvocation(t *testing.T) {
 			t.Setenv("TOOL_ARGS", argsPath)
 			ignorePath := filepath.Join(root, ".prettierignore")
 			require.NoError(t, os.WriteFile(ignorePath, []byte("user ignore rules"), 0o644))
-			result := runFormatTool(t, Prettier{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}}, dryRun)
+			config := ToolConfig{RootDir: root, SourceDirectories: []string{root}}
+			var result validation.ToolReport
+			if mode == "check" {
+				result = runCheckTool(t, Prettier{}, config)
+			} else {
+				result = runFormatTool(t, Prettier{}, config, dryRun)
+			}
 			require.Empty(t, result.Errors)
 			arguments, err := os.ReadFile(argsPath)
 			require.NoError(t, err)
@@ -48,6 +56,8 @@ func TestPrettierInvocation(t *testing.T) {
 			if dryRun {
 				require.Len(t, result.Findings, 1)
 				assert.Empty(t, result.ChangedFiles)
+				assert.Contains(t, string(arguments), "--list-different\n")
+				assert.NotContains(t, string(arguments), "--write")
 			} else {
 				assert.Empty(t, result.Findings)
 				assert.Equal(t, ChangeActionFormatted, result.ChangeAction)
@@ -59,6 +69,29 @@ func TestPrettierInvocation(t *testing.T) {
 			leftovers, err := filepath.Glob(filepath.Join(root, ".shopware-cli-prettier-ignore-*"))
 			require.NoError(t, err)
 			assert.Empty(t, leftovers)
+		})
+	}
+}
+
+func TestPrettierCheckOutcomes(t *testing.T) {
+	for _, scenario := range []struct {
+		name, output, code string
+		failed             bool
+	}{
+		{name: "clean", code: "0"},
+		{name: "execution failure", output: "diagnostic", code: "2", failed: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			fakeTool(t, "node", "printf '%s' \"$TOOL_STDOUT\"\nexit \"$TOOL_EXIT\"\n")
+			t.Setenv("TOOL_STDOUT", scenario.output)
+			t.Setenv("TOOL_EXIT", scenario.code)
+			root := t.TempDir()
+			result := runCheckTool(t, Prettier{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}})
+			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
+			assert.Empty(t, result.Findings)
+			if scenario.failed {
+				assert.Equal(t, scenario.output, result.Errors[0].Stdout)
+			}
 		})
 	}
 }
@@ -159,19 +192,26 @@ func TestPHPCSFixerInvocation(t *testing.T) {
 		findings                   int
 	}{
 		{"write", `{"files":[{"name":"src/file.php","appliedFixers":["test"]}]}`, "", "0", false, false, 0},
+		{"clean", `{"files":[]}`, "", "0", false, true, 0},
 		{"dry run", `{"files":[{"name":"file.php","appliedFixers":["test"]}]}`, "", "8", false, true, 1},
 		{"source syntax error", `{"files":[]}`, "invalid PHP", "4", false, true, 1},
+		{"malformed report", `broken`, "diagnostic", "0", true, true, 0},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			root := t.TempDir()
 			binDir := filepath.Join(root, "php", "vendor", "bin")
 			require.NoError(t, os.MkdirAll(binDir, 0o755))
-			require.NoError(t, os.WriteFile(filepath.Join(binDir, "php-cs-fixer"), []byte("#!/bin/sh\nprintf '%s' \"$TOOL_STDOUT\"\nprintf '%s' \"$TOOL_STDERR\" >&2\nexit \"$TOOL_EXIT\"\n"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(binDir, "php-cs-fixer"), []byte("#!/bin/sh\ncase \" $* \" in *' --dry-run '*) actual_dry_run=true ;; *) actual_dry_run=false ;; esac\n[ \"$actual_dry_run\" = \"$TOOL_DRY_RUN\" ] || exit 99\nprintf '%s' \"$TOOL_STDOUT\"\nprintf '%s' \"$TOOL_STDERR\" >&2\nexit \"$TOOL_EXIT\"\n"), 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0o644))
 			t.Setenv("TOOL_STDOUT", scenario.output)
 			t.Setenv("TOOL_STDERR", scenario.stderr)
 			t.Setenv("TOOL_EXIT", scenario.code)
-			result := runFormatTool(t, PHPCSFixer{}, ToolConfig{RootDir: root, ToolDirectory: root, SourceDirectories: []string{root}}, scenario.dryRun)
+			t.Setenv("TOOL_DRY_RUN", "true")
+			if !scenario.dryRun {
+				t.Setenv("TOOL_DRY_RUN", "false")
+			}
+			config := ToolConfig{RootDir: root, ToolDirectory: root, SourceDirectories: []string{root}}
+			result := runFormatTool(t, PHPCSFixer{}, config, scenario.dryRun)
 			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 			assert.Len(t, result.Findings, scenario.findings)
 			if scenario.dryRun {
@@ -179,6 +219,14 @@ func TestPHPCSFixerInvocation(t *testing.T) {
 			} else {
 				assert.Equal(t, []string{"src/file.php"}, result.ChangedFiles)
 				assert.Equal(t, ChangeActionFormatted, result.ChangeAction)
+				return
+			}
+			checked := runCheckTool(t, PHPCSFixer{}, config)
+			assert.Equal(t, scenario.failed, len(checked.Errors) > 0)
+			assert.Equal(t, result.Findings, checked.Findings)
+			if scenario.failed {
+				assert.Equal(t, scenario.output, checked.Errors[0].Stdout)
+				assert.Equal(t, scenario.stderr, checked.Errors[0].Stderr)
 			}
 		})
 	}

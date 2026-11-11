@@ -25,7 +25,7 @@ func TestRunToolsRetainsIndependentResults(t *testing.T) {
 	root := t.TempDir()
 	failure := errors.New("cannot finish analysis")
 	all := ToolList[Tool]{testTool{name: "failed"}, testTool{name: "completed"}, testTool{name: "excluded"}, testTool{name: "inapplicable"}}
-	selected, skipped, err := SelectTools(all, "", "excluded", "checkers")
+	selected, skipped, err := SelectTools(all, "", "excluded", "checkers", false)
 	require.NoError(t, err)
 	results := RunTools(t.Context(), selected, skipped, ToolConfig{
 		RootDir:           root,

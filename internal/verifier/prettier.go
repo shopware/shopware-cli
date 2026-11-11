@@ -40,6 +40,10 @@ func (p Prettier) Name() string {
 	return "prettier"
 }
 
+func (p Prettier) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+	return p.Format(ctx, config, execution, true)
+}
+
 func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	if len(config.SourceDirectories) == 0 {
 		return ToolSummary{SkipReason: "no source directories"}
