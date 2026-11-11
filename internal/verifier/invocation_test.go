@@ -47,9 +47,11 @@ func TestPrettierInvocation(t *testing.T) {
 			assert.Contains(t, string(arguments), "--ignore-path\n.prettierignore\n")
 			if dryRun {
 				require.Len(t, result.Findings, 1)
+				assert.Empty(t, result.ChangedFiles)
 			} else {
 				assert.Empty(t, result.Findings)
-				assert.Contains(t, result.Note, "formatted")
+				assert.Equal(t, ChangeActionFormatted, result.ChangeAction)
+				assert.Equal(t, []string{"file.js"}, result.ChangedFiles)
 			}
 			ignore, err := os.ReadFile(ignorePath)
 			require.NoError(t, err)
@@ -153,11 +155,12 @@ func TestPHPStanSkipsAnalysisAfterFailedDependencyRefresh(t *testing.T) {
 func TestPHPCSFixerInvocation(t *testing.T) {
 	for _, scenario := range []struct {
 		name, output, stderr, code string
-		failed                     bool
+		failed, dryRun             bool
 		findings                   int
 	}{
-		{"dry run", `{"files":[{"name":"file.php","appliedFixers":["test"]}]}`, "", "8", false, 1},
-		{"source syntax error", `{"files":[]}`, "invalid PHP", "4", false, 1},
+		{"write", `{"files":[{"name":"src/file.php","appliedFixers":["test"]}]}`, "", "0", false, false, 0},
+		{"dry run", `{"files":[{"name":"file.php","appliedFixers":["test"]}]}`, "", "8", false, true, 1},
+		{"source syntax error", `{"files":[]}`, "invalid PHP", "4", false, true, 1},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -168,9 +171,15 @@ func TestPHPCSFixerInvocation(t *testing.T) {
 			t.Setenv("TOOL_STDOUT", scenario.output)
 			t.Setenv("TOOL_STDERR", scenario.stderr)
 			t.Setenv("TOOL_EXIT", scenario.code)
-			result := runFormatTool(t, PHPCSFixer{}, ToolConfig{RootDir: root, ToolDirectory: root, SourceDirectories: []string{root}}, true)
+			result := runFormatTool(t, PHPCSFixer{}, ToolConfig{RootDir: root, ToolDirectory: root, SourceDirectories: []string{root}}, scenario.dryRun)
 			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 			assert.Len(t, result.Findings, scenario.findings)
+			if scenario.dryRun {
+				assert.Empty(t, result.ChangedFiles)
+			} else {
+				assert.Equal(t, []string{"src/file.php"}, result.ChangedFiles)
+				assert.Equal(t, ChangeActionFormatted, result.ChangeAction)
+			}
 		})
 	}
 }

@@ -44,27 +44,28 @@ func TestHasSCSSFiles(t *testing.T) {
 func TestStylelintReportsFindingsAndFailures(t *testing.T) {
 	const remainingError = `[{"source":"file.scss","warnings":[{"line":2,"rule":"block-no-empty","severity":"error","text":"Unexpected empty block"}],"autofixed":true}]`
 	for _, scenario := range []struct {
-		name, stdout, stderr, code, note string
-		failed                           bool
-		findings                         []validation.CheckResult
+		name, stdout, stderr, code string
+		changed                    int
+		failed                     bool
+		findings                   []validation.CheckResult
 	}{
 		{
-			name:   "clean",
-			stdout: `[{"source":"file.scss","warnings":[]}]`,
-			code:   "0",
-			note:   "no changes",
+			name:    "clean",
+			stdout:  `[{"source":"file.scss","warnings":[]}]`,
+			code:    "0",
+			changed: 0,
 		},
 		{
-			name:   "fixed",
-			stderr: `[{"source":"file.scss","warnings":[],"autofixed":true}]`,
-			code:   "0",
-			note:   "1 file fixed",
+			name:    "fixed",
+			stderr:  `[{"source":"file.scss","warnings":[],"autofixed":true}]`,
+			code:    "0",
+			changed: 1,
 		},
 		{
-			name:   "remaining error on stderr",
-			stderr: remainingError,
-			code:   "2",
-			note:   "1 file fixed",
+			name:    "remaining error on stderr",
+			stderr:  remainingError,
+			code:    "2",
+			changed: 1,
 			findings: []validation.CheckResult{{
 				Path:       "storefront/file.scss",
 				Line:       2,
@@ -74,11 +75,11 @@ func TestStylelintReportsFindingsAndFailures(t *testing.T) {
 			}},
 		},
 		{
-			name:   "remaining error on stdout",
-			stdout: remainingError,
-			stderr: "tool warning",
-			code:   "2",
-			note:   "1 file fixed",
+			name:    "remaining error on stdout",
+			stdout:  remainingError,
+			stderr:  "tool warning",
+			code:    "2",
+			changed: 1,
 			findings: []validation.CheckResult{{
 				Path:       "storefront/file.scss",
 				Line:       2,
@@ -88,11 +89,11 @@ func TestStylelintReportsFindingsAndFailures(t *testing.T) {
 			}},
 		},
 		{
-			name:   "whitespace stdout",
-			stdout: " \n",
-			stderr: remainingError,
-			code:   "2",
-			note:   "1 file fixed",
+			name:    "whitespace stdout",
+			stdout:  " \n",
+			stderr:  remainingError,
+			code:    "2",
+			changed: 1,
 			findings: []validation.CheckResult{{
 				Path:       "storefront/file.scss",
 				Line:       2,
@@ -102,10 +103,10 @@ func TestStylelintReportsFindingsAndFailures(t *testing.T) {
 			}},
 		},
 		{
-			name:   "remaining warning",
-			stderr: `[{"source":"file.scss","warnings":[{"line":1,"rule":"block-no-empty","severity":"warning","text":"Unexpected empty block"}]}]`,
-			code:   "0",
-			note:   "no changes",
+			name:    "remaining warning",
+			stderr:  `[{"source":"file.scss","warnings":[{"line":1,"rule":"block-no-empty","severity":"warning","text":"Unexpected empty block"}]}]`,
+			code:    "0",
+			changed: 0,
 			findings: []validation.CheckResult{{
 				Path:       "storefront/file.scss",
 				Line:       1,
@@ -115,10 +116,10 @@ func TestStylelintReportsFindingsAndFailures(t *testing.T) {
 			}},
 		},
 		{
-			name:   "deprecation warning",
-			stderr: `[{"source":"file.scss","warnings":[],"deprecations":[{"text":"Deprecated rule option","reference":"https://stylelint.io/"}]}]`,
-			code:   "0",
-			note:   "no changes",
+			name:    "deprecation warning",
+			stderr:  `[{"source":"file.scss","warnings":[],"deprecations":[{"text":"Deprecated rule option","reference":"https://stylelint.io/"}]}]`,
+			code:    "0",
+			changed: 0,
 			findings: []validation.CheckResult{{
 				Path:       "storefront/file.scss",
 				Line:       1,
@@ -128,10 +129,10 @@ func TestStylelintReportsFindingsAndFailures(t *testing.T) {
 			}},
 		},
 		{
-			name:   "syntax error",
-			stderr: `[{"source":"file.scss","warnings":[{"line":3,"rule":"CssSyntaxError","severity":"error","text":"Unclosed block"}]}]`,
-			code:   "2",
-			note:   "no changes",
+			name:    "syntax error",
+			stderr:  `[{"source":"file.scss","warnings":[{"line":3,"rule":"CssSyntaxError","severity":"error","text":"Unclosed block"}]}]`,
+			code:    "2",
+			changed: 0,
 			findings: []validation.CheckResult{{
 				Path:       "storefront/file.scss",
 				Line:       3,
@@ -141,10 +142,10 @@ func TestStylelintReportsFindingsAndFailures(t *testing.T) {
 			}},
 		},
 		{
-			name:   "parse error",
-			stderr: `[{"source":"file.scss","warnings":[],"parseErrors":[{"line":3,"text":"Cannot parse source"}]}]`,
-			code:   "2",
-			note:   "no changes",
+			name:    "parse error",
+			stderr:  `[{"source":"file.scss","warnings":[],"parseErrors":[{"line":3,"text":"Cannot parse source"}]}]`,
+			code:    "2",
+			changed: 0,
 			findings: []validation.CheckResult{{
 				Path:       "storefront/file.scss",
 				Line:       3,
@@ -247,17 +248,18 @@ exit "$TOOL_EXIT"`)
 				t.Setenv("TOOL_STDERR", stderr)
 				config := ToolConfig{RootDir: root, StorefrontDirectories: []string{directory}}
 				var result validation.ToolReport
-				note := ""
+				changed := 0
 				if fix {
 					result = runFixTool(t, StyleLint{}, config)
-					note = scenario.note
+					changed = scenario.changed
 				} else {
 					result = runCheckTool(t, StyleLint{}, config)
 				}
 				assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 				assert.ElementsMatch(t, scenario.findings, result.Findings)
 				assert.Equal(t, len(scenario.findings) > 0, result.HasFindings)
-				assert.Equal(t, note, result.Note)
+				assert.Empty(t, result.Note)
+				assert.Len(t, result.ChangedFiles, changed)
 				if scenario.failed {
 					require.NotEmpty(t, result.Errors)
 					assert.Equal(t, stdout, result.Errors[0].Stdout)
@@ -354,7 +356,7 @@ func TestStylelintFixCountsOverlappingDirectoriesOnce(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "file.scss"), nil, 0o644))
 	result := runFixTool(t, StyleLint{}, ToolConfig{RootDir: root, StorefrontDirectories: []string{root, root}})
-	assert.Equal(t, "1 file fixed", result.Note)
+	assert.Len(t, result.ChangedFiles, 1)
 	assert.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
 }
@@ -380,7 +382,8 @@ esac
 	assert.Equal(t, "broken", result.Errors[0].Stdout)
 	assert.Equal(t, "diagnostic", result.Errors[0].Stderr)
 	assert.Equal(t, bad, result.Errors[0].Dir)
-	assert.Empty(t, result.Note)
+	assert.Len(t, result.ChangedFiles, 1)
+	assert.Equal(t, []string{"good/file.scss"}, result.ChangedFiles)
 }
 
 func TestStylelintRejectsMalformedDiagnostics(t *testing.T) {
@@ -448,7 +451,7 @@ func TestStylelintFixCombinesAdministrationAndStorefrontChanges(t *testing.T) {
 	})
 	assert.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "2 files fixed", result.Note)
+	assert.Len(t, result.ChangedFiles, 2)
 }
 
 func TestStylelintRetainsValidFindingsInMalformedReport(t *testing.T) {
@@ -462,7 +465,8 @@ func TestStylelintRetainsValidFindingsInMalformedReport(t *testing.T) {
 		Severity: validation.SeverityError, Identifier: "stylelint/block-no-empty",
 	}}, result.Findings)
 	assert.True(t, result.HasFindings)
-	assert.Empty(t, result.Note)
+	assert.Len(t, result.ChangedFiles, 1)
+	assert.Equal(t, []string{"file.scss"}, result.ChangedFiles)
 }
 
 func TestStylelintFixAppliesChangesAndBecomesClean(t *testing.T) {
@@ -491,7 +495,8 @@ fi`)
 	assert.Empty(t, first.Errors)
 	assert.Empty(t, first.Findings)
 	assert.False(t, first.HasFindings)
-	assert.Equal(t, "1 file fixed", first.Note)
+	assert.Len(t, first.ChangedFiles, 1)
+	assert.Equal(t, []string{"file.scss"}, first.ChangedFiles)
 	contents, err := os.ReadFile(file)
 	require.NoError(t, err)
 	assert.Equal(t, "a { color: red; }\n", string(contents))
@@ -499,5 +504,6 @@ fi`)
 	second := runFixTool(t, StyleLint{}, config)
 	assert.Empty(t, second.Errors)
 	assert.Empty(t, second.Findings)
-	assert.Equal(t, "no changes", second.Note)
+	assert.Empty(t, second.Note)
+	assert.Empty(t, second.ChangedFiles)
 }

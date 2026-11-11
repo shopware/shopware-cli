@@ -7,21 +7,32 @@ import (
 )
 
 func toolDetail(tool ToolReport) string {
-	if len(tool.Errors) > 0 {
-		return tool.Errors[0].Error()
-	}
-	if tool.SkipReason != "" {
+	failed := len(tool.Errors) > 0
+	if !failed && tool.SkipReason != "" {
 		return tool.SkipReason
 	}
-	errors, warnings := countSeverities(tool.Findings)
 	var details []string
-	if errors > 0 {
-		details = append(details, countNoun(errors, "error"))
+	if failed {
+		details = append(details, tool.Errors[0].Error())
+	} else {
+		errors, warnings := countSeverities(tool.Findings)
+		if errors > 0 {
+			details = append(details, countNoun(errors, "error"))
+		}
+		if warnings > 0 {
+			details = append(details, countNoun(warnings, "warning"))
+		}
 	}
-	if warnings > 0 {
-		details = append(details, countNoun(warnings, "warning"))
+	if count := len(tool.ChangedFiles); count > 0 {
+		action := tool.ChangeAction
+		if action == "" {
+			action = "changed"
+		}
+		details = append(details, countNoun(count, "file")+" "+action)
+	} else if !failed && tool.ChangeAction != "" {
+		details = append(details, "no changes")
 	}
-	if tool.Note != "" {
+	if !failed && tool.Note != "" {
 		details = append(details, tool.Note)
 	}
 	if len(details) == 0 {

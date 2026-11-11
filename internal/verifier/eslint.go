@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -25,14 +24,6 @@ type eslintMessage struct {
 	Severity int    `json:"severity"`
 	Message  string `json:"message"`
 	Line     int    `json:"line"`
-}
-
-// eslintReport keeps valid findings even when other entries are malformed.
-// Changed paths describe native output fields, not remaining findings.
-type eslintReport struct {
-	findings     []validation.CheckResult
-	changedFiles []string
-	errors       []error
 }
 
 type Eslint struct{}
@@ -63,29 +54,13 @@ func (e Eslint) run(
 		return ToolSummary{SkipReason: "no administration or storefront sources"}
 	}
 
-	var summaryMu sync.Mutex
-	changedFiles := make(map[string]struct{})
-	failed := false
-
 	runDirectories(ctx, paths, func(directory string) {
-		report := e.runDirectory(ctx, config, execution, directory, fix)
-		if !fix {
-			return
-		}
-
-		summaryMu.Lock()
-		defer summaryMu.Unlock()
-		failed = failed || len(report.errors) > 0
-		for _, file := range report.changedFiles {
-			changedFiles[file] = struct{}{}
-		}
+		e.runDirectory(ctx, config, execution, directory, fix)
 	})
-
-	if !fix || failed {
-		return ToolSummary{}
+	if fix {
+		return ToolSummary{ChangeAction: ChangeActionFixed}
 	}
-
-	return ToolSummary{Note: fileChangeNote(len(changedFiles), "fixed")}
+	return ToolSummary{}
 }
 
 func (e Eslint) runDirectory(
@@ -94,7 +69,7 @@ func (e Eslint) runDirectory(
 	execution *ToolExecution,
 	directory string,
 	fix bool,
-) eslintReport {
+) {
 	args := []string{
 		path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "eslint"),
 		"--config", path.Join(
@@ -123,33 +98,34 @@ func (e Eslint) runDirectory(
 
 	report := parseESLintReport(subprocess, config.RootDir)
 	execution.AddFindings(report.findings...)
+	if fix {
+		execution.AddChangedFiles(report.changedFiles...)
+	}
 	for _, err := range report.errors {
 		execution.Fail(subprocess.ToolError(err))
 	}
-
-	return report
 }
 
-func parseESLintReport(subprocess SubprocessResult, root string) eslintReport {
+func parseESLintReport(subprocess SubprocessResult, root string) parsedToolReport {
 	if !expectedExit(subprocess.Err, 1) {
-		return eslintReport{errors: []error{
+		return parsedToolReport{errors: []error{
 			fmt.Errorf("cannot run eslint in %s: %w", subprocess.Dir, subprocess.Err),
 		}}
 	}
 
 	var output eslintOutput
 	if err := json.Unmarshal([]byte(subprocess.Stdout), &output); err != nil {
-		return eslintReport{errors: []error{
+		return parsedToolReport{errors: []error{
 			fmt.Errorf("cannot parse eslint output in %s: %w", subprocess.Dir, err),
 		}}
 	}
 	if output == nil {
-		return eslintReport{errors: []error{
+		return parsedToolReport{errors: []error{
 			errors.New("cannot parse eslint output: expected a report array"),
 		}}
 	}
 
-	var report eslintReport
+	var report parsedToolReport
 	for _, file := range output {
 		if file.FilePath == "" || file.Messages == nil {
 			report.errors = append(report.errors,

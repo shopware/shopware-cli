@@ -8,8 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
-	"sync/atomic"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -46,7 +46,6 @@ func (p PHPCSFixer) Format(ctx context.Context, config ToolConfig, execution *To
 	if result, applicable := preparePHPTool(config, execution); !applicable {
 		return result
 	}
-	var changed atomic.Int64
 	runDirectories(ctx, config.SourceDirectories, func(directory string) {
 		args := []string{
 			"fix", "--show-progress", "dots", "-vv", "--no-ansi", "--format", "json",
@@ -79,11 +78,19 @@ func (p PHPCSFixer) Format(ctx context.Context, config ToolConfig, execution *To
 			execution.Fail(subprocess.ToolError(errors.New("cannot parse php-cs-fixer output: missing file results")))
 			return
 		}
-		changed.Add(int64(len(parsed.Files)))
-		if !dryRun {
-			return
-		}
+		var changedFiles []string
 		for _, file := range parsed.Files {
+			if !dryRun {
+				filePath := file.Name
+				if strings.TrimSpace(filePath) == "" {
+					continue
+				}
+				if !filepath.IsAbs(filePath) {
+					filePath = filepath.Join(cmd.Dir, filePath)
+				}
+				changedFiles = append(changedFiles, filePath)
+				continue
+			}
 			for _, fixer := range file.AppliedFixers {
 				execution.AddFindings(validation.CheckResult{
 					Path: validation.NormalizeSourcePath(file.Name, config.RootDir), Line: 1,
@@ -92,9 +99,12 @@ func (p PHPCSFixer) Format(ctx context.Context, config ToolConfig, execution *To
 				})
 			}
 		}
+		if len(changedFiles) > 0 {
+			execution.AddChangedFiles(changedFiles...)
+		}
 	})
 	if !dryRun {
-		return ToolSummary{Note: fileChangeNote(int(changed.Load()), "formatted")}
+		return ToolSummary{ChangeAction: ChangeActionFormatted}
 	}
 	return ToolSummary{}
 }

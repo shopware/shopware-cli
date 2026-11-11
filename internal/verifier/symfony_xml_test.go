@@ -64,7 +64,8 @@ func TestSymfonyXMLConverterFixesPlugin(t *testing.T) {
 
 	assertConvertedConfigDir(t, filepath.Join(tmpDir, "src", "Resources", "config"))
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "2 files converted", result.Note)
+	assert.Len(t, result.ChangedFiles, 2)
+	assert.Equal(t, []string{"src/Resources/config/routes.xml", "src/Resources/config/services.xml"}, result.ChangedFiles)
 
 	second := runFixTool(t, SymfonyXMLConverter{}, ToolConfig{Extensions: []extension.Extension{ext}, RootDir: tmpDir})
 	assert.Empty(t, second.Errors)
@@ -72,6 +73,7 @@ func TestSymfonyXMLConverterFixesPlugin(t *testing.T) {
 	assert.Equal(t, "skipped", second.Status())
 	assert.NotEmpty(t, second.SkipReason)
 	assert.Empty(t, second.Note)
+	assert.Empty(t, second.ChangedFiles)
 	assertConvertedConfigDir(t, filepath.Join(tmpDir, "src", "Resources", "config"))
 }
 
@@ -186,7 +188,7 @@ func TestSymfonyXMLConverterReportsBlockedConversions(t *testing.T) {
 			assert.NotEmpty(t, result.Findings[0].Message)
 			assert.NotEmpty(t, result.Findings[0].Tip)
 			assert.True(t, result.HasFindings)
-			assert.Equal(t, "1 file converted", result.Note)
+			assert.Len(t, result.ChangedFiles, 1)
 			services, err := os.ReadFile(servicesPath)
 			require.NoError(t, err)
 			assert.Equal(t, scenario.services, string(services))
@@ -219,7 +221,7 @@ func TestSymfonyXMLConverterReportsFilesystemFailure(t *testing.T) {
 	var pathError *os.PathError
 	assert.ErrorAs(t, result.Errors[0], &pathError)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "1 file converted", result.Note)
+	assert.Len(t, result.ChangedFiles, 1)
 	assert.FileExists(t, filepath.Join(directory, "routes.yaml"))
 }
 
@@ -248,7 +250,8 @@ func TestSymfonyXMLConverterCountsImportedFiles(t *testing.T) {
 	result := runFixTool(t, SymfonyXMLConverter{}, ToolConfig{RootDir: root, Extensions: []extension.Extension{ext}})
 	assert.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "3 files converted", result.Note)
+	assert.Len(t, result.ChangedFiles, 3)
+	assert.Equal(t, []string{"src/Resources/config/child.xml", "src/Resources/config/routes.xml", "src/Resources/config/services.xml"}, result.ChangedFiles)
 	assert.NoFileExists(t, servicesPath)
 	assert.NoFileExists(t, childPath)
 	assert.NoFileExists(t, filepath.Join(directory, "routes.xml"))

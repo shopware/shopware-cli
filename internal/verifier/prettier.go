@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -45,7 +44,6 @@ func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *Tool
 	if len(config.SourceDirectories) == 0 {
 		return ToolSummary{SkipReason: "no source directories"}
 	}
-	var changed atomic.Int64
 	runDirectories(ctx, config.SourceDirectories, func(directory string) {
 		ignore, err := os.CreateTemp(directory, ".shopware-cli-prettier-ignore-*")
 		if err != nil {
@@ -93,17 +91,18 @@ func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *Tool
 			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot parse prettier output: %w", err)))
 			return
 		}
+		var changedFiles []string
 		for _, file := range parsed.Files {
 			if file.Unchanged {
-				continue
-			}
-			changed.Add(1)
-			if !dryRun {
 				continue
 			}
 			filePath := file.Path
 			if !filepath.IsAbs(filePath) {
 				filePath = filepath.Join(directory, filePath)
+			}
+			if !dryRun {
+				changedFiles = append(changedFiles, filePath)
+				continue
 			}
 			execution.AddFindings(validation.CheckResult{
 				Path:     validation.NormalizeSourcePath(filePath, config.RootDir),
@@ -111,9 +110,12 @@ func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *Tool
 				Severity: validation.SeverityError, Identifier: "prettier/format",
 			})
 		}
+		if len(changedFiles) > 0 {
+			execution.AddChangedFiles(changedFiles...)
+		}
 	})
 	if !dryRun {
-		return ToolSummary{Note: fileChangeNote(int(changed.Load()), "formatted")}
+		return ToolSummary{ChangeAction: ChangeActionFormatted}
 	}
 	return ToolSummary{}
 }

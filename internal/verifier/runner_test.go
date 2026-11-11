@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -113,13 +114,15 @@ func TestRunToolsFinalizesAfterCleanup(t *testing.T) {
 
 func TestRunToolsReportsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	results := RunTools(ctx, ToolList[Tool]{testTool{name: "test"}}, nil, ToolConfig{}, nil, func(_ Tool, _ *ToolExecution) ToolSummary {
+	results := RunTools(ctx, ToolList[Tool]{testTool{name: "test"}}, nil, ToolConfig{}, nil, func(_ Tool, execution *ToolExecution) ToolSummary {
+		execution.AddChangedFiles("file.php")
 		cancel()
 		return ToolSummary{SkipReason: "no sources"}
 	})
 	require.Len(t, results, 1)
 	assert.Equal(t, "failed", results[0].Status())
 	assert.Empty(t, results[0].SkipReason)
+	assert.Equal(t, []string{"file.php"}, results[0].ChangedFiles)
 	require.Len(t, results[0].Errors, 1)
 	assert.ErrorIs(t, results[0].Errors[0], context.Canceled)
 }
@@ -208,4 +211,55 @@ func TestRunToolsLeavesOutCPUTimeWithoutChildCPUTime(t *testing.T) {
 	tags := tracking.CommandTags()
 	assert.Equal(t, "marker", tags[tracking.TagCPUMS])
 	assert.Equal(t, strconv.Itoa(runtime.NumCPU()), tags[tracking.TagCPUCount])
+}
+
+func TestRunToolsCollectsChangedFiles(t *testing.T) {
+	root := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "alias")
+	require.NoError(t, os.Symlink(root, alias))
+	failure := errors.New("cannot clean up")
+	tools := ToolList[Tool]{testTool{name: "completed"}, testTool{name: "failed"}, testTool{name: "empty-failed"}, testTool{name: "skipped"}}
+	reports := RunTools(t.Context(), tools, nil, ToolConfig{
+		RootDir:           alias,
+		ValidationIgnores: []validation.ToolConfigIgnore{{Identifier: "ignored"}},
+	}, nil, func(tool Tool, execution *ToolExecution) ToolSummary {
+		summary := ToolSummary{Note: "context", ChangeAction: ChangeActionFixed, SkipReason: "no sources"}
+		if tool.Name() == "skipped" {
+			return summary
+		}
+		if tool.Name() != "completed" {
+			defer execution.Fail(&ToolError{Err: failure})
+		}
+		if tool.Name() == "empty-failed" {
+			return summary
+		}
+		file := tool.Name() + "/a.php"
+		// Sources need not still exist, as with successful XML conversion.
+		runDirectories(t.Context(), []string{filepath.Join(root, file), filepath.Join(alias, file), "./" + file}, func(path string) {
+			execution.AddChangedFiles(path, "", " ")
+			execution.AddFindings(validation.CheckResult{Path: path, Identifier: "ignored"})
+		})
+		defer execution.AddChangedFiles(tool.Name() + "/b.php")
+		return summary
+	})
+	for _, report := range reports {
+		assert.False(t, report.HasFindings)
+		assert.Empty(t, report.Findings)
+		switch report.Name {
+		case "skipped":
+			assert.Equal(t, "skipped", report.Status())
+			assert.Empty(t, report.ChangedFiles)
+			assert.Equal(t, "context", report.Note)
+		case "empty-failed":
+			assert.Equal(t, "failed", report.Status())
+			assert.Empty(t, report.ChangedFiles)
+			assert.Equal(t, "context", report.Note)
+		default:
+			assert.Empty(t, report.SkipReason)
+			assert.Equal(t, report.Name, report.Status())
+			assert.Equal(t, []string{report.Name + "/a.php", report.Name + "/b.php"}, report.ChangedFiles)
+			assert.Equal(t, "context", report.Note)
+			assert.Equal(t, ChangeActionFixed, report.ChangeAction)
+		}
+	}
 }
