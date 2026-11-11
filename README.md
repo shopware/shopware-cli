@@ -2,6 +2,7 @@
 
 [![Hosted By: Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&style=flat-square)](https://cloudsmith.com)
 [![skills.sh](https://skills.sh/b/shopware/shopware-cli)](https://skills.sh/shopware/shopware-cli)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16335/badge)](https://www.bestpractices.dev/projects/16335)
 
 Shopware CLI is a command line companion for common Shopware account, project,
 and extension workflows.
