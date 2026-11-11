@@ -18,6 +18,7 @@ var extensionValidateCmd = &cobra.Command{
 	Short: "Validate extension metadata, assets, and code quality",
 	Long: `Validate an extension folder or ZIP file.
 Prettier and PHP-CS-Fixer check formatting without changing source files. Formatting violations fail validation.
+Use --exclude-formatters to skip formatting checks.
 
 Store compliance checks that Administration and Storefront source files have matching compiled assets.
 Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.
@@ -30,7 +31,7 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
   shopware-cli extension format ./my-extension
 
   # Validate without formatting checks
-  shopware-cli extension validate ./my-extension --exclude prettier,php-cs-fixer`,
+  shopware-cli extension validate ./my-extension --exclude-formatters`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
@@ -41,9 +42,10 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		excludeFormatters, _ := cmd.Flags().GetBool("exclude-formatters")
 
 		// Tool selection was validated in PreRunE.
-		tools, statuses, _ := selectExtensionValidationTools(only, exclude)
+		tools, statuses, _ := selectExtensionValidationTools(only, exclude, excludeFormatters)
 		needsTools := slices.ContainsFunc(tools, requiresToolSetup)
 
 		path, err := filepath.Abs(args[0])
@@ -143,6 +145,7 @@ func init() {
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", verifier.CheckAgainstHighest, "Check against Shopware Version (highest, lowest)")
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PersistentFlags().Bool("exclude-formatters", false, "Exclude validation checks that also support formatting")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
@@ -167,8 +170,9 @@ func init() {
 
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		excludeFormatters, _ := cmd.Flags().GetBool("exclude-formatters")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
-		_, _, err := selectExtensionValidationTools(only, exclude)
+		_, _, err := selectExtensionValidationTools(only, exclude, excludeFormatters)
 		return err
 	}
 }

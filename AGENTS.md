@@ -175,7 +175,7 @@ filtering.
 
 `extension validate` and `project validate` run all checkers by default,
 including formatting dry runs. These findings can fail previously passing CI
-jobs; use `--exclude prettier,php-cs-fixer` to skip formatting checks and
+jobs; use `--exclude-formatters` to skip formatting checks and
 `format` to apply formatting. Rector remains a fixer and is not run by
 validation. The deprecated `--full` flag remains accepted but has no effect;
 use `--only` or
