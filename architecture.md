@@ -1,6 +1,6 @@
 ---
 title: Evolving Shopware CLI from a command set into a CLI-as-Platform
-date: 2026-17-06
+date: 2026-06-17
 area: architecture
 tags: [boundaries, commands, patterns]
 ---
@@ -11,12 +11,6 @@ tags: [boundaries, commands, patterns]
 [cmd/root.go](cmd/root.go): `account`, `ai`, `extension`, and `project`.
 Entry is [main.go](main.go) → `cmd.Execute`.
 
-The root command sets an interaction flag in the context based on stdin and
-`--no-interaction`. Commands use it to choose interactive or headless behavior;
-some commands also inspect whether stdin is a terminal directly. Interaction
-handling is therefore implemented by individual commands, not guaranteed by a
-single shared prompt mechanism.
-
 This summarizes current architecture, then sets a strategic direction across
 three main bets:
 
@@ -24,9 +18,9 @@ three main bets:
 - Providing a richer dev-inner-loop (build/watch/preview)
 - Providing a guided-but-delegating deploy experience
 
-The Deployment Helper boundary remains declarative, reuses the verifier `Tool`
-registry as the canonical extension model, and prioritizes the "run, watch, and
-build" stage of our user flow, where users will spend substantial time.
+The CLI keeps deployment configuration declarative and uses the verifier
+`Tool` registry as an extension model. The strategic focus is the "run,
+watch, and build" stage of the user flow.
 
 ## 2. Extensibility surfaces: where new features plug in
 
@@ -40,35 +34,13 @@ Subcommands are generally defined in `cmd/<group>/<group>_<subcommand>.go`
 and added to their parent from an `init` function. The Go filename does not
 register a Cobra command by itself; the registration call is required.
 
-### 2.2 Verifier tools: provides reproducible pattern for implementing other capabilities
+### 2.2 Verifier tools: provides reproducible pattern
 
 Each verifier tool registers a name and implements only the capabilities it
 supports: checking, fixing, formatting, or a combination. Commands select tools
 by capability, then apply `--only` and (where available) `--exclude`. An
 unsupported `--only` name is an error that lists the tools available to that
 command.
-
-`extension validate` runs all checkers by default. The deprecated `--full` flag
-remains accepted but has no effect; use `--only` or `--exclude` to select
-checkers. The extension format and fix commands both support `--dry-run`.
-
-```go
-type Tool interface {
-    Name() string
-}
-type CheckTool interface {
-    Tool
-    Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
-}
-type FixTool interface {
-    Tool
-    Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
-}
-type FormatTool interface {
-    Tool
-    Format(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
-}
-```
 
 Registration is `func init() { AddTool(PhpStan{}) }` into a global
 `availableTools`. Consumers call `GetToolsOf[CheckTool]()` (or `FixTool` /
@@ -98,9 +70,7 @@ and the CLI tells them apart by a file it finds: `manifest.xml` → App;
 bundle.
 
 The `Extension` interface abstracts extension type behind
-`GetName/GetType/GetSourceDirs/Validate/GetExtensionConfig/…`. Detection is by
-file signature
-([internal/extension/root.go#L28](https://github.com/shopware/shopware-cli/blob/6ebf84df16147190a258d2aeadf91a4a15c707d7/internal/extension/root.go#L28)).
+`GetName/GetType/GetSourceDirs/Validate/GetExtensionConfig/…`.
 
 ### 2.4 Config schema: one field to add, embedded, self-validating
 
@@ -134,7 +104,7 @@ mock and forces expensive clients to be built even when they aren't used.
 The Deployment Helper approach to dependency injection—a single Symfony
 container wired and compiled once—is generally stronger.
 
-### 2.6 CLI-level hooks and middleware: main missing primitive for "platform" behavior
+### 2.6 CLI-level hooks and middleware
 
 The root command has a `PersistentPreRunE` hook and enables Cobra's traversal of
 run hooks. `Execute` also sets up context, logging, interaction and update
@@ -144,19 +114,10 @@ and commands can define their own hooks.
 
 - Cleanup activity:
   _instead of each being baked into `Execute()` or duplicated per group_, cobra
-  has pre and post functions that we could use to offload some of thatactivity.
+  has pre and post functions that we could use to offload some of that activity.
   We use these for `account` already; will extend into the rest of CLI.
 
-Deployment Helper offers a registry-style seam via `PostDeploy` subscribers
-(`RunCommand.php:80`). Fastly, Platform.sh, staging, usage-consent,
-always-clear-cache. The strong seam: keeps provider/env behavior out of the
-managers. `FastlyServiceUpdater` is opt-in via `config/fastly`, env creds,
-diff-before-write, activate only on change.
-
-Deployment Helper also offers hooks: `HookExecutor`:
-pre/post/preInstall/postInstall/preUpdate/postUpdate), each a config string run
-via `ProcessHelper::runAndTail`. Flexible, but the escape hatch: behavior can
-move into shell the PHP can't model.
+For Deployment Helper extension points, see section 4.3.
 
 ### 2.7 Project and extension validation
 
@@ -166,14 +127,13 @@ discovered from the supplied path; project validation discovers project
 extensions and source directories, excluding vendor extensions and configured
 ignored extensions. Project validation also offers `--local-only`.
 
-Supported report formats include summary, JSON, GitHub, GitLab, JUnit and 
-Markdown.
+Both commands accept `--format` to select a report. Supported report formats
+include summary, JSON, GitHub, GitLab, JUnit and Markdown.
 
 The runner normalizes finding paths relative to the analysis root and filters
 findings according to configured ignores. A tool can report execution errors
 alongside findings; an execution error or remaining error-level finding makes
-the report fail. Tool outcomes describe whether the tool completed, failed or
-was skipped, rather than promising that source files were changed.
+the report fail.
 
 ## 3. Scalability & performance
 
@@ -192,7 +152,7 @@ was skipped, rather than promising that source files were changed.
 - **Worker command:** runs several job consumers at once, rate-limited so they
   don't flood the system (cmd/project/project_worker.go:86).
 
-### 3.2 Two ways to build admin/storefront assets: a fast way and a slow fallback
+### 3.2 Two ways to build admin/storefront assets
 
 - **Fast path (esbuild):** the CLI builds assets itself, in-process, by calling
   esbuild directly (`api.Build(...)`, internal/esbuild/esbuild.go:130). No
@@ -204,24 +164,13 @@ was skipped, rather than promising that source files were changed.
 
 ### 3.3 Caching
 
-The CLI remembers past asset builds so it doesn't redo work that hasn't changed.
-
-- The cache key is a fingerprint of the inputs: the Shopware version plus a hash
-  of the source files and config (xxhash, internal/extension/asset_cache.go). If
-  nothing changed, you get a cache hit; if anything changes, the fingerprint
-  changes and it rebuilds. So it can't go stale.
-- It's stored on local disk, or in the GitHub Actions cache for CI. Both sit
-  behind one shared `Cache` interface (internal/system/cache_interface.go,
-  `cache_disk.go`, `cache_github_actions.go`). Because it's one interface,
-  adding a new backend (e.g. a shared S3 cache for a CI fleet) is a clean
-  drop-in.
+The asset cache key combines the Shopware version with hashes of source
+files and configuration (`internal/extension/asset_cache.go`).
 
 ### 3.4 Performance issues/weaknesses
 
 None are broken, but some are slower.
 
-- **Resolved:** PHP linting uses `github.com/shyim/phplint-go` for pure Go
-  linting without WASM or downloading binary dependencies.
 - **Medium:** The file-hashing pool uses eight workers instead of scaling to
   CPU. `internal/extension/asset_config.go:231`
 - **Medium:** Code checkers run in parallel with each other, but each one still
@@ -234,10 +183,6 @@ None are broken, but some are slower.
   no retries. `internal/shop/client.go:37`
   - **TODO:** remove and replace with a general http client for Shopware in Go,
     wired into <https://github.com/shopware/app-sdk-go>
-
-A fresh php/composer/node process is started for every call, but it's not
-possible to reuse them so this isn't an issue. `internal/phpexec`,
-`internal/npm`
 
 ### 3.5 Observability and what we can measure
 
@@ -255,125 +200,41 @@ We can build on this signal.
 
 ## 4. Deployment Helper: boundary must stay clean
 
-shopware-cli is the tool you run locally and in CI to build, develop, and
-package. It writes the deploy config and pokes live shops over the API. The
-Deployment Helper is what runs on the server to actually carry out a deploy.
-The CLI also invokes Deployment Helper in workflows such as headless local
-installation; generated deployment configuration and CI files form another
-boundary between the tools.
+The CLI builds, validates and packages projects locally and in CI. It defines
+and validates the `deployment:` configuration; Deployment Helper executes
+deployment workflows. The CLI can also invoke the Helper for workflows such as
+headless local installation.
 
-In code, this boundary is maintained like so:
+For extension management, the CLI changes the local project, while Deployment
+Helper reconciles the deployed shop with that project state. Proposed deploy
+commands would prepare and trigger deployments through the Helper.
 
-- The project config (`.config/shopware-project.yml`) has a `deployment:`
-  section `ConfigDeployment` covering hooks, extension management, one-time
-  tasks, and staging (internal/shop/config.go:329). The CLI defines and
-  validates that section, but nothing in the CLI ever runs it: only the struct
-  and its schema touch it. The CLI writes the instructions, and Deployment
-  Helper carries them out. Keep it declarative-only on the CLI side.
-- Every project the CLI scaffolds automatically pulls in Deployment Helper as a
-  dependency (`require shopware/deployment-helper`,
-  internal/packagist/project_composer_json.go:64).
-- The CI files that the CLI generates (`internal/ci`, covering both GitHub
-  Actions and GitLab) hand the actual deploy to Deployment Helper: The GitHub
-  Actions deploy job `github-deploy.yml` calls
-  `shopware/github-actions/project-deployer`; the `deploy.php` recipe calls
-  `vendor/bin/shopware-deployment-helper run` (Deployer task).
+### 4.1 Deployment orchestration
 
-### 4.1 Who owns what
+Deployment Helper's `RunCommand` delegates to installation or upgrade
+managers, which run sequences of commands through `ProcessHelper`. Their
+stages are implicit in control flow, making dry runs, structured reports and
+resumability difficult. Named stages and structured step results could make
+the workflow easier to extend.
 
-The split isn't arbitrary, but follows the question:
-**where does the work run?** If it happens on your machine or in CI, it's the
-CLI's. If it happens on the server as part of going live, it's the Helper's.
-Almost every job lands cleanly on one side.
-
-### Runs locally / in CI → shopware-cli
-
-- Scaffold a project / `composer.json`
-- Build theme/admin assets
-- Validate / lint / format
-- Package an extension zip / changelog
-- Dump the database
-- Upload an extension to the Account/shop
-- Write + validate the `deployment:` config — but only writes it; the Helper is
-  what runs it
-
-### Runs on the server at deploy time → Deployment Helper
-
-- Run migrations / `system:install`
-- Compile the theme on the server
-- Run the deploy lifecycle hooks
-
-### 4.2 The fuzzy edge we need to watch
-
-Live-shop extension management exists in both tools, but at different layers:
-
-- **CLI:** modifies the project locally. For example, adding a plugin updates
-  the root `composer.json` so the dependency becomes part of the codebase.
-- **Deployment Helper:** reconciles the deployed system with the codebase. If a
-  plugin is present but not yet installed, it installs and activates it as part
-  of the deployment process.
-
-In practice, the CLI makes plugins available in the project, while the
-Deployment Helper ensures the deployed Shopware instance reflects that state.
-Preserving this distinction keeps project changes and deployment execution
-clearly separated.
-
-### 4.3 Responsibility of the proposed `deploy` commands
-
-The proposed `project deploy` and `project deploy plan` would act as the bridge
-between local project state and deployment execution. The CLI prepares and
-triggers the deployment, while the Deployment Helper remains responsible for
-executing the deployment workflow.
-
-### 4.4 Inside Deployment Helper
-
-A Symfony Console app that installs or updates a shop on the server,
-orchestrating a fixed sequence of console commands through one shell-out layer
-(`ProcessHelper`, imported by 11 files, the most-depended-on class), driven by
-the `deployment:` config. `RunCommand` is the entrypoint: it checks
-`isInstalled()` and hands off to `InstallationManager` or `UpgradeManager`. DI
-is a single Symfony container compiled once (the unified wiring 2.5 wants the
-CLI to have).
-
-### 4.5 Install / update flows
-
-Install stands a shop up from nothing (`system:install`, admin user, transports,
-storefront + theme, plugin then app lifecycle, record version); update maintains
-one (one-time tasks, maintenance mode, `system:update:finish` only if the
-version changed, plugin/theme refresh, lifecycles, `theme:compile`). Both are
-one long imperative method — a sequence of shell-outs. Readable now, but the
-stage list lives in control flow, not data, so it's hard to extend with dry-run,
-structured reporting, or resumability.
-
-### 4.6 Config, defined twice
+### 4.2 Configuration inputs
 
 Deployment Helper uses both YAML configuration and environment variables. The
 environment variables are primarily intended as short-lived inputs for
 installation and deployment workflows, making a reasonable split between
 file-based configuration and env-based inputs.
 
-### 4.7 Extension seams
+### 4.3 Extension seams
 
 `PostDeploy` subscribers (Fastly, Platform.sh, staging, consent, cache) keep
 provider/env behavior out of the managers. Hooks (pre/post/preInstall/…) run
-config strings via the shell-out layer. This maintains flexibility, but the
-escape hatch where behavior moves into shell the PHP can't model it.
+config strings via the shell-out layer. This maintains flexibility but allows
+behavior to move into shell commands that the PHP code cannot model.
 
 One-time tasks are the strongest primitive: run-once scripts keyed by id,
 tracked in the DB, marked only on success.
 
-### 4.8 Orchestration is where complexity concentrates
-
-The two managers own ordering, branching, command assembly, side effects, and
-telemetry. Lifecycle ordering is duplicated across install/update (for a reason:
-plugins carry asset handling, apps don't). Config grows fastest. Failure is
-implicit: no skipped/retryable/partial model.
-
-The levers: make the implicit pipeline explicit (named stages), a shared
-lifecycle runner, and a structured step-result, the last also being the
-prerequisite for the machine-readable output below.
-
-### 4.9 Version-upgrade workflow
+### 4.4 Version-upgrade workflow
 
 `project upgrade` provides an interactive local upgrade wizard. In
 non-interactive mode it requires `--target`; `--dry-run` runs the
@@ -400,14 +261,9 @@ Machine-readable output becomes a design rule, not an afterthought:
 Two related gaps, both blocking the AI/agent direction and the machine-readable
 promise:
 
-- **Machine-readable output is ad-hoc, not a contract.** `--format` is the
-  convention for selecting a command's output representation, including JSON on
-  extension list commands and json/github/gitlab/junit/markdown validation
-  reports. The supported values remain command-specific, and most commands still
-  print human text only.
-- For agents and CI to consume any command, structured output needs to follow
-  the `--format` convention everywhere it makes sense, not be bolted onto
-  individual commands.
+- **Machine-readable output is ad-hoc, not a contract.** `--format` selects a
+  command's output representation; supported values vary by command. Structured
+  output should follow this convention wherever it makes sense.
 - **Output isn't centralized.** Commands mix direct `fmt.Print*` calls with
   `logging.FromContext` calls. Logging is structured (`zap`) and goes to
   stderr; the `fmt` calls go to stdout with no level, no format control, and no
@@ -416,17 +272,12 @@ promise:
   That fragmentation is why a clean JSON mode is hard today. There's no single
   output path to switch. Routing result output through one channel (and
   reserving stderr for logs) is the prerequisite.
-- The interactive/non-interactive split is handled by individual commands.
-  Many use `system.IsInteractionEnabled` from the root context; some also
-  inspect the terminal directly. Headless behavior therefore depends on each
-  command's implementation.
 
 ## 6. Logging
 
-The logger is intentionally optimized for human consumption. The logger is
-human-oriented (colored, dev-style encoder); `zap` already supports JSON via
-`NewProductionConfig`, so a `--log-format=json` is a small lever once output is
-centralized.
+The logger is human-oriented (colored, dev-style encoder); `zap` already
+supports JSON via `NewProductionConfig`, so a `--log-format=json` is a small
+lever once output is centralized.
 
 ## 7. Parity between interactive/non-interactive
 
@@ -434,4 +285,5 @@ Interactive behavior varies by command. The root context disables interaction
 when `--no-interaction` is supplied or stdin is not a terminal; commands that
 consult that context can use flags and defaults or fail when input is required.
 Some commands check the terminal directly, so the root flag alone does not
-establish parity across every command.
+establish parity across every command. Many use `system.IsInteractionEnabled`
+from the root context.
