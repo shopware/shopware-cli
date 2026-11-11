@@ -64,9 +64,13 @@ esac
 }
 
 func TestSSHGroupPrunePartialFailureAndOptions(t *testing.T) {
+	g, requests := fakePruneGroup(t, 2)
 	for _, dryRun := range []bool{false, true} {
 		t.Run(map[bool]string{false: "remove", true: "dry run"}[dryRun], func(t *testing.T) {
-			g, requests := fakePruneGroup(t, 2)
+			for _, host := range g.hosts {
+				request := filepath.Join(requests, host.name+".request")
+				t.Cleanup(func() { require.NoError(t, os.Remove(request)) })
+			}
 			options := DeploymentPruneOptions{Keep: 7, DryRun: dryRun}
 			result, err := g.PruneDeployments(t.Context(), options)
 			require.ErrorContains(t, err, "host m-failed")

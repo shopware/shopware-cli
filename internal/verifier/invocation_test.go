@@ -72,6 +72,7 @@ func TestPrettierInvocation(t *testing.T) {
 }
 
 func TestPrettierCheckOutcomes(t *testing.T) {
+	fakeTool(t, "node", "printf '%s' \"$TOOL_STDOUT\"\nexit \"$TOOL_EXIT\"\n")
 	for _, scenario := range []struct {
 		name, output, code string
 		failed             bool
@@ -80,7 +81,6 @@ func TestPrettierCheckOutcomes(t *testing.T) {
 		{name: "execution failure", output: "diagnostic", code: "2", failed: true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			fakeTool(t, "node", "printf '%s' \"$TOOL_STDOUT\"\nexit \"$TOOL_EXIT\"\n")
 			t.Setenv("TOOL_STDOUT", scenario.output)
 			t.Setenv("TOOL_EXIT", scenario.code)
 			root := t.TempDir()
@@ -95,6 +95,7 @@ func TestPrettierCheckOutcomes(t *testing.T) {
 }
 
 func TestPHPStanInvocation(t *testing.T) {
+	fakeTool(t, "php", "printf '%s' \"$TOOL_STDOUT\"\nprintf '%s' \"$TOOL_STDERR\" >&2\nexit \"$TOOL_EXIT\"\n")
 	for _, scenario := range []struct {
 		name, stdout, stderr, code string
 		failed, skipped            bool
@@ -105,7 +106,6 @@ func TestPHPStanInvocation(t *testing.T) {
 		{"no matching files", "No files found to analyse", "", "1", false, true, 0},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			fakeTool(t, "php", "printf '%s' \"$TOOL_STDOUT\"\nprintf '%s' \"$TOOL_STDERR\" >&2\nexit \"$TOOL_EXIT\"\n")
 			t.Setenv("TOOL_STDOUT", scenario.stdout)
 			t.Setenv("TOOL_STDERR", scenario.stderr)
 			t.Setenv("TOOL_EXIT", scenario.code)
@@ -184,6 +184,10 @@ func TestPHPStanSkipsAnalysisAfterFailedDependencyRefresh(t *testing.T) {
 }
 
 func TestPHPCSFixerInvocation(t *testing.T) {
+	tools := t.TempDir()
+	binDir := filepath.Join(tools, "php", "vendor", "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "php-cs-fixer"), []byte("#!/bin/sh\ncase \" $* \" in *' --dry-run '*) ;; *) exit 99 ;; esac\nprintf '%s' \"$TOOL_STDOUT\"\nprintf '%s' \"$TOOL_STDERR\" >&2\nexit \"$TOOL_EXIT\"\n"), 0o755))
 	for _, scenario := range []struct {
 		name, output, stderr, code string
 		failed                     bool
@@ -196,14 +200,11 @@ func TestPHPCSFixerInvocation(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			root := t.TempDir()
-			binDir := filepath.Join(root, "php", "vendor", "bin")
-			require.NoError(t, os.MkdirAll(binDir, 0o755))
-			require.NoError(t, os.WriteFile(filepath.Join(binDir, "php-cs-fixer"), []byte("#!/bin/sh\ncase \" $* \" in *' --dry-run '*) ;; *) exit 99 ;; esac\nprintf '%s' \"$TOOL_STDOUT\"\nprintf '%s' \"$TOOL_STDERR\" >&2\nexit \"$TOOL_EXIT\"\n"), 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0o644))
 			t.Setenv("TOOL_STDOUT", scenario.output)
 			t.Setenv("TOOL_STDERR", scenario.stderr)
 			t.Setenv("TOOL_EXIT", scenario.code)
-			config := ToolConfig{RootDir: root, ToolDirectory: root, SourceDirectories: []string{root}}
+			config := ToolConfig{RootDir: root, ToolDirectory: tools, SourceDirectories: []string{root}}
 			result := runFormatTool(t, PHPCSFixer{}, config, true)
 			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 			assert.Len(t, result.Findings, scenario.findings)

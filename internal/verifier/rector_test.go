@@ -16,6 +16,11 @@ import (
 func setupRector(t *testing.T, script string, directories ...string) (string, []string) {
 	t.Helper()
 	fakeTool(t, "php", script)
+	return setupRectorProject(t, directories...)
+}
+
+func setupRectorProject(t *testing.T, directories ...string) (string, []string) {
+	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0o644))
 	require.NoError(t, os.Mkdir(filepath.Join(root, "vendor"), 0o755))
@@ -126,6 +131,7 @@ exit 1`, "src")
 }
 
 func TestRectorFixReportsErrorsAndRejectsInvalidReports(t *testing.T) {
+	fakeTool(t, "php", rectorResponder())
 	for _, scenario := range []struct {
 		name, output, exit string
 	}{
@@ -148,7 +154,7 @@ func TestRectorFixReportsErrorsAndRejectsInvalidReports(t *testing.T) {
 		{"fatal process error", "partial", "2"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			root, directories := setupRector(t, rectorResponder(), "src")
+			root, directories := setupRectorProject(t, "src")
 			argsPath := filepath.Join(t.TempDir(), "arguments")
 			t.Setenv("TOOL_ARGS", argsPath)
 			t.Setenv("RECTOR_WRITE_OUTPUT", scenario.output)
@@ -234,6 +240,7 @@ func TestRectorFixReportsSourceErrors(t *testing.T) {
 }
 
 func TestRectorSourceErrorsThroughSymlinkedRoot(t *testing.T) {
+	fakeTool(t, "php", rectorResponder())
 	for _, dryRun := range []bool{false, true} {
 		mode := "fix"
 		if dryRun {
@@ -241,7 +248,7 @@ func TestRectorSourceErrorsThroughSymlinkedRoot(t *testing.T) {
 		}
 		for _, location := range []string{"relative", "root alias", "resolved", "outside sources"} {
 			t.Run(mode+"/"+location, func(t *testing.T) {
-				root, _ := setupRector(t, rectorResponder(), "src", "other")
+				root, _ := setupRectorProject(t, "src", "other")
 				require.NoError(t, os.WriteFile(filepath.Join(root, "src", "broken.php"), []byte("<?php invalid"), 0o644))
 				require.NoError(t, os.WriteFile(filepath.Join(root, "other", "broken.php"), []byte("<?php invalid"), 0o644))
 				resolved, err := filepath.EvalSymlinks(root)
@@ -303,9 +310,10 @@ func TestRectorFixWithoutDiffs(t *testing.T) {
 }
 
 func TestRectorSyntaxErrorsOutsideSourcesRemainFailures(t *testing.T) {
+	fakeTool(t, "php", rectorResponder())
 	for _, file := range []string{"src-other/broken.php", "src/../other/broken.php", "../outside.php"} {
 		t.Run(file, func(t *testing.T) {
-			root, directories := setupRector(t, rectorResponder(), "src")
+			root, directories := setupRectorProject(t, "src")
 			t.Setenv("TOOL_ARGS", filepath.Join(t.TempDir(), "arguments"))
 			t.Setenv("RECTOR_WRITE_OUTPUT", `{"totals":{"changed_files":0,"errors":1},"errors":[{"file":"`+file+`","line":8,"message":"Syntax error"}]}`)
 			t.Setenv("RECTOR_WRITE_EXIT", "1")
@@ -320,16 +328,16 @@ func TestRectorSyntaxErrorsOutsideSourcesRemainFailures(t *testing.T) {
 }
 
 func TestRectorPreservesComposerFilesAfterFix(t *testing.T) {
+	fakeTool(t, "php", `if [ ! -f composer.lock ]; then exit 3; fi
+printf '{"totals":{"changed_files":0,"errors":0}}'`)
+	composer := filepath.Join(os.Getenv("PATH"), "composer")
+	require.NoError(t, os.WriteFile(composer, []byte("#!/bin/sh\nprintf 'changed' > composer.json\nprintf 'generated' > composer.lock\n/bin/mkdir -p vendor\n: > vendor/autoload.php\n"), 0o755))
 	for _, lockExists := range []bool{false, true} {
 		name := "without lock"
 		if lockExists {
 			name = "with lock"
 		}
 		t.Run(name, func(t *testing.T) {
-			fakeTool(t, "php", `if [ ! -f composer.lock ]; then exit 3; fi
-printf '{"totals":{"changed_files":0,"errors":0}}'`)
-			composer := filepath.Join(os.Getenv("PATH"), "composer")
-			require.NoError(t, os.WriteFile(composer, []byte("#!/bin/sh\nprintf 'changed' > composer.json\nprintf 'generated' > composer.lock\n/bin/mkdir -p vendor\n: > vendor/autoload.php\n"), 0o755))
 			root := t.TempDir()
 			manifest := filepath.Join(root, "composer.json")
 			lock := filepath.Join(root, "composer.lock")
@@ -405,6 +413,7 @@ exit 2`, "src")
 }
 
 func TestRectorFixDryRunOutcomes(t *testing.T) {
+	fakeTool(t, "php", rectorResponder())
 	for _, scenario := range []struct {
 		name, output, exit string
 		failed             bool
@@ -422,7 +431,7 @@ func TestRectorFixDryRunOutcomes(t *testing.T) {
 		{name: "fatal report", output: "broken", exit: "1", failed: true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			root, directories := setupRector(t, rectorResponder(), "src")
+			root, directories := setupRectorProject(t, "src")
 			require.NoError(t, os.WriteFile(filepath.Join(root, "src", "broken.php"), []byte("<?php :"), 0o644))
 			args := filepath.Join(t.TempDir(), "arguments")
 			t.Setenv("TOOL_ARGS", args)
@@ -466,6 +475,18 @@ func TestRectorPreservesComposerFilesOnPreparationFailure(t *testing.T) {
 }
 
 func TestRectorDependenciesAndReporting(t *testing.T) {
+	fakeTools(t, map[string]string{
+		"composer": `printf '%s' "$* advisories=$COMPOSER_POLICY_ADVISORIES_BLOCK" > "$RECTOR_ROOT/composer-args"
+/bin/mkdir -p vendor/composer
+printf '{"packages":[{"name":"shopware/core","version":"6.7.0.0"}]}' > vendor/composer/installed.json
+: > vendor/autoload.php
+`,
+		"php": `printf '%s\n' "$@" > "$RECTOR_ROOT/rector-args"
+printf '%s' "$PWD" > "$RECTOR_ROOT/rector-cwd"
+printf '{"totals":{"changed_files":0,"errors":0}}'
+exit "$RECTOR_EXIT"
+`,
+	})
 	for _, scenario := range []struct {
 		name                                             string
 		localVendor, customConfig, project, fail, dryRun bool
@@ -479,18 +500,6 @@ func TestRectorDependenciesAndReporting(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("RECTOR_ROOT", root)
-			fakeTools(t, map[string]string{
-				"composer": `printf '%s' "$* advisories=$COMPOSER_POLICY_ADVISORIES_BLOCK" > "$RECTOR_ROOT/composer-args"
-/bin/mkdir -p vendor/composer
-printf '{"packages":[{"name":"shopware/core","version":"6.7.0.0"}]}' > vendor/composer/installed.json
-: > vendor/autoload.php
-`,
-				"php": `printf '%s\n' "$@" > "$RECTOR_ROOT/rector-args"
-printf '%s' "$PWD" > "$RECTOR_ROOT/rector-cwd"
-printf '{"totals":{"changed_files":0,"errors":0}}'
-exit "$RECTOR_EXIT"
-`,
-			})
 			t.Setenv("RECTOR_EXIT", "0")
 			if scenario.fail {
 				t.Setenv("RECTOR_EXIT", "1")
@@ -569,17 +578,17 @@ exit "$RECTOR_EXIT"
 }
 
 func TestRectorExtensionReportsCachedPaths(t *testing.T) {
+	fakeTools(t, map[string]string{
+		"composer": "/bin/mkdir -p vendor\n: > vendor/autoload.php\n",
+		"php": `printf '{"totals":{"changed_files":1,"errors":1},"changed_files":["../../../../src/changed.php"],"errors":[{"file":"../../../../src/broken.php","message":"Syntax error","line":2}]}'
+exit 1`,
+	})
 	for _, dryRun := range []bool{false, true} {
 		name := "fix"
 		if dryRun {
 			name = "dry run"
 		}
 		t.Run(name, func(t *testing.T) {
-			fakeTools(t, map[string]string{
-				"composer": "/bin/mkdir -p vendor\n: > vendor/autoload.php\n",
-				"php": `printf '{"totals":{"changed_files":1,"errors":1},"changed_files":["../../../../src/changed.php"],"errors":[{"file":"../../../../src/broken.php","message":"Syntax error","line":2}]}'
-exit 1`,
-			})
 			root := t.TempDir()
 			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0o644))
 			require.NoError(t, os.WriteFile(filepath.Join(root, "rector.php"), []byte("<?php"), 0o644))

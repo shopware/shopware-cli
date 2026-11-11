@@ -42,6 +42,10 @@ func TestHasSCSSFiles(t *testing.T) {
 }
 
 func TestStylelintReportsFindingsAndFailures(t *testing.T) {
+	fakeTool(t, "node", `printf '%s' "$TOOL_STDOUT"
+printf '%s' "$TOOL_STDERR" >&2
+exit "$TOOL_EXIT"`)
+
 	const remainingError = `[{"source":"file.scss","warnings":[{"line":2,"rule":"block-no-empty","severity":"error","text":"Unexpected empty block"}],"autofixed":true}]`
 	for _, scenario := range []struct {
 		name, stdout, stderr, code, note string
@@ -231,9 +235,6 @@ func TestStylelintReportsFindingsAndFailures(t *testing.T) {
 				mode = "fix"
 			}
 			t.Run(mode+"/"+scenario.name, func(t *testing.T) {
-				fakeTool(t, "node", `printf '%s' "$TOOL_STDOUT"
-printf '%s' "$TOOL_STDERR" >&2
-exit "$TOOL_EXIT"`)
 				t.Setenv("TOOL_EXIT", scenario.code)
 				root := t.TempDir()
 				directory := filepath.Join(root, "storefront")

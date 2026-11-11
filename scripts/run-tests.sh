@@ -12,9 +12,23 @@ if [ $# -eq 0 ]; then
     set -- ./...
 fi
 
-# Warm the build cache while we still have network so the sandboxed run
-# does not need to fetch or compile anything from the module proxy.
-go test -run='^$' ./...
+COVER_FLAGS=()
+if [ -n "$COVERPROFILE" ]; then
+    COVER_FLAGS=("-coverprofile=$COVERPROFILE")
+fi
+
+# Warm only the requested packages, using the same build flags (race, tags,
+# coverage, etc.). Use a no-op runner instead of starting every test binary:
+# even with -run='^$', package initializers and TestMain would still execute.
+# Actual tests, benchmarks and fuzz targets only run inside the sandbox.
+WARM_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        -args|--) break ;;
+    esac
+    WARM_ARGS+=("$arg")
+done
+go test ${COVER_FLAGS+"${COVER_FLAGS[@]}"} ${WARM_ARGS+"${WARM_ARGS[@]}"} -exec=true -run='^$' -bench='^$' -fuzz=''
 
 # If a coverage file is requested, install gocover-cobertura while we have network.
 if [ -n "$COVERPROFILE" ]; then
@@ -29,11 +43,6 @@ export GOPROXY=off
 # Tells tests that depend on real external downloads (e.g. fetching dart-sass)
 # to skip themselves instead of failing on DNS.
 export SHOPWARE_CLI_NO_NETWORK=1
-
-COVER_FLAGS=()
-if [ -n "$COVERPROFILE" ]; then
-    COVER_FLAGS=("-coverprofile=$COVERPROFILE")
-fi
 
 case "$(uname -s)" in
     Darwin)

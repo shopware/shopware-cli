@@ -63,27 +63,28 @@ func newMockExec(t *testing.T, scriptContent string) {
 	t.Setenv("PATH", fmt.Sprintf("%s%c%s", binDir, filepath.ListSeparator, originalPath))
 }
 
-// newArgRecordingMockExec creates a mock npx that writes its full argv to a
-// file so tests can assert which CLI flags Compile forwarded.
-func newArgRecordingMockExec(t *testing.T, argsFile string) {
+func setupMockCompiler(t *testing.T, output string) {
 	t.Helper()
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-echo "<h1>Hello</h1>"
-exit 0
-`, argsFile)
-	newMockExec(t, script)
+	// Keep one executable for these sequential cases; each case restores its overrides.
+	t.Setenv("MJML_STDOUT", output)
+	t.Setenv("MJML_STDERR", "")
+	t.Setenv("MJML_EXIT", "0")
+	t.Setenv("MJML_ARGS", "")
+	newMockExec(t, `#!/bin/sh
+if [ -n "$MJML_ARGS" ]; then
+  printf '%s\n' "$@" > "$MJML_ARGS"
+fi
+printf '%s' "$MJML_STDOUT"
+printf '%s' "$MJML_STDERR" >&2
+exit "$MJML_EXIT"
+`)
 }
 
 func TestCompile(t *testing.T) {
 	ctx := t.Context()
+	setupMockCompiler(t, "<h1>Hello</h1>\n")
 
 	t.Run("successful compilation", func(t *testing.T) {
-		script := `#!/bin/sh
-echo "<h1>Hello</h1>"
-exit 0`
-		newMockExec(t, script)
-
 		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
@@ -105,10 +106,9 @@ exit 0`
 	})
 
 	t.Run("compilation error", func(t *testing.T) {
-		script := `#!/bin/sh
-echo "compilation error" >&2
-exit 1`
-		newMockExec(t, script)
+		t.Setenv("MJML_STDOUT", "")
+		t.Setenv("MJML_STDERR", "compilation error\n")
+		t.Setenv("MJML_EXIT", "1")
 
 		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
 		if err != nil {
@@ -133,11 +133,7 @@ exit 1`
 	})
 
 	t.Run("compilation with warnings", func(t *testing.T) {
-		script := `#!/bin/sh
-echo "a warning" >&2
-echo "<h1>Hello</h1>"
-exit 0`
-		newMockExec(t, script)
+		t.Setenv("MJML_STDERR", "a warning\n")
 
 		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
 		if err != nil {
@@ -161,7 +157,7 @@ exit 0`
 
 	t.Run("default options pass no include flags", func(t *testing.T) {
 		argsFile := filepath.Join(t.TempDir(), "args.txt")
-		newArgRecordingMockExec(t, argsFile)
+		t.Setenv("MJML_ARGS", argsFile)
 
 		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
 		if err != nil {
@@ -185,7 +181,7 @@ exit 0`
 
 	t.Run("allow_includes forwards --config.allowIncludes=true", func(t *testing.T) {
 		argsFile := filepath.Join(t.TempDir(), "args.txt")
-		newArgRecordingMockExec(t, argsFile)
+		t.Setenv("MJML_ARGS", argsFile)
 
 		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
 		if err != nil {
@@ -204,7 +200,7 @@ exit 0`
 
 	t.Run("include_paths forwards JSON-encoded array and implies allow_includes", func(t *testing.T) {
 		argsFile := filepath.Join(t.TempDir(), "args.txt")
-		newArgRecordingMockExec(t, argsFile)
+		t.Setenv("MJML_ARGS", argsFile)
 
 		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
 		if err != nil {
@@ -229,13 +225,9 @@ exit 0`
 
 func TestProcessDirectory(t *testing.T) {
 	ctx := t.Context()
+	setupMockCompiler(t, "compiled content\n")
 
 	t.Run("successful processing", func(t *testing.T) {
-		script := `#!/bin/sh
-echo "compiled content"
-exit 0`
-		newMockExec(t, script)
-
 		tmpDir := t.TempDir()
 
 		// Create test file structure
@@ -317,10 +309,9 @@ exit 0`
 	})
 
 	t.Run("processing with compilation errors", func(t *testing.T) {
-		script := `#!/bin/sh
-echo "error" >&2
-exit 1`
-		newMockExec(t, script)
+		t.Setenv("MJML_STDOUT", "")
+		t.Setenv("MJML_STDERR", "error\n")
+		t.Setenv("MJML_EXIT", "1")
 
 		tmpDir := t.TempDir()
 
@@ -349,7 +340,7 @@ exit 1`
 
 	t.Run("forwards include options to each file", func(t *testing.T) {
 		argsFile := filepath.Join(t.TempDir(), "args.txt")
-		newArgRecordingMockExec(t, argsFile)
+		t.Setenv("MJML_ARGS", argsFile)
 
 		tmpDir := t.TempDir()
 		mailDir := filepath.Join(tmpDir, "mail", "welcome")

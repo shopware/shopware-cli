@@ -14,6 +14,10 @@ import (
 )
 
 func TestESLintReportsFindingsAndFailures(t *testing.T) {
+	fakeTool(t, "node", `printf '%s' "$TOOL_STDOUT"
+printf '%s' "$TOOL_STDERR" >&2
+exit "$TOOL_EXIT"`)
+
 	for _, scenario := range []struct {
 		name, output, stderr, code, note string
 		failed                           bool
@@ -168,9 +172,6 @@ func TestESLintReportsFindingsAndFailures(t *testing.T) {
 				mode = "fix"
 			}
 			t.Run(mode+"/"+scenario.name, func(t *testing.T) {
-				fakeTool(t, "node", `printf '%s' "$TOOL_STDOUT"
-printf '%s' "$TOOL_STDERR" >&2
-exit "$TOOL_EXIT"`)
 				t.Setenv("TOOL_STDERR", scenario.stderr)
 				t.Setenv("TOOL_EXIT", scenario.code)
 				root := t.TempDir()
