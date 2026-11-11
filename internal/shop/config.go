@@ -33,7 +33,21 @@ type EnvironmentConfig struct {
 	SSH *EnvironmentSSHConfig `yaml:"ssh,omitempty"`
 }
 
+// EnvironmentSSHDeploymentHooks run on each host around release activation, including rollback.
+// Scripts run with sh -eu in the deployment storage directory (parent of ssh.directory).
+// Post also runs after a failed pre hook or switch, so it can restart stopped workers.
+// Unchanged rollouts do not run hooks.
+type EnvironmentSSHDeploymentHooks struct {
+	// Maximum runtime per hook in seconds. Zero uses 300. Requires timeout with --kill-after support on the remote host; timed-out hooks receive TERM, then KILL after five seconds.
+	TimeoutSeconds int      `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" jsonschema:"minimum=0"`
+	Pre            []string `yaml:"pre,omitempty" json:"pre,omitempty"`
+	Post           []string `yaml:"post,omitempty" json:"post,omitempty"`
+}
+
 type EnvironmentSSHConfig struct {
+	// Host-side commands around release activation.
+	Hooks *EnvironmentSSHDeploymentHooks `yaml:"hooks,omitempty"`
+
 	// SSH host name or IP address for a single target. Mutually exclusive with hosts.
 	Host string `yaml:"host,omitempty"`
 	// SSH user. Defaults to the user configured in ~/.ssh/config or the current user

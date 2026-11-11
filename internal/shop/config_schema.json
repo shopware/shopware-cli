@@ -953,6 +953,10 @@
     },
     "EnvironmentSSHConfig": {
       "properties": {
+        "hooks": {
+          "$ref": "#/$defs/EnvironmentSSHDeploymentHooks",
+          "description": "Host-side commands around release activation."
+        },
         "host": {
           "type": "string",
           "description": "SSH host name or IP address for a single target. Mutually exclusive with hosts."
@@ -1012,8 +1016,36 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "EnvironmentSSHDeploymentHooks": {
+      "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum runtime per hook in seconds. Zero uses 300. Requires timeout with --kill-after support on the remote host; timed-out hooks receive TERM, then KILL after five seconds."
+        },
+        "pre": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "post": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EnvironmentSSHDeploymentHooks run on each host around release activation, including rollback."
+    },
     "EnvironmentSSHHostConfig": {
       "properties": {
+        "hooks": {
+          "$ref": "#/$defs/EnvironmentSSHDeploymentHooks",
+          "description": "Replaces the entire common hooks block when supplied."
+        },
         "cachetool": {
           "$ref": "#/$defs/EnvironmentSSHCachetoolConfig"
         },
