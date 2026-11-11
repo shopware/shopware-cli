@@ -7,6 +7,7 @@ import (
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/proxy"
@@ -314,7 +315,7 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker for the project environment")
 	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Add Elasticsearch or OpenSearch support to the project (enabled by default in non-interactive mode)")
 	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
-	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch=false instead")
+	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", deprecation.Message("2027-02-10", "--with-elasticsearch=false"))
 	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Add AMQP queue support via Symfony's Messenger component")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Continue when dependencies are blocked by known security advisories")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository for a Shopware project")

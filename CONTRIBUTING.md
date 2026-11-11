@@ -36,6 +36,12 @@ When opening a PR, please include:
 
 Please keep PRs focused. Smaller PRs are easier to review and merge.
 
+Start commit titles that deprecate anything the
+[deprecation policy](docs/adr/2026-11-09-deprecation-policy.md) covers with
+`deprecate:` and titles that remove it with `remove:` (both also with a scope,
+such as `deprecate(extension):`), so the release changelog lists them under
+Deprecations.
+
 ## Development
 
 Branch from `main` and target `main` with your pull request.

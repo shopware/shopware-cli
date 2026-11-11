@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
 )
 
@@ -368,6 +369,7 @@ func TestPushExtensionStoreInfoManualImages(t *testing.T) {
 			File:     imgFile,
 			Activate: extension.ConfigStoreImageActivate{German: true, English: false},
 			Preview:  extension.ConfigStoreImagePreview{German: true, English: false},
+			Priority: 3, //nolint:staticcheck // the deprecated key still sets the position
 		},
 	}
 
@@ -379,6 +381,8 @@ func TestPushExtensionStoreInfoManualImages(t *testing.T) {
 	}))
 
 	require.NotNil(t, updated)
+	assert.Equal(t, 3, updated.Priority)
+	assert.Contains(t, deprecation.Used(), "config.store_image_priority")
 	assert.True(t, updated.Details[0].Activated)
 	assert.True(t, updated.Details[0].Preview)
 	assert.False(t, updated.Details[1].Activated)

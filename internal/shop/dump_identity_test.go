@@ -34,6 +34,8 @@ func TestDumpDatabaseResetIdentityFiltersExportedAppRows(t *testing.T) {
 			mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS.*").WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
 			mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").WillReturnRows(
 				sqlmock.NewRows([]string{"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME", "REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION"}))
+			mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_NAME = 'CHECK_CONSTRAINTS'.*COLUMN_NAME = 'TABLE_NAME'").
+				WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(0))
 			mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").WillReturnRows(
 				sqlmock.NewRows([]string{"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE"}))
 			mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `app`").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))

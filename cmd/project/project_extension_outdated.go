@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
@@ -85,6 +86,6 @@ func init() {
 	_ = projectExtensionOutdatedCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions([]string{string(tui.TableFormatTable), string(tui.TableFormatJSON)}, cobra.ShellCompDirectiveNoFileComp))
 	projectExtensionOutdatedCmd.Flags().Bool("json", false, "Output as JSON")
 	projectExtensionOutdatedCmd.MarkFlagsMutuallyExclusive("format", "json")
-	_ = projectExtensionOutdatedCmd.Flags().MarkDeprecated("json", "use --format json instead")
+	_ = projectExtensionOutdatedCmd.Flags().MarkDeprecated("json", deprecation.Message("2027-02-10", "--format json"))
 	_ = projectExtensionOutdatedCmd.Flags().MarkHidden("json")
 }

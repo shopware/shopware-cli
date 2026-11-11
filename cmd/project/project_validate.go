@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
@@ -117,7 +118,7 @@ func init() {
 	_ = projectValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
 	_ = projectValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
-	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
-	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
+	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", deprecation.Message("2027-02-10", "--format"))
+	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("no-copy", deprecation.Message("2027-02-10", ""))
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")
 }

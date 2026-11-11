@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
@@ -80,7 +81,7 @@ func init() {
 	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
-	_ = projectFixCmd.PersistentFlags().MarkDeprecated("allow-non-git", "a Git repository is no longer required; omit --allow-non-git")
+	_ = projectFixCmd.PersistentFlags().MarkDeprecated("allow-non-git", deprecation.Message("2027-02-10", ""))
 	_ = projectFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
 	_ = projectFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }

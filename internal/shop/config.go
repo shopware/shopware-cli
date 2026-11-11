@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -1043,10 +1044,7 @@ func warnDeprecatedTopLevelShop(ctx context.Context, fileName string, c *Config)
 		return
 	}
 
-	logging.FromContext(ctx).Warnf(
-		"Config %s uses deprecated top-level url/admin_api; move shop URL and Admin API credentials to environments (empty -e defaults to environments.local)",
-		fileName,
-	)
+	deprecation.Warn(ctx, "config.top_level_shop", "Top-level url/admin_api in "+fileName, "2027-02-10", "environments.<name>.url and environments.<name>.admin_api")
 }
 
 func fillEmptyConfig(c *Config) *Config {
