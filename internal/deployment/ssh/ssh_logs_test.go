@@ -2,12 +2,19 @@ package ssh
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestSSHDeploymentLogsCancellationAndValidation(t *testing.T) {
@@ -24,4 +31,29 @@ func TestSSHDeploymentLogsCancellationAndValidation(t *testing.T) {
 	for _, reference := range []string{"", "..", ".hidden", "name\ninjection"} {
 		require.ErrorContains(t, e.WriteDeploymentLogs(t.Context(), Deployment{Reference: reference}, io.Discard), "invalid deployment name")
 	}
+}
+
+func TestDeploymentLogReferences(t *testing.T) {
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Skip("PHP required")
+	}
+	root := t.TempDir()
+	list := func() []string {
+		payload, err := json.Marshal(sshDeploymentLogsInput{Root: root, List: true})
+		require.NoError(t, err)
+		data, err := exec.CommandContext(t.Context(), php, "-r", strings.TrimPrefix(sshDeploymentLogsScript, "<?php\n"), "--", string(payload)).CombinedOutput()
+		require.NoError(t, err, string(data))
+		var references []string
+		require.NoError(t, json.Unmarshal(data, &references))
+		return references
+	}
+	assert.Empty(t, list())
+	dir := filepath.Join(root, ".shopware-cli", "logs")
+	for _, name := range []string{"successful.log", "failed.log", "ignore.txt", ".hidden.log"} {
+		testhelper.WriteFile(t, filepath.Join(dir, name), "log")
+	}
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "directory.log"), 0755))
+	require.NoError(t, os.Symlink(filepath.Join(dir, "successful.log"), filepath.Join(dir, "linked.log")))
+	assert.Equal(t, []string{"failed", "successful"}, list())
 }

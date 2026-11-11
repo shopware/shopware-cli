@@ -11,7 +11,7 @@ import (
 )
 
 var projectDeploymentLogsCmd = &cobra.Command{
-	Use:   "logs <deployment-reference>",
+	Use:   "logs deployment-reference",
 	Short: "Show stored deployment-helper logs",
 	Long: `Print the stored deployment-helper output for a deployment in the selected environment.
 For SSH, use the deployment name or archive path. The local archive is not
@@ -23,7 +23,7 @@ stored logs.
 Output is written directly to stdout and can be redirected to a file.
 Logs may contain sensitive information printed by the deployment helper.`,
 	Args:              cobra.ExactArgs(1),
-	ValidArgsFunction: deploymentReferenceCompletions,
+	ValidArgsFunction: deploymentLogReferenceCompletions,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := resolveDeploymentProjectRoot(nil)
 		if err != nil {
