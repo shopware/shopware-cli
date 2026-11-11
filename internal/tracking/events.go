@@ -65,6 +65,8 @@ const (
 	// TagFailedStep is the step a failed or cancelled run stopped at, from FailedAt here.
 	// Also on EventProjectUpgrade, EventDevInstall and EventDevWatcher.
 	TagFailedStep = "failed_step"
+	// TagDeprecated lists the deprecated items a run used, sorted and comma-separated.
+	TagDeprecated = "deprecated"
 	// Input counts of validate, fix and format, set by RunTools with SetCommandTag.
 	// Configured bundles are not extensions, so they only count as directories.
 	TagExtensionCount     = "extension_count"

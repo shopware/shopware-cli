@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
@@ -136,7 +137,7 @@ func WarnOnDeprecatedToolName(ctx context.Context, values ...string) {
 	for _, value := range values {
 		for _, name := range strings.Split(value, ",") {
 			if strings.TrimSpace(name) == "sw-cli" {
-				logging.FromContext(ctx).Warnf("The tool name %q is deprecated as input; use %q instead", "sw-cli", "builtin")
+				deprecation.Warn(ctx, "tool_name.sw_cli", `Tool name "sw-cli"`, "2027-02-10", `"builtin"`)
 				return
 			}
 		}
