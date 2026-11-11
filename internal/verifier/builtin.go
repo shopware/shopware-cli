@@ -21,6 +21,9 @@ func (s Builtin) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	ignores := make([]validation.ToolConfigIgnore, 0)
 
 	for _, ext := range config.Extensions {
+		if ctx.Err() != nil {
+			return ToolSummary{}
+		}
 		extensionCheck := NewCheck()
 		extensionCheck.SetSourceRoot(ext.GetPath())
 		extension.RunValidation(ctx, ext, extensionCheck, config.PHPVersion)

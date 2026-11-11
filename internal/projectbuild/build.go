@@ -249,7 +249,7 @@ func finalize(ctx context.Context, root string, shopCfg *shop.Config, sources []
 		}
 	}
 	if !shopCfg.Build.DisableChecksums {
-		generateChecksums(ctx, root, shopCfg)
+		return generateChecksums(ctx, root, shopCfg)
 	}
 	return nil
 }
@@ -298,11 +298,17 @@ func removeExtensionAssets(root string, sources []asset.Source) error {
 	return os.WriteFile(path.Join(root, "vendor", "shopware", "administration", "Resources", ".administration-css"), []byte{}, 0o644)
 }
 
-func generateChecksums(ctx context.Context, root string, shopCfg *shop.Config) {
+func generateChecksums(ctx context.Context, root string, shopCfg *shop.Config) error {
 	section := ci.Start("Generating extension checksums")
 	defer section.End()
 	extensions, _ := extension.FindExtensionsFromProject(ctx, root, false)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	for _, ext := range extensions {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		extPath := ext.GetPath()
 		if shopCfg.Build.KeepExistingChecksums {
 			if _, err := os.Stat(path.Join(extPath, "checksum.json")); err == nil {
@@ -314,4 +320,5 @@ func generateChecksums(ctx context.Context, root string, shopCfg *shop.Config) {
 			logging.FromContext(ctx).Warnf("Failed to generate checksum for %s: %v", extPath, err)
 		}
 	}
+	return ctx.Err()
 }

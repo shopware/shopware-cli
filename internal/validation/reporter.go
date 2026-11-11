@@ -2,7 +2,6 @@ package validation
 
 import (
 	"cmp"
-	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +11,8 @@ import (
 	"os"
 	"slices"
 	"strings"
+
+	"github.com/zeebo/xxh3"
 )
 
 // ReporterFormats lists the supported validation report formats.
@@ -236,7 +237,7 @@ func doGitLabReport(findings []CheckResult, tools []ToolReport, title string) er
 
 		// Create fingerprint (unique identifier for the issue)
 		fingerprintData := fmt.Sprintf("%s:%d:%s:%s", r.Path, r.Line, r.Identifier, r.Message)
-		fingerprint := fmt.Sprintf("%x", md5.Sum([]byte(fingerprintData)))
+		fingerprint := fmt.Sprintf("%x", xxh3.HashString128(fingerprintData).Bytes())
 
 		description := r.Message
 		if r.Tip != "" {

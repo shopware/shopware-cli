@@ -14,9 +14,32 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
+
+func TestFinalizeChecksumsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	cfg := &shop.Config{Build: &shop.ConfigBuild{}}
+
+	require.ErrorIs(t, finalize(ctx, t.TempDir(), cfg, nil), context.Canceled)
+}
+
+func TestFinalizeChecksumsPreservesPartialDiscovery(t *testing.T) {
+	root := t.TempDir()
+	pluginPath := filepath.Join(root, "custom", "plugins", "Demo")
+	testhelper.WriteFile(t, filepath.Join(pluginPath, "composer.json"), testhelper.PluginComposer("swag/demo", "1.0.0", `Swag\Demo\Demo`).String())
+	testhelper.WriteFile(t, filepath.Join(root, "composer.lock"), "{ invalid json")
+	cfg := &shop.Config{Build: &shop.ConfigBuild{}}
+
+	extensions, err := extension.FindExtensionsFromProject(t.Context(), root, false)
+	require.Error(t, err)
+	require.Len(t, extensions, 1)
+	require.NoError(t, finalize(t.Context(), root, cfg, nil))
+	assert.FileExists(t, filepath.Join(pluginPath, "checksum.json"))
+}
 
 // Keep the real local executor's environment handling, but replace PHP and
 // Composer with a shell process so pipeline tests never install dependencies.

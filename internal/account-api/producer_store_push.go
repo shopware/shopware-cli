@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/markdown"
 	"github.com/shopware/shopware-cli/logging"
@@ -84,6 +85,9 @@ func PushExtensionStoreInfo(ctx context.Context, producer ProducerAPI, zipExt ex
 						return fmt.Errorf("cannot upload image %s to extension: %w", configImage.File, err)
 					}
 
+					if configImage.Position == 0 && configImage.Priority != 0 { //nolint:staticcheck // warns about the deprecated key
+						deprecation.Warn(ctx, "config.store_image_priority", "Key store.images[].priority of image "+configImage.File, "2027-02-10", "store.images[].position")
+					}
 					apiImage.Priority = configImage.GetPosition()
 					apiImage.Details[0].Activated = configImage.Activate.German
 					apiImage.Details[0].Preview = configImage.Preview.German

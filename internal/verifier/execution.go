@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"runtime"
@@ -67,10 +68,17 @@ func NewToolExecution(onFindings func([]validation.CheckResult) bool) *ToolExecu
 
 // runDirectories waits for every directory, without cancelling sibling work
 // when one invocation reports an error through ToolExecution.
-func runDirectories(directories []string, run func(string)) {
+func runDirectories(ctx context.Context, directories []string, run func(string)) {
 	var group sync.WaitGroup
 	for _, directory := range directories {
-		group.Go(func() { run(directory) })
+		if ctx.Err() != nil {
+			break
+		}
+		group.Go(func() {
+			if ctx.Err() == nil {
+				run(directory)
+			}
+		})
 	}
 	group.Wait()
 }

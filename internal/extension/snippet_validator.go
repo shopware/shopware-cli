@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -28,38 +29,44 @@ func adminSnippetFilter(_ string, containingFolder string) bool {
 	return filepath.Base(containingFolder) == "snippet"
 }
 
-func validateStorefrontSnippets(ext Extension, check validation.Check) {
-	validateSnippetsForExtension(ext, check, "snippet", storefrontSnippetFilter)
+func validateStorefrontSnippets(ctx context.Context, ext Extension, check validation.Check) {
+	validateSnippetsForExtension(ctx, ext, check, "snippet", storefrontSnippetFilter)
 }
 
-func validateAdministrationSnippets(ext Extension, check validation.Check) {
-	validateSnippetsForExtension(ext, check, filepath.Join("app", "administration"), adminSnippetFilter)
+func validateAdministrationSnippets(ctx context.Context, ext Extension, check validation.Check) {
+	validateSnippetsForExtension(ctx, ext, check, filepath.Join("app", "administration"), adminSnippetFilter)
 }
 
 // validateSnippetsForExtension validates snippets for an extension using the provided subpath and filter.
-func validateSnippetsForExtension(ext Extension, check validation.Check, subPath string, filter snippetFileFilter) {
+func validateSnippetsForExtension(ctx context.Context, ext Extension, check validation.Check, subPath string, filter snippetFileFilter) {
 	sourceRoot := ext.GetPath()
 
 	for _, val := range ext.GetResourcesDirs() {
+		if ctx.Err() != nil {
+			return
+		}
 		folder := filepath.Join(val, subPath)
 
-		if err := validateSnippetsByPath(folder, sourceRoot, check, filter); err != nil {
+		if err := validateSnippetsByPath(ctx, folder, sourceRoot, check, filter); err != nil {
 			return
 		}
 	}
 
 	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
+		if ctx.Err() != nil {
+			return
+		}
 		bundlePath := extraBundle.ResolvePath(ext.GetRootDir())
 		folder := filepath.Join(bundlePath, "Resources", subPath)
 
-		if err := validateSnippetsByPath(folder, sourceRoot, check, filter); err != nil {
+		if err := validateSnippetsByPath(ctx, folder, sourceRoot, check, filter); err != nil {
 			return
 		}
 	}
 }
 
 // validateSnippetsByPath validates snippet files in a folder using the provided filter.
-func validateSnippetsByPath(folder, rootDir string, check validation.Check, filter snippetFileFilter) error {
+func validateSnippetsByPath(ctx context.Context, folder, rootDir string, check validation.Check, filter snippetFileFilter) error {
 	if _, err := os.Stat(folder); err != nil {
 		return nil //nolint:nilerr
 	}
@@ -67,6 +74,12 @@ func validateSnippetsByPath(folder, rootDir string, check validation.Check, filt
 	snippetFiles := make(map[string][]string)
 
 	err := filepath.WalkDir(folder, func(path string, d os.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err != nil {
+			return err
+		}
 		if d.IsDir() {
 			return nil
 		}
@@ -94,6 +107,9 @@ func validateSnippetsByPath(folder, rootDir string, check validation.Check, filt
 	}
 
 	for snippetFolder, files := range snippetFiles {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if len(files) == 1 {
 			// We have no other file to compare against
 			continue
@@ -131,6 +147,9 @@ func validateSnippetsByPath(folder, rootDir string, check validation.Check, filt
 		}
 
 		for _, file := range files {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			// makes no sense to compare to ourself
 			if file == mainFile {
 				continue

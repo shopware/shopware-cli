@@ -34,9 +34,11 @@ keeps one voice. When a rule and existing code disagree, the code gets fixed.
   `console command [args...]`.
 - Aliases mirror their siblings: `ls` for every `list`, `rm` for `delete`,
   `watch-admin` beside `admin-watch`.
-- Deprecate with the same lowercase sentence cobra uses for flags:
-  `use "project upgrade" instead, will be removed in October 2026`. Always name
-  the replacement.
+- Deprecate commands with
+  `Deprecated: deprecation.Message("2027-02-10", "\"project upgrade\"")`;
+  cobra prints `Command "x" is deprecated, it will be removed by 2027-02-10,
+  use "project upgrade" as replacement`. The date and telemetry follow
+  `docs/adr/2026-11-09-deprecation-policy.md`.
 
 ## Flags
 
@@ -58,8 +60,10 @@ keeps one voice. When a rule and existing code disagree, the code gets fixed.
   that reads well there (`select`), never a space or an internal marker.
 - Numbers are numeric flags (`Uint`, `Int`) unless the value is handed through
   to another tool as a string.
-- Flag deprecations: `use --with-elasticsearch=false instead`, lowercase, naming
-  the replacement.
+- Flag deprecations: `MarkDeprecated(name, deprecation.Message("2027-02-10",
+  "--with-elasticsearch=false"))`. Other deprecated input (config keys, flag
+  values) warns with `deprecation.Warn`. Pass an empty replacement when there is
+  none.
 
 ## Errors
 
