@@ -29,7 +29,7 @@ func toolNames[T Tool](list ToolList[T]) []string {
 }
 
 func TestToolsByCapability(t *testing.T) {
-	assert.ElementsMatch(t, []string{"eslint", "phpstan", "storefront-twig", "stylelint", "builtin"}, toolNames(GetToolsOf[CheckTool]()))
+	assert.ElementsMatch(t, []string{"eslint", "phpstan", "storefront-twig", "stylelint", "builtin", "prettier", "php-cs-fixer"}, toolNames(GetToolsOf[CheckTool]()))
 	assert.ElementsMatch(t, []string{"eslint", "rector", "stylelint", "symfony-xml"}, toolNames(GetToolsOf[FixTool]()))
 	assert.ElementsMatch(t, []string{"php-cs-fixer", "prettier"}, toolNames(GetToolsOf[FormatTool]()))
 }
@@ -135,14 +135,14 @@ func TestSelectTools(t *testing.T) {
 	all := ToolList[Tool]{testTool{name: "alpha"}, testTool{name: "beta"}, testTool{name: "gamma"}}
 
 	t.Run("selects all by default", func(t *testing.T) {
-		selected, statuses, err := SelectTools(all, "", "", "formatters")
+		selected, statuses, err := SelectTools(all, "", "", "formatters", false)
 		require.NoError(t, err)
 		assert.Equal(t, all, selected)
 		assert.Equal(t, []ToolResult{}, statuses)
 	})
 
 	t.Run("applies only and exclude and sorts statuses", func(t *testing.T) {
-		selected, statuses, err := SelectTools(all, "gamma,beta", "beta", "formatters")
+		selected, statuses, err := SelectTools(all, "gamma,beta", "beta", "formatters", false)
 		require.NoError(t, err)
 		assert.Equal(t, ToolList[Tool]{testTool{name: "gamma"}}, selected)
 		assert.Equal(t, []ToolResult{
@@ -152,15 +152,81 @@ func TestSelectTools(t *testing.T) {
 	})
 
 	t.Run("rejects excluding every selected tool", func(t *testing.T) {
-		_, statuses, err := SelectTools(all, "beta", "beta", "formatters")
+		_, statuses, err := SelectTools(all, "beta", "beta", "formatters", false)
 		require.ErrorContains(t, err, "no formatters selected after applying --exclude")
 		assert.Nil(t, statuses)
 	})
 
 	t.Run("rejects excluding a tool outside the only set", func(t *testing.T) {
-		_, _, err := SelectTools(all, "alpha", "beta", "formatters")
+		_, _, err := SelectTools(all, "alpha", "beta", "formatters", false)
 		require.ErrorContains(t, err, "not found in the selected tools")
 	})
+}
+
+type selectionChecker struct{ name string }
+
+func (t selectionChecker) Name() string { return t.name }
+func (selectionChecker) Check(context.Context, ToolConfig, *ToolExecution) ToolSummary {
+	return ToolSummary{}
+}
+
+type selectionFormatter struct{ selectionChecker }
+
+func (selectionFormatter) Format(context.Context, ToolConfig, *ToolExecution, bool) ToolSummary {
+	return ToolSummary{}
+}
+
+func TestSelectToolsExcludeFormatters(t *testing.T) {
+	all := ToolList[CheckTool]{
+		selectionChecker{"first"},
+		selectionFormatter{selectionChecker{"format"}},
+		selectionChecker{"last"},
+	}
+	tests := []struct {
+		name              string
+		only              string
+		exclude           string
+		excludeFormatters bool
+		want              []string
+		skipped           []ToolResult
+		wantErr           bool
+	}{
+		{name: "defaults", want: []string{"first", "format", "last"}},
+		{name: "exclude formatters", excludeFormatters: true, want: []string{"first", "last"}, skipped: []ToolResult{
+			{Name: "format", SkipReason: "excluded by --exclude-formatters"},
+		}},
+		{name: "only order and precedence", only: "last,format", excludeFormatters: true, want: []string{"last"}, skipped: []ToolResult{
+			{Name: "first", SkipReason: "not selected by --only"},
+			{Name: "format", SkipReason: "excluded by --exclude-formatters"},
+		}},
+		{name: "redundant named exclusion", exclude: "format", excludeFormatters: true, want: []string{"first", "last"}, skipped: []ToolResult{
+			{Name: "format", SkipReason: "excluded by --exclude"},
+		}},
+		{name: "empty selection", only: "format", excludeFormatters: true, wantErr: true},
+		{name: "unknown only", only: "unknown", excludeFormatters: true, wantErr: true},
+		{name: "unknown exclude", exclude: "unknown", excludeFormatters: true, wantErr: true},
+		{name: "exclude outside only", only: "first", exclude: "format", excludeFormatters: true, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selected, statuses, err := SelectTools(all, tt.only, tt.exclude, "validation checks", tt.excludeFormatters)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Nil(t, selected)
+				assert.Nil(t, statuses)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, toolNames(selected))
+			assert.ElementsMatch(t, tt.skipped, statuses)
+		})
+	}
+}
+
+func TestValidationExcludeFormatters(t *testing.T) {
+	selected, _, err := SelectTools(GetToolsOf[CheckTool](), "", "", "validation checks", true)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"builtin", "phpstan", "storefront-twig", "eslint", "stylelint"}, toolNames(selected))
 }
 
 func TestCommandOutputOrError(t *testing.T) {

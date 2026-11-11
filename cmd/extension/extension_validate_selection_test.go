@@ -12,15 +12,24 @@ import (
 
 func TestExtensionValidationSelection(t *testing.T) {
 	t.Run("default runs all checkers", func(t *testing.T) {
-		tools, statuses, err := selectExtensionValidationTools("", "")
+		tools, statuses, err := selectExtensionValidationTools("", "", false)
 		require.NoError(t, err)
-		assert.Len(t, tools, 5)
+		assert.Len(t, tools, 7)
 		assert.Empty(t, statuses)
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
 	})
 
+	for _, name := range []string{"prettier", "php-cs-fixer"} {
+		t.Run("only "+name, func(t *testing.T) {
+			tools, _, err := selectExtensionValidationTools(name, "", false)
+			require.NoError(t, err)
+			assert.Equal(t, []string{name}, toolNamesForValidation(tools))
+			assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
+		})
+	}
+
 	t.Run("only phpstan", func(t *testing.T) {
-		tools, statuses, err := selectExtensionValidationTools("phpstan", "")
+		tools, statuses, err := selectExtensionValidationTools("phpstan", "", false)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"phpstan"}, toolNamesForValidation(tools))
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
@@ -28,49 +37,49 @@ func TestExtensionValidationSelection(t *testing.T) {
 	})
 
 	t.Run("Twig validation needs no external tools", func(t *testing.T) {
-		tools, _, err := selectExtensionValidationTools("storefront-twig", "")
+		tools, _, err := selectExtensionValidationTools("storefront-twig", "", false)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"storefront-twig"}, toolNamesForValidation(tools))
 		assert.False(t, slices.ContainsFunc(tools, requiresToolSetup))
 	})
 
 	t.Run("default exclusion is reported", func(t *testing.T) {
-		tools, statuses, err := selectExtensionValidationTools("", "phpstan")
+		tools, statuses, err := selectExtensionValidationTools("", "php-cs-fixer", false)
 		require.NoError(t, err)
-		assert.NotContains(t, toolNamesForValidation(tools), "phpstan")
-		assert.Contains(t, statuses, verifier.ToolResult{Name: "phpstan", SkipReason: "excluded by --exclude"})
+		assert.NotContains(t, toolNamesForValidation(tools), "php-cs-fixer")
+		assert.Contains(t, statuses, verifier.ToolResult{Name: "php-cs-fixer", SkipReason: "excluded by --exclude"})
 	})
 
 	t.Run("exclude applies after only", func(t *testing.T) {
-		tools, statuses, err := selectExtensionValidationTools("phpstan,sw-cli", "sw-cli")
+		tools, statuses, err := selectExtensionValidationTools("phpstan,sw-cli", "sw-cli", false)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"phpstan"}, toolNamesForValidation(tools))
 		assert.Contains(t, statuses, verifier.ToolResult{Name: "builtin", SkipReason: "excluded by --exclude"})
 	})
 
 	t.Run("duplicate only values run once", func(t *testing.T) {
-		tools, _, err := selectExtensionValidationTools("sw-cli,sw-cli", "")
+		tools, _, err := selectExtensionValidationTools("sw-cli,sw-cli", "", false)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"builtin"}, toolNamesForValidation(tools))
 	})
 
 	t.Run("unsupported operation lists checkers", func(t *testing.T) {
-		_, _, err := selectExtensionValidationTools("prettier", "")
-		require.ErrorContains(t, err, `tool with name "prettier" not found, possible tools:`)
-		assert.NotContains(t, err.Error(), "prettier,")
+		_, _, err := selectExtensionValidationTools("rector", "", false)
+		require.ErrorContains(t, err, `tool with name "rector" not found, possible tools:`)
+		assert.NotContains(t, err.Error(), "rector,")
 		assert.Contains(t, err.Error(), "phpstan")
 	})
 
 	t.Run("typo lists only checkers", func(t *testing.T) {
-		_, _, err := selectExtensionValidationTools("phpsta", "")
+		_, _, err := selectExtensionValidationTools("phpsta", "", false)
 		require.ErrorContains(t, err, `tool with name "phpsta" not found, possible tools:`)
 		assert.Contains(t, err.Error(), "phpstan")
-		assert.NotContains(t, err.Error(), "prettier")
+		assert.Contains(t, err.Error(), "prettier")
 		assert.NotContains(t, err.Error(), "rector")
 	})
 
 	t.Run("empty selection fails", func(t *testing.T) {
-		_, _, err := selectExtensionValidationTools("sw-cli", "sw-cli")
+		_, _, err := selectExtensionValidationTools("sw-cli", "sw-cli", false)
 		require.EqualError(t, err, "no validation checks selected after applying --exclude")
 	})
 }

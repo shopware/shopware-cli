@@ -6,12 +6,12 @@ import (
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
-func selectExtensionValidationTools(only, exclude string) (
+func selectExtensionValidationTools(only, exclude string, excludeFormatters bool) (
 	verifier.ToolList[verifier.CheckTool],
 	[]verifier.ToolResult,
 	error,
 ) {
-	return verifier.SelectTools(verifier.GetToolsOf[verifier.CheckTool](), only, exclude, "validation checks")
+	return verifier.SelectTools(verifier.GetToolsOf[verifier.CheckTool](), only, exclude, "validation checks", excludeFormatters)
 }
 
 func selectExtensionFixTools(only, exclude string) (
@@ -19,7 +19,7 @@ func selectExtensionFixTools(only, exclude string) (
 	[]verifier.ToolResult,
 	error,
 ) {
-	return verifier.SelectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
+	return verifier.SelectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers", false)
 }
 
 func selectExtensionFormattingTools(only, exclude string) (
@@ -27,7 +27,7 @@ func selectExtensionFormattingTools(only, exclude string) (
 	[]verifier.ToolResult,
 	error,
 ) {
-	return verifier.SelectTools(verifier.GetToolsOf[verifier.FormatTool](), only, exclude, "formatters")
+	return verifier.SelectTools(verifier.GetToolsOf[verifier.FormatTool](), only, exclude, "formatters", false)
 }
 
 func completeToolNames[T verifier.Tool](_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {

@@ -205,10 +205,10 @@ func (tl ToolList[T]) Exclude(exclude string) (ToolList[T], error) {
 	return filtered, nil
 }
 
-// SelectTools applies the --only and --exclude filters and returns the
+// SelectTools applies the --only, --exclude, and --exclude-formatters filters and returns the
 // selected tools and results for skipped tools. kind names the tools in the
 // error returned when no tools remain, such as "formatters".
-func SelectTools[T Tool](all ToolList[T], only, exclude, kind string) (
+func SelectTools[T Tool](all ToolList[T], only, exclude, kind string, excludeFormatters bool) (
 	ToolList[T],
 	[]ToolResult,
 	error,
@@ -225,16 +225,30 @@ func SelectTools[T Tool](all ToolList[T], only, exclude, kind string) (
 		return nil, nil, fmt.Errorf("no %s selected after applying --exclude", kind)
 	}
 
-	return selected, skippedTools(all, requested, selected), nil
+	statuses := skippedTools(all, requested, selected, excludeFormatters)
+	var filtered ToolList[T]
+	for _, tool := range selected {
+		if _, formatter := any(tool).(FormatTool); !excludeFormatters || !formatter {
+			filtered = append(filtered, tool)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, nil, fmt.Errorf("cannot select %s: no tools remain after applying --exclude-formatters", kind)
+	}
+
+	return filtered, statuses, nil
 }
 
-func skippedTools[T Tool](all, requested, selected ToolList[T]) []ToolResult {
+func skippedTools[T Tool](all, requested, selected ToolList[T], excludeFormatters bool) []ToolResult {
 	results := make([]ToolResult, 0, len(all))
 	for _, tool := range all {
 		result := ToolResult{Name: tool.Name(), SkipReason: "not selected by --only"}
 		switch {
 		case slices.ContainsFunc(selected, func(candidate T) bool { return candidate.Name() == tool.Name() }):
-			continue
+			if _, formatter := any(tool).(FormatTool); !excludeFormatters || !formatter {
+				continue
+			}
+			result.SkipReason = "excluded by --exclude-formatters"
 		case slices.ContainsFunc(requested, func(candidate T) bool { return candidate.Name() == tool.Name() }):
 			result.SkipReason = "excluded by --exclude"
 		}
