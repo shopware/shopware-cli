@@ -1187,6 +1187,12 @@ func newString(value string) *yaml.Node {
 	node := &yaml.Node{}
 	node.SetString(value)
 
+	// yaml.v3 writes a literal block that loses leading whitespace or line breaks,
+	// or cannot be parsed at all, so quote those strings instead.
+	if node.Style == yaml.LiteralStyle && strings.ContainsAny(value[:1], " \t\n") {
+		node.Style = yaml.DoubleQuotedStyle
+	}
+
 	return node
 }
 

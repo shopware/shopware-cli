@@ -3,6 +3,7 @@ package symfony
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -183,6 +184,33 @@ func TestConvertErrors(t *testing.T) {
 			assert.ErrorContains(t, err, tt.expectedErr)
 		})
 	}
+}
+
+func TestConvertKeepsLeadingWhitespaceInStrings(t *testing.T) {
+	values := []string{
+		"\n                indented on the next line",
+		"\na",
+		"  leading spaces\nsecond line",
+		"\tleading tab\nsecond line",
+		"\n",
+		"line1\n    indented line2",
+	}
+
+	var xml strings.Builder
+	xml.WriteString(`<container><services><service id="Shop\A" class="Shop\A">`)
+	for _, value := range values {
+		xml.WriteString(`<argument type="string">` + strings.ReplaceAll(value, "\t", "&#9;") + `</argument>`)
+	}
+	xml.WriteString(`</service></services></container>`)
+
+	var parsed struct {
+		Services map[string]struct {
+			Arguments []string `yaml:"arguments"`
+		} `yaml:"services"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(convertString(t, xml.String())), &parsed))
+
+	assert.Equal(t, values, parsed.Services[`Shop\A`].Arguments)
 }
 
 func TestConvertInvalidXML(t *testing.T) {
