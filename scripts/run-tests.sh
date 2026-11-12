@@ -12,9 +12,54 @@ if [ $# -eq 0 ]; then
     set -- ./...
 fi
 
-# Warm the build cache while we still have network so the sandboxed run
-# does not need to fetch or compile anything from the module proxy.
-go test -run='^$' ./...
+COVER_FLAGS=()
+if [ -n "$COVERPROFILE" ]; then
+    COVER_FLAGS=("-coverprofile=$COVERPROFILE")
+fi
+
+# Warm only the requested packages, using the same build flags (race, tags,
+# coverage, etc.). Use a no-op runner instead of starting every test binary:
+# even with -run='^$', package initializers and TestMain would still execute.
+# Actual tests, benchmarks and fuzz targets only run inside the sandbox.
+WARM_ARGS=()
+EXPECT_VALUE=false
+for arg in "$@"; do
+    if "$EXPECT_VALUE"; then
+        WARM_ARGS+=("$arg")
+        EXPECT_VALUE=false
+        continue
+    fi
+    case "$arg" in
+        -args|--args|--) break ;;
+    esac
+    WARM_ARGS+=("$arg")
+    # Go accepts one or two dashes and a test. prefix for test flags.
+    # A boundary token consumed as a flag value must stay in the warm-up.
+    flag="${arg#-}"
+    flag="${flag#-}"
+    flag="${flag#test.}"
+    case "$arg" in
+        -*)
+            case "$flag" in
+                C|p|asmflags|compiler|buildmode|gcflags|gccgoflags|mod|modfile|overlay|\
+                installsuffix|ldflags|pgo|pkgdir|tags|toolexec|debug-actiongraph|\
+                debug-runtime-trace|debug-trace|covermode|coverpkg|coverprofile|\
+                o|exec|vet|bench|benchtime|blockprofile|blockprofilerate|count|cpu|\
+                cpuprofile|fuzz|list|memprofile|memprofilerate|mutexprofile|\
+                mutexprofilefraction|outputdir|parallel|run|skip|timeout|fuzztime|\
+                fuzzminimizetime|trace|shuffle)
+                    EXPECT_VALUE=true ;;
+            esac
+            ;;
+    esac
+done
+if WARM_OUTPUT=$(go test ${COVER_FLAGS+"${COVER_FLAGS[@]}"} ${WARM_ARGS+"${WARM_ARGS[@]}"} -exec=true -run='^$' -bench='^$' -fuzz='' 2>&1); then
+    : # Only the sandboxed run should emit test results.
+else
+    WARM_STATUS=$?
+    printf '%s\n' "$WARM_OUTPUT" >&2
+    exit "$WARM_STATUS"
+fi
 
 # If a coverage file is requested, install gocover-cobertura while we have network.
 if [ -n "$COVERPROFILE" ]; then
@@ -29,11 +74,6 @@ export GOPROXY=off
 # Tells tests that depend on real external downloads (e.g. fetching dart-sass)
 # to skip themselves instead of failing on DNS.
 export SHOPWARE_CLI_NO_NETWORK=1
-
-COVER_FLAGS=()
-if [ -n "$COVERPROFILE" ]; then
-    COVER_FLAGS=("-coverprofile=$COVERPROFILE")
-fi
 
 case "$(uname -s)" in
     Darwin)

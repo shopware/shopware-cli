@@ -22,6 +22,9 @@ func TestHostHooksAroundActivation(t *testing.T) {
 	if err != nil {
 		t.Skip("PHP required")
 	}
+	if _, err := exec.LookPath("timeout"); err != nil {
+		t.Skip("GNU timeout required")
+	}
 	for _, tc := range []struct {
 		name        string
 		failPre     bool
