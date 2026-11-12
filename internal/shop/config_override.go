@@ -55,6 +55,8 @@ func mergeLocalConfig(baseMap map[string]any, localFileName string) (map[string]
 	overridePaths := make(map[string]bool)
 	collectTaggedPaths(&localNode, "", resetPaths, overridePaths)
 
+	appended := takeAppendTags(&localNode)
+
 	var localMap map[string]any
 	if err := localNode.Decode(&localMap); err != nil {
 		return nil, fmt.Errorf("decoding local config %s: %w", localFileName, err)
@@ -65,6 +67,7 @@ func mergeLocalConfig(baseMap map[string]any, localFileName string) (map[string]
 	}
 
 	normalizeTimestamps(localMap)
+	restoreAppendTags(localMap, appended)
 
 	for p := range resetPaths {
 		deleteAtPath(baseMap, p)
@@ -166,6 +169,17 @@ func mergeMap(dst, src map[string]any, currentPath string, overridePaths map[str
 			continue
 		}
 
+		if srcAppend, ok := srcVal.(appendValue); ok {
+			switch d := dstVal.(type) {
+			case string:
+				dst[key] = "(" + d + ") AND (" + string(srcAppend) + ")"
+				continue
+			case appendValue:
+				dst[key] = appendValue("(" + string(d) + ") AND (" + string(srcAppend) + ")")
+				continue
+			}
+		}
+
 		dstMap, dstIsMap := dstVal.(map[string]any)
 		srcMap, srcIsMap := srcVal.(map[string]any)
 
@@ -194,8 +208,14 @@ func readConfigAsMap(fileName string) (map[string]any, error) {
 
 	substituted := system.ExpandEnv(string(fileHandle))
 
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(substituted), &node); err != nil {
+		return nil, fmt.Errorf("parsing config %s: %w", fileName, err)
+	}
+	appended := takeAppendTags(&node)
+
 	var m map[string]any
-	if err := yaml.Unmarshal([]byte(substituted), &m); err != nil {
+	if err := node.Decode(&m); err != nil {
 		return nil, fmt.Errorf("parsing config %s: %w", fileName, err)
 	}
 
@@ -204,6 +224,7 @@ func readConfigAsMap(fileName string) (map[string]any, error) {
 	}
 
 	normalizeTimestamps(m)
+	restoreAppendTags(m, appended)
 
 	return m, nil
 }
@@ -243,4 +264,64 @@ func normalizeTimestampValue(value any) any {
 
 func marshalMap(m map[string]any) ([]byte, error) {
 	return yaml.Marshal(m)
+}
+
+// appendValue is a dump.where condition tagged with !append. It keeps the tag
+// when a config is merged as a generic map and written back as YAML.
+type appendValue string
+
+func (v appendValue) MarshalYAML() (any, error) {
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: appendTag, Value: string(v)}, nil
+}
+
+// takeAppendTags clears the !append tags below dump.where, so the node decodes
+// into a generic map, and returns the tagged table names.
+func takeAppendTags(node *yaml.Node) map[string]bool {
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		node = node.Content[0]
+	}
+
+	tables := map[string]bool{}
+	dump := mappingValue(node, "dump")
+	where := mappingValue(dump, "where")
+	if where == nil {
+		return tables
+	}
+
+	for i := 0; i+1 < len(where.Content); i += 2 {
+		if where.Content[i+1].Tag == appendTag {
+			where.Content[i+1].Tag = "!!str"
+			tables[where.Content[i].Value] = true
+		}
+	}
+
+	return tables
+}
+
+func restoreAppendTags(m map[string]any, tables map[string]bool) {
+	if len(tables) == 0 {
+		return
+	}
+
+	dump, _ := m["dump"].(map[string]any)
+	where, _ := dump["where"].(map[string]any)
+	for table := range tables {
+		if condition, ok := where[table].(string); ok {
+			where[table] = appendValue(condition)
+		}
+	}
+}
+
+func mappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+
+	return nil
 }
