@@ -138,7 +138,8 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 			fmt.Println(tui.BoldText.Render("  Verifying the setup:"))
 			// setup just started the DNS and Traefik containers, so here anything
 			// short of fully ready (including "not started yet") is a real failure.
-			if ready, _ := runProxyVerification(ctx, baseDomain); !ready {
+			// With --skip-trust the CA is not trusted, so HTTPS is not checked.
+			if ready, _ := runProxyVerification(ctx, baseDomain, !skipTrust); !ready {
 				return ErrProxyVerificationFailed
 			}
 		} else {
