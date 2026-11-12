@@ -128,7 +128,12 @@ func explainDumpError(err error, skipCustomerData bool) error {
 	for _, table := range tables {
 		snippet.WriteString("    - " + strconv.Quote(table) + "\n")
 	}
-	return fmt.Errorf("%w\nreview these tables and add those whose data should be excluded to \"dump.skip_customer_data_tables\" in \".config/shopware-project.yml\":\n%s", err, snippet.String())
+	return fmt.Errorf(
+		"%w\nreview these tables and add those whose data should be excluded to "+
+			"\"dump.skip_customer_data_tables\" in \".config/shopware-project.yml\":\n%s",
+		err,
+		snippet.String(),
+	)
 }
 
 // configureDumper applies the prepared dump config and options.

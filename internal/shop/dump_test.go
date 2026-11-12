@@ -393,11 +393,41 @@ func TestDumpLockPrivilegeGuidance(t *testing.T) {
 		cause error
 		hint  bool
 	}{
-		{name: "MariaDB", cause: &mysql.MySQLError{Number: 1227, Message: "Access denied; you need (at least one of) the RELOAD privilege(s) for this operation"}, hint: true},
-		{name: "MySQL", cause: &mysql.MySQLError{Number: 1227, Message: "Access denied; you need (at least one of) the RELOAD or FLUSH_TABLES privilege(s) for this operation"}, hint: true},
-		{name: "FLUSH_TABLES", cause: &mysql.MySQLError{Number: 1227, Message: "Access denied; you need the FLUSH_TABLES privilege"}, hint: true},
-		{name: "other privilege", cause: &mysql.MySQLError{Number: 1227, Message: "Access denied; you need the SUPER privilege"}},
-		{name: "connection failure", cause: errors.New("connection refused")},
+		{
+			name: "MariaDB",
+			cause: &mysql.MySQLError{
+				Number:  1227,
+				Message: "Access denied; you need (at least one of) the RELOAD privilege(s) for this operation",
+			},
+			hint: true,
+		},
+		{
+			name: "MySQL",
+			cause: &mysql.MySQLError{
+				Number:  1227,
+				Message: "Access denied; you need (at least one of) the RELOAD or FLUSH_TABLES privilege(s) for this operation",
+			},
+			hint: true,
+		},
+		{
+			name: "FLUSH_TABLES",
+			cause: &mysql.MySQLError{
+				Number:  1227,
+				Message: "Access denied; you need the FLUSH_TABLES privilege",
+			},
+			hint: true,
+		},
+		{
+			name: "other privilege",
+			cause: &mysql.MySQLError{
+				Number:  1227,
+				Message: "Access denied; you need the SUPER privilege",
+			},
+		},
+		{
+			name:  "connection failure",
+			cause: errors.New("connection refused"),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			wrapped := fmt.Errorf("database operation: %w", tc.cause)

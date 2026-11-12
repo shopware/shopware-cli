@@ -44,38 +44,50 @@ func (d *Dumper) validateExcludedReferences(ctx context.Context, schemas map[str
 	if err := d.validateOverlappingDeleteActions(schemas); err != nil {
 		return err
 	}
+
 	if d.db == nil {
 		return nil
 	}
+
 	var conflicts []ExcludedReferenceConflict
+
 	for _, table := range slices.Sorted(maps.Keys(schemas)) {
-		if d.filterMap[table] == IgnoreMapPlacement || d.filterMap[table] == NoDataMapPlacement {
+		if d.filterMap[table] == IgnoreMapPlacement ||
+			d.filterMap[table] == NoDataMapPlacement {
 			continue
 		}
+
 		schema := schemas[table]
 		for _, fk := range schema.ForeignKeys {
 			parent := schemas[strings.ToLower(fk.ReferencedTable)]
+
 			if err := d.validateExcludedReference(ctx, schema, parent, fk); err != nil {
 				var conflict *ExcludedReferenceError
 				if !errors.As(err, &conflict) {
 					return err
 				}
+
 				conflicts = append(conflicts, conflict.Conflicts...)
 			}
 		}
 	}
+
 	if len(conflicts) > 0 {
 		slices.SortFunc(conflicts, func(a, b ExcludedReferenceConflict) int {
 			if c := strings.Compare(a.ChildTable, b.ChildTable); c != 0 {
 				return c
 			}
+
 			if c := strings.Compare(a.ParentTable, b.ParentTable); c != 0 {
 				return c
 			}
+
 			return strings.Compare(a.ForeignKey, b.ForeignKey)
 		})
+
 		return &ExcludedReferenceError{Conflicts: conflicts}
 	}
+
 	return nil
 }
 
