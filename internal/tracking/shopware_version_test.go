@@ -11,14 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func enableVersionLookup(t *testing.T) {
-	t.Helper()
-	t.Setenv("DO_NOT_TRACK", "")
-	require.NoError(t, os.Unsetenv("DO_NOT_TRACK"))
-}
-
 func TestShopwareVersionLookupDoesNotWait(t *testing.T) {
-	enableVersionLookup(t)
+	enableTracking(t)
 	synctest.Test(t, func(t *testing.T) {
 		release := make(chan struct{})
 		lookup := startShopwareVersion("project.console", func() string {
@@ -35,7 +29,7 @@ func TestShopwareVersionLookupDoesNotWait(t *testing.T) {
 }
 
 func TestShopwareVersionLookupSkipsIneligibleCommands(t *testing.T) {
-	enableVersionLookup(t)
+	enableTracking(t)
 	for _, name := range []string{"", "project", "project.create", "extension.build"} {
 		lookup := startShopwareVersion(name, func() string {
 			t.Error("unexpected lookup")
@@ -59,7 +53,7 @@ func TestShopwareVersionLookupRespectsDoNotTrack(t *testing.T) {
 }
 
 func TestShopwareVersionLookupRespectsUserConfig(t *testing.T) {
-	enableVersionLookup(t)
+	enableTracking(t)
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte("telemetry: false\n"), 0o600))
 	t.Setenv("SHOPWARE_CLI_CONFIG", configPath)
@@ -72,7 +66,7 @@ func TestShopwareVersionLookupRespectsUserConfig(t *testing.T) {
 }
 
 func TestProjectShopwareVersion(t *testing.T) {
-	enableVersionLookup(t)
+	enableTracking(t)
 	root := t.TempDir()
 	t.Setenv("PROJECT_ROOT", root)
 	for version, want := range map[string]string{
@@ -106,7 +100,7 @@ func TestReportableShopwareVersion(t *testing.T) {
 }
 
 func TestShopwareVersionLookupUnavailable(t *testing.T) {
-	enableVersionLookup(t)
+	enableTracking(t)
 	synctest.Test(t, func(t *testing.T) {
 		lookup := startShopwareVersion("project.console", func() string { return "" })
 		synctest.Wait()

@@ -15,7 +15,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/cliversion"
+	"github.com/shopware/shopware-cli/internal/userconfig"
 )
+
+// enableTracking isolates user preferences and restores the environment after the test.
+func enableTracking(t *testing.T) {
+	t.Helper()
+	t.Setenv(userconfig.PathEnv, filepath.Join(t.TempDir(), "config.yaml"))
+	t.Setenv("DO_NOT_TRACK", "")
+	require.NoError(t, os.Unsetenv("DO_NOT_TRACK"))
+}
 
 // resetInit resets the lazy initialization so each test starts fresh.
 func resetInit(t *testing.T) {
@@ -26,6 +35,7 @@ func resetInit(t *testing.T) {
 }
 
 func TestTrackSendsUDPPayload(t *testing.T) {
+	enableTracking(t)
 	resetInit(t)
 	clearCIEnvVars(t)
 
@@ -69,9 +79,9 @@ func TestTrackRespectsDoNotTrack(t *testing.T) {
 }
 
 func TestTrackRespectsUserConfig(t *testing.T) {
+	enableTracking(t)
 	resetInit(t)
 	clearCIEnvVars(t)
-	require.NoError(t, os.Unsetenv("DO_NOT_TRACK"))
 
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte("telemetry: false\n"), 0o600))
