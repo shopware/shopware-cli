@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -86,11 +87,7 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 	defer func() { _ = w.Close() }()
 
 	if err := dumper.Dump(ctx, w); err != nil {
-		if strings.Contains(err.Error(), "the RELOAD or FLUSH_TABLES privilege") {
-			return fmt.Errorf("%s, you maybe want to disable locking with --skip-lock-tables", err.Error())
-		}
-
-		return err
+		return explainDumpError(err, opts.SkipCustomerData || cfg.SkipCustomerData)
 	}
 
 	// Closing flushes the compressor into the file; report flush errors
@@ -102,6 +99,36 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 	logging.FromContext(ctx).Infof("Successfully created the dump %s", output)
 
 	return nil
+}
+
+// explainDumpError adds actionable guidance while preserving the database error.
+func explainDumpError(err error, skipCustomerData bool) error {
+	var databaseError *mysql.MySQLError
+	if errors.As(err, &databaseError) && databaseError.Number == 1227 {
+		privileges := strings.ToUpper(databaseError.Message)
+		if strings.Contains(privileges, "RELOAD") || strings.Contains(privileges, "FLUSH_TABLES") {
+			return fmt.Errorf("cannot lock tables for dump: %w; use \"--skip-lock-tables\" to dump without table locks", err)
+		}
+	}
+
+	var references *mysqldump.ExcludedReferenceError
+	if !skipCustomerData || !errors.As(err, &references) {
+		return err
+	}
+
+	tables := make([]string, 0, len(references.Conflicts))
+	for _, conflict := range references.Conflicts {
+		tables = append(tables, conflict.ChildTable)
+	}
+	slices.Sort(tables)
+	tables = slices.Compact(tables)
+
+	var snippet strings.Builder
+	snippet.WriteString("dump:\n  skip_customer_data_tables:\n")
+	for _, table := range tables {
+		snippet.WriteString("    - " + strconv.Quote(table) + "\n")
+	}
+	return fmt.Errorf("%w\nreview these tables and add those whose data should be excluded to \"dump.skip_customer_data_tables\" in \".config/shopware-project.yml\":\n%s", err, snippet.String())
 }
 
 // configureDumper applies the prepared dump config and options.

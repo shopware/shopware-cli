@@ -35,6 +35,10 @@ func (c *ConfigDump) EnableSkipCustomerData() {
 		"sales_channel_tracking_customer",
 		"sales_channel_tracking_order",
 		"state_machine_history",
+		"swag_paypal_order_transactions",
+		"swag_paypal_transaction_report",
+		"swag_paypal_vault_token",
+		"swag_paypal_vault_token_mapping",
 	})
 
 	c.forceRewrite("promotion", "orders_per_customer_count", "NULL")
