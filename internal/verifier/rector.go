@@ -115,9 +115,6 @@ func (r Rector) fixSources(
 	autoloadFile string,
 	dryRun bool,
 ) ToolSummary {
-	changed := make(map[string]struct{})
-	reportsComplete := true
-
 	for _, sourceDirectory := range config.SourceDirectories {
 		if ctx.Err() != nil {
 			return ToolSummary{}
@@ -129,19 +126,15 @@ func (r Rector) fixSources(
 			}
 			continue
 		}
-
-		if report.Totals == nil {
-			reportsComplete = false
-		}
 		// A write report lists applied edits. Remaining source errors have
 		// already been reported by process and are the only normal findings.
 		for _, file := range report.FileDiffs {
-			changed[filepath.Clean(file.File)] = struct{}{}
+			execution.AddChangedFiles(file.File)
 		}
 	}
 
-	if !dryRun && reportsComplete {
-		return ToolSummary{Note: fileChangeNote(len(changed), "fixed")}
+	if !dryRun {
+		return ToolSummary{ChangeAction: ChangeActionFixed}
 	}
 
 	return ToolSummary{}

@@ -35,7 +35,13 @@ type ToolResult struct {
 	SkipReason  string
 	HasFindings bool
 	Note        string
-	Errors      []ToolError
+	// ChangeAction describes applied changes, e.g. "fixed" or "formatted".
+	// Renderers default to "changed"; a nonempty action also requests a zero count.
+	ChangeAction string
+	// ChangedFiles lists confirmed applied changes, independently of findings.
+	// XML conversions identify converted sources rather than generated targets.
+	ChangedFiles []string
+	Errors       []ToolError
 }
 
 // ToolError describes a failure and, when available, its subprocess context.

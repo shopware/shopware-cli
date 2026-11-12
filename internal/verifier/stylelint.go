@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
+	"sync/atomic"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -30,13 +30,6 @@ type stylelintMessage struct {
 	Rule     string `json:"rule"`
 	Severity string `json:"severity"`
 	Text     string `json:"text"`
-}
-
-// stylelintReport retains valid findings alongside malformed report errors.
-type stylelintReport struct {
-	findings     []validation.CheckResult
-	changedFiles []string
-	errors       []error
 }
 
 type StyleLint struct{}
@@ -63,43 +56,26 @@ func (s StyleLint) run(
 	fix bool,
 ) ToolSummary {
 	paths := append(append([]string{}, config.StorefrontDirectories...), config.AdminDirectories...)
-	var summaryMu sync.Mutex
-	changedFiles := make(map[string]struct{})
-	ran, failed := false, false
-
+	var ran atomic.Bool
 	runDirectories(ctx, paths, func(directory string) {
 		hasSCSS, err := hasSCSSFiles(ctx, directory)
 		if err != nil {
 			execution.Fail(&ToolError{Err: fmt.Errorf("cannot find SCSS files: %w", err)})
-			summaryMu.Lock()
-			failed = true
-			summaryMu.Unlock()
 			return
 		}
 		if !hasSCSS {
 			return
 		}
-
-		report := s.runDirectory(ctx, config, execution, directory, fix)
-		summaryMu.Lock()
-		defer summaryMu.Unlock()
-		ran = true
-		failed = failed || len(report.errors) > 0
-		if fix {
-			for _, file := range report.changedFiles {
-				changedFiles[file] = struct{}{}
-			}
-		}
+		ran.Store(true)
+		s.runDirectory(ctx, config, execution, directory, fix)
 	})
-
-	if !ran && !failed {
+	if !ran.Load() {
 		return ToolSummary{SkipReason: "no SCSS source files"}
 	}
-	if !fix || failed {
-		return ToolSummary{}
+	if fix {
+		return ToolSummary{ChangeAction: ChangeActionFixed}
 	}
-
-	return ToolSummary{Note: fileChangeNote(len(changedFiles), "fixed")}
+	return ToolSummary{}
 }
 
 func (s StyleLint) runDirectory(
@@ -108,7 +84,7 @@ func (s StyleLint) runDirectory(
 	execution *ToolExecution,
 	directory string,
 	fix bool,
-) stylelintReport {
+) {
 	args := []string{
 		path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
 		"--config", path.Join(
@@ -133,16 +109,17 @@ func (s StyleLint) runDirectory(
 
 	report := parseStylelintReport(subprocess, config.RootDir)
 	execution.AddFindings(report.findings...)
+	if fix {
+		execution.AddChangedFiles(report.changedFiles...)
+	}
 	for _, err := range report.errors {
 		execution.Fail(subprocess.ToolError(err))
 	}
-
-	return report
 }
 
-func parseStylelintReport(subprocess SubprocessResult, root string) stylelintReport {
+func parseStylelintReport(subprocess SubprocessResult, root string) parsedToolReport {
 	if !expectedExit(subprocess.Err, 2) {
-		return stylelintReport{errors: []error{
+		return parsedToolReport{errors: []error{
 			fmt.Errorf("cannot run stylelint in %s: %w", subprocess.Dir, subprocess.Err),
 		}}
 	}
@@ -153,17 +130,17 @@ func parseStylelintReport(subprocess SubprocessResult, root string) stylelintRep
 	}
 	var parsed stylelintOutput
 	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
-		return stylelintReport{errors: []error{
+		return parsedToolReport{errors: []error{
 			fmt.Errorf("cannot parse stylelint output in %s: %w", subprocess.Dir, err),
 		}}
 	}
 	if parsed == nil {
-		return stylelintReport{errors: []error{
+		return parsedToolReport{errors: []error{
 			errors.New("cannot parse stylelint output: expected a report array"),
 		}}
 	}
 
-	var report stylelintReport
+	var report parsedToolReport
 	for _, file := range parsed {
 		if file.Source == "" || file.Warnings == nil {
 			report.errors = append(report.errors,

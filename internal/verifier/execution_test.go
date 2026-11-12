@@ -24,7 +24,7 @@ func TestToolExecutionCollectsConcurrentFailures(t *testing.T) {
 		})
 	}
 	group.Wait()
-	require.Len(t, execution.snapshot().Errors, 3)
+	require.Len(t, execution.finalize(nil).Errors, 3)
 }
 
 func TestToolExecutionRunDeliversDiagnosticsWithoutReportingFailure(t *testing.T) {
@@ -37,14 +37,14 @@ func TestToolExecutionRunDeliversDiagnosticsWithoutReportingFailure(t *testing.T
 	subprocess := execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/bin/sh", "-c", "printf output; exit 1"))
 	assert.True(t, delivered)
 	require.Error(t, subprocess.Err)
-	assert.Empty(t, execution.snapshot().Errors)
 	cause := errors.New("cannot parse output")
 	execution.Fail(subprocess.ToolError(cause))
-	assert.ErrorIs(t, execution.snapshot().Errors[0], cause)
 	execution.onSubprocess = nil
 	subprocess = execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/missing-executable"))
 	require.Error(t, subprocess.Err)
-	assert.Len(t, execution.snapshot().Errors, 1, "Run must leave failure classification to the tool")
+	result := execution.finalize(nil)
+	require.Len(t, result.Errors, 1, "Run must leave failure classification to the tool")
+	assert.ErrorIs(t, result.Errors[0], cause)
 }
 
 func TestToolExecutionRunTelemetry(t *testing.T) {
@@ -109,9 +109,11 @@ func TestToolExecutionRunTelemetry(t *testing.T) {
 func runCheckTool(t *testing.T, tool CheckTool, config ToolConfig) validation.ToolReport {
 	t.Helper()
 	t.Setenv("DO_NOT_TRACK", "1")
-	return RunTools(t.Context(), ToolList[CheckTool]{tool}, nil, config, nil, func(tool CheckTool, execution *ToolExecution) ToolSummary {
+	result := RunTools(t.Context(), ToolList[CheckTool]{tool}, nil, config, nil, func(tool CheckTool, execution *ToolExecution) ToolSummary {
 		return tool.Check(t.Context(), config, execution)
 	})[0]
+	assert.Empty(t, result.ChangedFiles)
+	return result
 }
 
 func runFixTool(t *testing.T, tool FixTool, config ToolConfig) validation.ToolReport {
@@ -127,17 +129,25 @@ func runFixToolWithDryRun(
 ) validation.ToolReport {
 	t.Helper()
 	t.Setenv("DO_NOT_TRACK", "1")
-	return RunTools(t.Context(), ToolList[FixTool]{tool}, nil, config, nil, func(tool FixTool, execution *ToolExecution) ToolSummary {
+	result := RunTools(t.Context(), ToolList[FixTool]{tool}, nil, config, nil, func(tool FixTool, execution *ToolExecution) ToolSummary {
 		return tool.Fix(t.Context(), config, execution, dryRun)
 	})[0]
+	if dryRun {
+		assert.Empty(t, result.ChangedFiles)
+	}
+	return result
 }
 
 func runFormatTool(t *testing.T, tool FormatTool, config ToolConfig, dryRun bool) validation.ToolReport {
 	t.Helper()
 	t.Setenv("DO_NOT_TRACK", "1")
-	return RunTools(t.Context(), ToolList[FormatTool]{tool}, nil, config, nil, func(tool FormatTool, execution *ToolExecution) ToolSummary {
+	result := RunTools(t.Context(), ToolList[FormatTool]{tool}, nil, config, nil, func(tool FormatTool, execution *ToolExecution) ToolSummary {
 		return tool.Format(t.Context(), config, execution, dryRun)
 	})[0]
+	if dryRun {
+		assert.Empty(t, result.ChangedFiles)
+	}
+	return result
 }
 
 func TestToolExecutionRunTelemetryWithoutChildCPUTime(t *testing.T) {
@@ -154,4 +164,27 @@ func TestToolExecutionRunTelemetryWithoutChildCPUTime(t *testing.T) {
 
 	assert.Equal(t, "true", tags[tracking.TagStarted])
 	assert.NotContains(t, tags, tracking.TagCPUMS)
+}
+
+func TestToolExecutionRejectsUseAfterFinalization(t *testing.T) {
+	for name, operation := range map[string]func(*ToolExecution){
+		"findings":       func(e *ToolExecution) { e.AddFindings(validation.CheckResult{}) },
+		"empty findings": func(e *ToolExecution) { e.AddFindings() },
+		"changes":        func(e *ToolExecution) { e.AddChangedFiles("file.php") },
+		"empty changes":  func(e *ToolExecution) { e.AddChangedFiles() },
+		"failure":        func(e *ToolExecution) { e.Fail(&ToolError{Err: errors.New("failure")}) },
+
+		"finalization": func(e *ToolExecution) { e.finalize(nil) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			delivered := false
+			execution := NewToolExecution(func([]validation.CheckResult) bool {
+				delivered = true
+				return true
+			})
+			execution.finalize(nil)
+			assert.Panics(t, func() { operation(execution) })
+			assert.False(t, delivered)
+		})
+	}
 }

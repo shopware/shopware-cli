@@ -24,8 +24,6 @@ func (SymfonyXMLConverter) Name() string {
 
 func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	found := false
-	changed := 0
-	failed := false
 	pendingFiles := make(map[string]struct{})
 	conversions := []struct {
 		fileName string
@@ -45,7 +43,6 @@ func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig, executi
 
 			if _, err := os.Stat(xmlPath); err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
-					failed = true
 					execution.Fail(&ToolError{Err: fmt.Errorf("cannot read XML configuration: %w", err)})
 				}
 				continue
@@ -62,14 +59,15 @@ func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig, executi
 				if finding, ok := symfonyXMLFinding(err, config.RootDir); ok {
 					execution.AddFindings(finding)
 				} else {
-					failed = true
 					execution.Fail(&ToolError{Err: fmt.Errorf("cannot convert XML configuration: %w", err)})
 				}
 				continue
 			}
 
 			if !dryRun {
-				changed += len(converted)
+				for source := range converted {
+					execution.AddChangedFiles(source)
+				}
 				continue
 			}
 
@@ -89,20 +87,14 @@ func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig, executi
 		}
 	}
 
-	if !found && !failed {
+	if !found {
 		return ToolSummary{SkipReason: "no XML configuration files"}
 	}
 	if dryRun {
 		return ToolSummary{}
 	}
 
-	// I/O failures can leave partial writes. Avoid claiming no changes when
-	// conversion did not return a completed result.
-	if failed && changed == 0 {
-		return ToolSummary{}
-	}
-
-	return ToolSummary{Note: fileChangeNote(changed, "converted")}
+	return ToolSummary{ChangeAction: ChangeActionConverted}
 }
 
 // symfonyXMLFinding maps source blockers to findings. Filesystem failures remain
