@@ -546,9 +546,12 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 		// deregister and no reason to stop its environment. Still regenerate
 		// compose.yaml in plain fixed-port mode to heal a proxy compose file
 		// left by a partially-failed `up`, then report honestly instead of
-		// claiming a deregistration.
-		if err := e.writePlainCompose(); err != nil {
-			return err
+		// claiming a deregistration. `up` refuses a non-Docker project, so
+		// there its compose.yaml is the user's own and stays untouched.
+		if _, ok := e.executor.(*executor.DockerExecutor); ok {
+			if err := e.writePlainCompose(); err != nil {
+				return err
+			}
 		}
 		fmt.Println(tui.DimText.Render("  ") + tui.BoldText.Render(e.hostname) + tui.DimText.Render(" is not registered with the shared proxy — nothing to deregister."))
 		fmt.Println()

@@ -1,9 +1,15 @@
 package project
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 func TestResolveLocalDomainChoice(t *testing.T) {
@@ -39,4 +45,29 @@ func TestShopNotInstalled(t *testing.T) {
 	assert.True(t, shopNotInstalled("Unknown database 'shopware'"))
 	assert.False(t, shopNotInstalled("some unrelated failure"))
 	assert.False(t, shopNotInstalled(""))
+}
+
+func TestProxyDownKeepsComposeOfNonDockerProject(t *testing.T) {
+	// Keep the proxy registry out of the real user config dir.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	projectRoot := t.TempDir()
+	composePath := filepath.Join(projectRoot, "compose.yaml")
+	require.NoError(t, os.WriteFile(composePath, []byte("services: {}\n"), 0o644))
+
+	cfg := &shop.Config{}
+	env := &proxyEnvironment{
+		projectRoot:   projectRoot,
+		canonicalRoot: projectRoot,
+		cfg:           cfg,
+		hostname:      "my-shop.shopware.local",
+		executor:      executor.NewLocalWithConfig(projectRoot, &shop.EnvironmentConfig{}, cfg),
+	}
+
+	require.NoError(t, env.down(t.Context(), false))
+
+	content, err := os.ReadFile(composePath)
+	require.NoError(t, err)
+	assert.Equal(t, "services: {}\n", string(content))
 }
