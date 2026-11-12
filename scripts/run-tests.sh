@@ -22,13 +22,44 @@ fi
 # even with -run='^$', package initializers and TestMain would still execute.
 # Actual tests, benchmarks and fuzz targets only run inside the sandbox.
 WARM_ARGS=()
+EXPECT_VALUE=false
 for arg in "$@"; do
+    if "$EXPECT_VALUE"; then
+        WARM_ARGS+=("$arg")
+        EXPECT_VALUE=false
+        continue
+    fi
     case "$arg" in
-        -args|--) break ;;
+        -args|--args|--) break ;;
     esac
     WARM_ARGS+=("$arg")
+    # Go accepts one or two dashes and a test. prefix for test flags.
+    # A boundary token consumed as a flag value must stay in the warm-up.
+    flag="${arg#-}"
+    flag="${flag#-}"
+    flag="${flag#test.}"
+    case "$arg" in
+        -*)
+            case "$flag" in
+                C|p|asmflags|compiler|buildmode|gcflags|gccgoflags|mod|modfile|overlay|\
+                installsuffix|ldflags|pgo|pkgdir|tags|toolexec|debug-actiongraph|\
+                debug-runtime-trace|debug-trace|covermode|coverpkg|coverprofile|\
+                o|exec|vet|bench|benchtime|blockprofile|blockprofilerate|count|cpu|\
+                cpuprofile|fuzz|list|memprofile|memprofilerate|mutexprofile|\
+                mutexprofilefraction|outputdir|parallel|run|skip|timeout|fuzztime|\
+                fuzzminimizetime|trace|shuffle)
+                    EXPECT_VALUE=true ;;
+            esac
+            ;;
+    esac
 done
-go test ${COVER_FLAGS+"${COVER_FLAGS[@]}"} ${WARM_ARGS+"${WARM_ARGS[@]}"} -exec=true -run='^$' -bench='^$' -fuzz=''
+if WARM_OUTPUT=$(go test ${COVER_FLAGS+"${COVER_FLAGS[@]}"} ${WARM_ARGS+"${WARM_ARGS[@]}"} -exec=true -run='^$' -bench='^$' -fuzz='' 2>&1); then
+    : # Only the sandboxed run should emit test results.
+else
+    WARM_STATUS=$?
+    printf '%s\n' "$WARM_OUTPUT" >&2
+    exit "$WARM_STATUS"
+fi
 
 # If a coverage file is requested, install gocover-cobertura while we have network.
 if [ -n "$COVERPROFILE" ]; then
