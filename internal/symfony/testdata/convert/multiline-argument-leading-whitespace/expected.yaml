@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+services:
+    Shop\A:
+        arguments:
+            - "\n                indented on the next line"
+            - "\na"
+            - "  leading spaces\nsecond line"
+            - "\tleading tab\nsecond line"
+            - "\n"
+            - |-
+              line1
+                  indented line2

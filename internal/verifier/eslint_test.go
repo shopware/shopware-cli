@@ -19,34 +19,35 @@ printf '%s' "$TOOL_STDERR" >&2
 exit "$TOOL_EXIT"`)
 
 	for _, scenario := range []struct {
-		name, output, stderr, code, note string
-		failed                           bool
-		findings                         []validation.CheckResult
+		name, output, stderr, code string
+		changed                    int
+		failed                     bool
+		findings                   []validation.CheckResult
 	}{
 		{
-			name:   "clean",
-			output: `[{"filePath":"file.js","messages":[]}]`,
-			code:   "0",
-			note:   "no changes",
+			name:    "clean",
+			output:  `[{"filePath":"file.js","messages":[]}]`,
+			code:    "0",
+			changed: 0,
 		},
 		{
-			name:   "fixed",
-			output: `[{"filePath":"file.js","messages":[],"output":"const value = 1;"}]`,
-			code:   "0",
-			note:   "1 file fixed",
+			name:    "fixed",
+			output:  `[{"filePath":"file.js","messages":[],"output":"const value = 1;"}]`,
+			code:    "0",
+			changed: 1,
 		},
 		{
-			name:   "fixed empty output",
-			output: `[{"filePath":"file.js","messages":[],"output":""}]`,
-			code:   "0",
-			note:   "1 file fixed",
+			name:    "fixed empty output",
+			output:  `[{"filePath":"file.js","messages":[],"output":""}]`,
+			code:    "0",
+			changed: 1,
 		},
 		{
-			name:   "remaining error",
-			output: `[{"filePath":"file.js","messages":[{"ruleId":"no-undef","severity":2,"message":"Unknown variable","line":2}],"output":"fixed code"}]`,
-			stderr: "warning on stderr",
-			code:   "1",
-			note:   "1 file fixed",
+			name:    "remaining error",
+			output:  `[{"filePath":"file.js","messages":[{"ruleId":"no-undef","severity":2,"message":"Unknown variable","line":2}],"output":"fixed code"}]`,
+			stderr:  "warning on stderr",
+			code:    "1",
+			changed: 1,
 			findings: []validation.CheckResult{{
 				Path:       "administration/file.js",
 				Line:       2,
@@ -56,10 +57,10 @@ exit "$TOOL_EXIT"`)
 			}},
 		},
 		{
-			name:   "remaining warning",
-			output: `[{"filePath":"file.js","messages":[{"ruleId":"no-unused-vars","severity":1,"message":"Unused variable","line":1}]}]`,
-			code:   "0",
-			note:   "no changes",
+			name:    "remaining warning",
+			output:  `[{"filePath":"file.js","messages":[{"ruleId":"no-unused-vars","severity":1,"message":"Unused variable","line":1}]}]`,
+			code:    "0",
+			changed: 0,
 			findings: []validation.CheckResult{{
 				Path:       "administration/file.js",
 				Line:       1,
@@ -69,10 +70,10 @@ exit "$TOOL_EXIT"`)
 			}},
 		},
 		{
-			name:   "syntax error",
-			output: `[{"filePath":"file.js","messages":[{"ruleId":null,"severity":2,"fatal":true,"message":"Parsing error","line":3}]}]`,
-			code:   "1",
-			note:   "no changes",
+			name:    "syntax error",
+			output:  `[{"filePath":"file.js","messages":[{"ruleId":null,"severity":2,"fatal":true,"message":"Parsing error","line":3}]}]`,
+			code:    "1",
+			changed: 0,
 			findings: []validation.CheckResult{{
 				Path:       "administration/file.js",
 				Line:       3,
@@ -183,17 +184,18 @@ exit "$TOOL_EXIT"`)
 				t.Setenv("TOOL_STDOUT", output)
 				config := ToolConfig{RootDir: root, AdminDirectories: []string{directory}}
 				var result validation.ToolReport
-				note := ""
+				changed := 0
 				if fix {
 					result = runFixTool(t, Eslint{}, config)
-					note = scenario.note
+					changed = scenario.changed
 				} else {
 					result = runCheckTool(t, Eslint{}, config)
 				}
 				assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 				assert.ElementsMatch(t, scenario.findings, result.Findings)
 				assert.Equal(t, len(scenario.findings) > 0, result.HasFindings)
-				assert.Equal(t, note, result.Note)
+				assert.Empty(t, result.Note)
+				assert.Len(t, result.ChangedFiles, changed)
 				if scenario.failed {
 					require.Len(t, result.Errors, 1)
 					assert.Equal(t, output, result.Errors[0].Stdout)
@@ -289,7 +291,7 @@ func TestESLintFixCountsOverlappingDirectoriesOnce(t *testing.T) {
 	fakeTool(t, "node", `printf '[{"filePath":"%s/file.js","messages":[],"output":"changed"}]' "$PWD"`)
 	root := t.TempDir()
 	result := runFixTool(t, Eslint{}, ToolConfig{RootDir: root, AdminDirectories: []string{root, root}})
-	assert.Equal(t, "1 file fixed", result.Note)
+	assert.Len(t, result.ChangedFiles, 1)
 	assert.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
 }
@@ -320,7 +322,8 @@ fi`)
 	assert.Empty(t, first.Errors)
 	assert.Empty(t, first.Findings)
 	assert.False(t, first.HasFindings)
-	assert.Equal(t, "1 file fixed", first.Note)
+	assert.Len(t, first.ChangedFiles, 1)
+	assert.Equal(t, []string{"file.js"}, first.ChangedFiles)
 	contents, err := os.ReadFile(file)
 	require.NoError(t, err)
 	assert.Equal(t, "const value = 1;\n", string(contents))
@@ -328,7 +331,8 @@ fi`)
 	second := runFixTool(t, Eslint{}, config)
 	assert.Empty(t, second.Errors)
 	assert.Empty(t, second.Findings)
-	assert.Equal(t, "no changes", second.Note)
+	assert.Empty(t, second.Note)
+	assert.Empty(t, second.ChangedFiles)
 }
 
 func TestESLintFixCombinesAdministrationAndStorefrontChanges(t *testing.T) {
@@ -342,7 +346,7 @@ func TestESLintFixCombinesAdministrationAndStorefrontChanges(t *testing.T) {
 	})
 	assert.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "2 files fixed", result.Note)
+	assert.Len(t, result.ChangedFiles, 2)
 }
 
 func TestESLintFixRetainsPartialFindings(t *testing.T) {
@@ -364,7 +368,8 @@ esac
 	assert.Equal(t, "broken", result.Errors[0].Stdout)
 	assert.Equal(t, "diagnostic", result.Errors[0].Stderr)
 	assert.Equal(t, bad, result.Errors[0].Dir)
-	assert.Empty(t, result.Note)
+	assert.Len(t, result.ChangedFiles, 1)
+	assert.Equal(t, []string{"good/file.js"}, result.ChangedFiles)
 }
 
 func TestESLintFixRetainsValidDiagnosticsInMalformedReport(t *testing.T) {
@@ -390,7 +395,8 @@ func TestESLintFixRetainsValidFilesInMalformedReport(t *testing.T) {
 		Severity: validation.SeverityError, Identifier: "eslint/no-undef",
 	}}, result.Findings)
 	assert.True(t, result.HasFindings)
-	assert.Empty(t, result.Note)
+	assert.Len(t, result.ChangedFiles, 1)
+	assert.Equal(t, []string{"file.js"}, result.ChangedFiles)
 }
 
 func TestESLintMissingExecutableReportsFailure(t *testing.T) {

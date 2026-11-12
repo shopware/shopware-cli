@@ -12,6 +12,8 @@ import (
 // configuration. Shared replaces the entire common block when set; shared lists
 // are never merged with the common block.
 type EnvironmentSSHHostConfig struct {
+	// Replaces the entire common hooks block when supplied.
+	Hooks        *EnvironmentSSHDeploymentHooks `yaml:"hooks,omitempty"`
 	Cachetool    *EnvironmentSSHCachetoolConfig `yaml:"cachetool,omitempty"`
 	Host         string                         `yaml:"host" jsonschema:"required"`
 	User         string                         `yaml:"user,omitempty"`
@@ -129,6 +131,9 @@ func (c *EnvironmentSSHConfig) ResolveHosts() ([]SSHHost, string, error) {
 		if override.Cachetool != nil {
 			member.Cachetool = override.Cachetool
 		}
+		if override.Hooks != nil {
+			member.Hooks = override.Hooks
+		}
 		if override.Shared != nil {
 			member.Shared = override.Shared
 		}
@@ -152,6 +157,9 @@ func (c *EnvironmentSSHConfig) ResolveHosts() ([]SSHHost, string, error) {
 
 // validateSSHMember requires a host and directory and validates the resolved shared paths.
 func validateSSHMember(c *EnvironmentSSHConfig) error {
+	if c.Hooks != nil && c.Hooks.TimeoutSeconds < 0 {
+		return errors.New("cannot configure ssh.hooks.timeout_seconds: must be zero or positive")
+	}
 	if c.Host == "" {
 		return errors.New("ssh environment requires ssh.host")
 	}

@@ -63,20 +63,23 @@ type FormatTool interface {
 
 type FixTool interface {
     Tool
-    Fix(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
+    Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
 }
 
 type ToolSummary struct {
-    Note       string
-    SkipReason string
+    Note         string
+    SkipReason   string
+    ChangeAction string // optional: fixed, formatted, converted
 }
 
 type ToolResult struct {
-    Name        string
-    SkipReason  string
-    HasFindings bool
-    Note        string
-    Errors      []ToolError
+    Name         string
+    SkipReason   string
+    HasFindings  bool
+    Note         string
+    ChangedFiles []string
+    ChangeAction string
+    Errors       []ToolError
 }
 
 type ToolError struct {
@@ -102,14 +105,14 @@ Derive the displayed outcome in this order:
 
 A completed or failed outcome indicates that the tool ran, without implying that
 it spawned a subprocess. Skipped tools have `HasFindings == false`, publish no
-findings, and have no execution errors.
+findings or changed files, and have no execution errors.
 
 `HasFindings` indicates whether at least one reported finding remains after
 ignore rules. It can be true for completed or failed tools and stays false if
 all findings are ignored.
 
-`Note` holds optional context, such as the Shopware version used or a summary of
-changes.
+`Note` holds optional context, such as the Shopware version used. Changed paths
+and their action remain separate from this text; renderers derive change counts.
 
 `Errors` means the tool could not complete reliably, including preparation,
 process execution, output parsing, or cleanup failures. Source problems and
@@ -130,7 +133,7 @@ reports no error.
 
 | Component        | Responsibility                                                                                                                                                                                                                |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Execution helper | Execute subprocesses, capture their output, record subprocess telemetry, track whether findings survived filtering, deliver findings and optional subprocess diagnostics through callbacks, and collect all reported failures |
+| Execution helper | Execute subprocesses, capture their output, record subprocess telemetry, track whether findings survived filtering, deliver findings and optional subprocess diagnostics through callbacks, and collect applied changes and all reported failures |
 | Tool             | Configure subprocesses, interpret process errors and exit codes, parse output, and report findings or failures                                                                                                                |
 | Tool runner      | Create the helper, manage tool selection and lifecycle, normalize and filter findings, collect them by tool, and coordinate optional live findings and verbose subprocess output                                              |
 | Renderer         | Present published findings and final results as interactive, plain-text, or structured output                                                                                                                                 |
@@ -209,12 +212,13 @@ all three findings.
 
 ## Execution helper
 
-`ToolExecution` provides three operations for tools, all safe for concurrent
+`ToolExecution` provides four operations for tools, all safe for concurrent
 use:
 
 ```go
-func (e *ToolExecution) Run(cmd *exec.Cmd) SubprocessResult
+func (e *ToolExecution) Run(operation string, cmd *exec.Cmd) SubprocessResult
 func (e *ToolExecution) AddFindings(findings ...validation.CheckResult)
+func (e *ToolExecution) AddChangedFiles(paths ...string)
 func (e *ToolExecution) Fail(err *ToolError)
 ```
 
@@ -288,16 +292,32 @@ Synchronous callbacks provide backpressure without a channel or background
 consumer; once all tools finish, all findings have been collected. Final
 renderers need no live subscription.
 
-Tools return `ToolSummary` containing optional `Note` and `SkipReason` metadata.
-After the tool and its deferred cleanup finish, the runner uses the private
-`execution.snapshot()` method to read `HasFindings` and all reported failures in
-`ToolResult.Errors`, then adds the tool name and returned metadata. A skip
-reason is applied only when there are no retained findings or failures.
+Tools return `ToolSummary` containing optional `Note`, `SkipReason`, and
+`ChangeAction` metadata. After the tool and its deferred cleanup finish, the
+runner uses the private
+`execution.finalize()` method to read `HasFindings`, `ChangedFiles`, and all
+reported failures in `ToolResult.Errors`, then adds the tool name and returned
+metadata. A skip reason is applied only when there are no retained findings,
+changes, or failures. Reporting after finalization or finalizing twice panics
+as a programmer error.
+
+### Applied changes
+
+Tools report applied changes through `ToolExecution.AddChangedFiles`, separately
+from findings and failures. Checks and dry runs report pending work as findings.
+
+The runner normalizes and deduplicates paths into `ToolResult.ChangedFiles`,
+retaining confirmed changes even when execution fails. Optional `ChangeAction`
+metadata describes the changes, while `Note` remains contextual text.
+
+Renderers derive change counts and combine them with findings and notes for
+display, or expose the data as structured output. Applied changes alone do not
+cause a nonzero exit.
 
 For example, inside an ESLint tool's per-directory function:
 
 ```go
-subprocess := execution.Run(cmd)
+subprocess := execution.Run(OperationCheck, cmd)
 if !isExpectedESLintExit(subprocess.Err) {
     execution.Fail(subprocess.ToolError(
         fmt.Errorf("cannot run ESLint: %w", subprocess.Err)))

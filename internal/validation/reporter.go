@@ -48,6 +48,8 @@ type toolInvocationStatus struct {
 	Note               string      `json:"note,omitempty"`
 	HasFindings        bool        `json:"has_findings"`
 	Errors             []ToolError `json:"errors,omitempty"`
+	ChangeAction       string      `json:"change_action,omitempty"`
+	ChangedFiles       []string    `json:"changed_files,omitempty"`
 	FindingsIncomplete bool        `json:"findings_incomplete,omitempty"`
 }
 
@@ -65,7 +67,14 @@ func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 	var failedTools, toolsWithErrorFindings []string
 	for _, tool := range tools {
 		findings = append(findings, tool.Findings...)
-		status := toolInvocationStatus{Name: tool.Name, Status: "invoked", Note: tool.Note, HasFindings: tool.HasFindings}
+		status := toolInvocationStatus{
+			Name:         tool.Name,
+			Status:       "invoked",
+			Note:         tool.Note,
+			HasFindings:  tool.HasFindings,
+			ChangedFiles: tool.ChangedFiles,
+			ChangeAction: tool.ChangeAction,
+		}
 		if tool.Status() == "skipped" {
 			status.Status, status.Reason = "skipped", tool.SkipReason
 		}

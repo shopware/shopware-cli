@@ -56,7 +56,8 @@ func TestRectorFixReportsAppliedChangesWithoutVerification(t *testing.T) {
 	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 	require.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "1 file fixed; custom rules from rector.php", result.Note)
+	assert.Equal(t, "custom rules from rector.php", result.Note)
+	assert.Equal(t, []string{"src/file.php"}, result.ChangedFiles)
 	arguments, err := os.ReadFile(argsPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(arguments), "--output-format\njson")
@@ -81,7 +82,7 @@ func TestRectorFixCleanInputRunsOnce(t *testing.T) {
 	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 	assert.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "no changes; custom rules from rector.php", result.Note)
+	assert.Equal(t, "custom rules from rector.php", result.Note)
 	arguments, err := os.ReadFile(argsPath)
 	require.NoError(t, err)
 	assert.Equal(t, 1, strings.Count(string(arguments), "\nprocess\n"))
@@ -110,10 +111,11 @@ exit 1`, "src")
 	require.NoError(t, os.WriteFile(fixed, []byte("<?php // old\n"), 0o600))
 	require.NoError(t, os.WriteFile(broken, []byte("<?php invalid\n"), 0o600))
 	config := ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories}
-	for _, note := range []string{"1 file fixed; custom rules from rector.php", "no changes; custom rules from rector.php"} {
+	for _, changed := range []int{1, 0} {
 		result := runFixTool(t, Rector{}, config)
 		assert.Empty(t, result.Errors)
-		assert.Equal(t, note, result.Note)
+		assert.Equal(t, "custom rules from rector.php", result.Note)
+		assert.Len(t, result.ChangedFiles, changed)
 		assert.ElementsMatch(t, []validation.CheckResult{{
 			Path: "src/broken.php", Line: 8, Message: "Syntax error",
 			Severity: validation.SeverityError, Identifier: "rector/error",
@@ -195,7 +197,8 @@ esac`)
 	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: []string{good, bad}})
 	require.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0].Stdout, "BadRector")
-	assert.Equal(t, "1 file fixed; custom rules from rector.php", result.Note)
+	assert.Equal(t, "custom rules from rector.php", result.Note)
+	assert.Equal(t, []string{"good/fixed.php"}, result.ChangedFiles)
 	assert.ElementsMatch(t, []validation.CheckResult{{
 		Path: "good/broken.php", Line: 2, Message: "Syntax error",
 		Severity: validation.SeverityError, Identifier: "rector/error",
@@ -302,7 +305,8 @@ func TestRectorFixWithoutDiffs(t *testing.T) {
 	result := runFixTool(t, Rector{}, ToolConfig{IsProject: true, RootDir: root, SourceDirectories: directories})
 	require.Empty(t, result.Errors)
 	assert.Empty(t, result.Findings)
-	assert.Equal(t, "1 file fixed; custom rules from rector.php", result.Note)
+	assert.Equal(t, "custom rules from rector.php", result.Note)
+	assert.Equal(t, []string{"src/file.php"}, result.ChangedFiles)
 	arguments, err := os.ReadFile(argsPath)
 	require.NoError(t, err)
 	assert.NotContains(t, string(arguments), "--dry-run")
@@ -349,7 +353,7 @@ printf '{"totals":{"changed_files":0,"errors":0}}'`)
 			result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}})
 			assert.Empty(t, result.Errors)
 			assert.Empty(t, result.Findings)
-			assert.Equal(t, "no changes; custom rules from rector.php", result.Note)
+			assert.Equal(t, "custom rules from rector.php", result.Note)
 			contents, err := os.ReadFile(manifest)
 			require.NoError(t, err)
 			assert.Equal(t, "{}", string(contents))
@@ -537,9 +541,6 @@ exit "$RECTOR_EXIT"
 				expectedConfig = filepath.Join(root, "rector.php")
 				note = "Shopware 6.7.0.0 (lowest); custom rules from rector.php"
 			}
-			if !scenario.fail && !scenario.dryRun {
-				note = "no changes; " + note
-			}
 			assert.Equal(t, note, result.Note)
 			checkedVersion := "6.7.0.0"
 			if scenario.project {
@@ -609,7 +610,7 @@ exit 1`,
 					Severity: validation.SeverityError, Identifier: "rector/change",
 				})
 			} else {
-				assert.Contains(t, result.Note, "1 file fixed")
+				assert.Len(t, result.ChangedFiles, 1)
 			}
 			assert.ElementsMatch(t, expected, result.Findings)
 		})

@@ -1,0 +1,18 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <argument>
+                indented on the next line</argument>
+            <argument type="string">
+a</argument>
+            <argument>  leading spaces
+second line</argument>
+            <argument>&#9;leading tab
+second line</argument>
+            <argument>
+</argument>
+            <argument>line1
+    indented line2</argument>
+        </service>
+    </services>
+</container>

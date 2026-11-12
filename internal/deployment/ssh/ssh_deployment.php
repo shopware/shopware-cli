@@ -50,6 +50,36 @@ function deploymentRun(array $command, string $directory): void
     }
 }
 
+/** Bound the whole hook process group, including children of the shell. */
+function deploymentRunHook(string $script, string $directory, int $timeout): void
+{
+    $process = proc_open(['timeout', '--kill-after=5s', $timeout . 's', 'sh', '-eu', '-c', $script],
+        [0 => ['file', '/dev/null', 'r'], 1 => STDERR, 2 => STDERR], $pipes, $directory);
+    if (!is_resource($process)) {
+        throw new RuntimeException('cannot start deployment hook');
+    }
+    $status = proc_close($process);
+    if ($status !== 0) {
+        throw new RuntimeException("cannot run deployment hook (exit $status; timeout {$timeout}s)");
+    }
+}
+
+/** Run every post-hook before reporting failures, including during cleanup. */
+function deploymentRunPostHooks(array $scripts, string $directory, int $timeout): void
+{
+    $errors = [];
+    foreach ($scripts as $script) {
+        try {
+            deploymentRunHook($script, $directory, $timeout);
+        } catch (Throwable $error) {
+            $errors[] = $error->getMessage();
+        }
+    }
+    if ($errors !== []) {
+        throw new RuntimeException("cannot run post hooks: " . implode("; ", $errors));
+    }
+}
+
 function deploymentLog(string $message): void
 {
     fwrite(STDERR, "$message\n");
@@ -361,12 +391,19 @@ $archive = null;
 $temporaryLink = null;
 $metadataFile = null;
 $activated = false;
+$hooksStarted = false;
+$postHooksAttempted = false;
 $lock = null;
 $exitCode = 0;
 $cachetool = null;
 try {
     $input = json_decode($argv[1], true, 512, JSON_THROW_ON_ERROR);
     $root = $input['root'];
+    $hookTimeout = $input['hooks']['timeout_seconds'] ?? 0;
+    if (!is_int($hookTimeout) || $hookTimeout < 0) {
+        throw new RuntimeException('cannot configure hook timeout: must be zero or positive');
+    }
+    $hookTimeout = $hookTimeout ?: 300;
     $action = $input['action'] ?? '';
     if (!in_array($action, ['', 'activate', 'candidates'], true)) {
         throw new RuntimeException('Invalid deployment action');
@@ -658,6 +695,14 @@ try {
     if (rtrim((string) fgets(STDIN), "\r\n") !== "ACTIVATE $id") {
         throw new RuntimeException("Client did not authorize activation");
     }
+    if (!empty($input['hooks']['pre']) || !empty($input['hooks']['post'])) {
+        // Verify timeout support before a pre-hook can stop workers.
+        deploymentRun(['timeout', '--kill-after=5s', '1s', 'sh', '-c', 'exit 0'], $root);
+    }
+    $hooksStarted = true;
+    foreach ($input['hooks']['pre'] ?? [] as $script) {
+        deploymentRunHook($script, $root, $hookTimeout);
+    }
     // Persist intent before the switch so a finalization failure cannot make a
     // later no-op report an older activation as the current successful rollout.
     $releaseMetadata['created_at'] ??= deploymentReleaseCreatedAt($root, $name, $releaseMetadata) ?? $metadata['created_at'];
@@ -695,6 +740,8 @@ try {
         // The switch has committed; a reset failure must not undo readiness.
         deploymentReportReset("Deployment activated, but OPcache reset failed: {$error->getMessage()}");
     }
+    $postHooksAttempted = true;
+    deploymentRunPostHooks($input['hooks']['post'] ?? [], $root, $hookTimeout);
     echo "ACTIVE $id\n";
     deploymentActivationResult($input, $metadata, false);
     fflush(STDOUT);
@@ -713,6 +760,14 @@ try {
     }
     $exitCode = 1;
 } finally {
+    if ($hooksStarted && !$postHooksAttempted) {
+        try {
+            deploymentRunPostHooks($input['hooks']['post'] ?? [], $root, $hookTimeout);
+        } catch (Throwable $error) {
+            deploymentReportReset($error->getMessage());
+            $exitCode = 1;
+        }
+    }
     deploymentCachetoolCleanup($cachetool);
     if ($upload !== null && file_exists($upload)) {
         unlink($upload);

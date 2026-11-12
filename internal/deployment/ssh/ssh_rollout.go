@@ -66,23 +66,24 @@ const (
 )
 
 type sshRolloutInput struct {
-	Coordinated       bool                `json:"coordinated,omitempty"`
-	Follower          bool                `json:"follower,omitempty"`
-	Action            sshDeploymentAction `json:"action,omitempty"`
-	Root              string              `json:"root"`
-	Current           string              `json:"current,omitempty"`
-	Reference         string              `json:"reference"`
-	Release           string              `json:"release"`
-	Deployment        string              `json:"deployment"`
-	Archive           string              `json:"archive,omitempty"`
-	SHA256            string              `json:"sha256,omitempty"`
-	Size              int64               `json:"size,omitempty"`
-	PHP               string              `json:"php,omitempty"`
-	PHPArgs           []string            `json:"php_args,omitempty"`
-	SharedFiles       []string            `json:"shared_files"`
-	SharedDirectories []string            `json:"shared_directories"`
-	Cachetool         *sshCachetoolInput  `json:"cachetool,omitempty"`
-	ProbePHPHost      bool                `json:"probe_php_host,omitempty"`
+	Hooks             *shop.EnvironmentSSHDeploymentHooks `json:"hooks,omitempty"`
+	Coordinated       bool                                `json:"coordinated,omitempty"`
+	Follower          bool                                `json:"follower,omitempty"`
+	Action            sshDeploymentAction                 `json:"action,omitempty"`
+	Root              string                              `json:"root"`
+	Current           string                              `json:"current,omitempty"`
+	Reference         string                              `json:"reference"`
+	Release           string                              `json:"release"`
+	Deployment        string                              `json:"deployment"`
+	Archive           string                              `json:"archive,omitempty"`
+	SHA256            string                              `json:"sha256,omitempty"`
+	Size              int64                               `json:"size,omitempty"`
+	PHP               string                              `json:"php,omitempty"`
+	PHPArgs           []string                            `json:"php_args,omitempty"`
+	SharedFiles       []string                            `json:"shared_files"`
+	SharedDirectories []string                            `json:"shared_directories"`
+	Cachetool         *sshCachetoolInput                  `json:"cachetool,omitempty"`
+	ProbePHPHost      bool                                `json:"probe_php_host,omitempty"`
 }
 
 // RolloutDeployment prepares a release and atomically switches current.
@@ -215,6 +216,9 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 		output = io.Discard
 	}
 	output = &synchronizedWriter{output: output}
+	if s.env != nil && s.env.SSH != nil {
+		input.Hooks = s.env.SSH.Hooks
+	}
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return Rollout{}, err

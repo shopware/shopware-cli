@@ -3,6 +3,7 @@ package verifier
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"runtime"
@@ -53,10 +54,11 @@ func (r SubprocessResult) cpuTime() time.Duration {
 	return r.ProcessState.UserTime() + r.ProcessState.SystemTime()
 }
 
-// ToolExecution delivers findings synchronously and keeps execution failures.
-// The callback must be safe for concurrent use.
+// ToolExecution delivers findings synchronously and collects applied changes and failures.
+// Finding callbacks run under the mutex and must not call back into the helper.
 type ToolExecution struct {
 	mu           sync.Mutex
+	finalized    bool
 	result       ToolResult
 	onFindings   func([]validation.CheckResult) bool
 	onSubprocess func(SubprocessResult)
@@ -108,14 +110,33 @@ func (e *ToolExecution) Run(operation string, cmd *exec.Cmd) SubprocessResult {
 }
 
 func (e *ToolExecution) AddFindings(findings ...validation.CheckResult) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.assertOpen()
 	if len(findings) == 0 {
 		return
 	}
 	if e.onFindings(findings) {
-		e.mu.Lock()
 		e.result.HasFindings = true
-		e.mu.Unlock()
 	}
+}
+
+// AddChangedFiles records confirmed applied changes, including partial successes.
+// Paths must be absolute or relative to ToolConfig.RootDir. RunTools normalizes
+// and deduplicates them after the tool and its cleanup finish.
+func (e *ToolExecution) AddChangedFiles(paths ...string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.assertOpen()
+	e.result.ChangedFiles = append(e.result.ChangedFiles, paths...)
+}
+
+// parsedToolReport retains valid entries alongside malformed report errors.
+// Changed paths describe native output fields, not remaining findings.
+type parsedToolReport struct {
+	findings     []validation.CheckResult
+	changedFiles []string
+	errors       []error
 }
 
 func (e *ToolExecution) Fail(err *ToolError) {
@@ -124,11 +145,28 @@ func (e *ToolExecution) Fail(err *ToolError) {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.assertOpen()
 	e.result.Errors = append(e.result.Errors, *err)
 }
 
-func (e *ToolExecution) snapshot() ToolResult {
+// finalize transfers the result to the runner after tool cleanup and records
+// cancellation unless it was already reported. Further reporting is a programmer error.
+func (e *ToolExecution) finalize(cancellation error) ToolResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.assertOpen()
+	if cancellation != nil && !slices.ContainsFunc(e.result.Errors, func(failure ToolError) bool {
+		return errors.Is(failure, cancellation)
+	}) {
+		e.result.Errors = append(e.result.Errors, ToolError{Err: cancellation})
+	}
+	e.finalized = true
 	return e.result
+}
+
+// assertOpen requires mu to be held.
+func (e *ToolExecution) assertOpen() {
+	if e.finalized {
+		panic("ToolExecution is finalized")
+	}
 }

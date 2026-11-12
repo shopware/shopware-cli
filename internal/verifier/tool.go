@@ -104,7 +104,17 @@ type Tool interface {
 type ToolSummary struct {
 	Note       string
 	SkipReason string
+	// ChangeAction describes an applicable write invocation for renderers.
+	// Reported changes default to "changed" when empty.
+	// Checks and dry runs leave it empty and report no changed files.
+	ChangeAction string
 }
+
+const (
+	ChangeActionFixed     = "fixed"
+	ChangeActionFormatted = "formatted"
+	ChangeActionConverted = "converted"
+)
 
 type CheckTool interface {
 	Tool

@@ -2,7 +2,6 @@ package verifier
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -49,10 +48,7 @@ func RunTools[T Tool](
 	for i, tool := range tools {
 		group.Go(func() {
 			var collected []validation.CheckResult
-			var findingsMu sync.Mutex
 			execution := NewToolExecution(func(findings []validation.CheckResult) bool {
-				findingsMu.Lock()
-				defer findingsMu.Unlock()
 				retained := filterFindings(findings, sourceRoot, config.ValidationIgnores)
 				collected = append(collected, retained...)
 				return len(retained) > 0
@@ -79,19 +75,16 @@ func RunTools[T Tool](
 			if ctx.Err() == nil {
 				summary = run(tool, execution)
 			}
-			result := execution.snapshot()
-			if err := ctx.Err(); err != nil && !slices.ContainsFunc(result.Errors, func(failure ToolError) bool {
-				return errors.Is(failure, err)
-			}) {
-				execution.Fail(&ToolError{Err: err})
-				result = execution.snapshot()
-			}
+			result := execution.finalize(ctx.Err())
 			result.Name = tool.Name()
 			result.Note = summary.Note
-			// A tool that reported findings or failures has run, whatever it returned.
-			if !result.HasFindings && len(result.Errors) == 0 {
+			result.ChangeAction = summary.ChangeAction
+			result.ChangedFiles = normalizeChangedFiles(result.ChangedFiles, config.RootDir)
+			// A tool that reported changes, findings or failures has run, whatever it returned.
+			if !result.HasFindings && len(result.Errors) == 0 && len(result.ChangedFiles) == 0 {
 				result.SkipReason = summary.SkipReason
 			}
+
 			if len(result.Errors) > 0 {
 				finish(result.Errors[0])
 			} else {
@@ -212,12 +205,19 @@ func filterFindings(findings []validation.CheckResult, root string, ignores []va
 	return filtered
 }
 
-func fileChangeNote(count int, action string) string {
-	if count == 0 {
-		return "no changes"
+// normalizeChangedFiles gives every reporter the same stable, per-tool path list.
+func normalizeChangedFiles(paths []string, root string) []string {
+	var normalized []string
+	resolvedRoot := validation.ResolveSourceRoot(root)
+	for _, file := range paths {
+		// Preserve the original root alias: converted sources may no longer
+		// exist, so resolving a symlink in the file path can fail.
+		file = validation.NormalizeSourcePath(file, root)
+		file = validation.NormalizeSourcePath(file, resolvedRoot)
+		if file != "" {
+			normalized = append(normalized, file)
+		}
 	}
-	if count == 1 {
-		return "1 file " + action
-	}
-	return fmt.Sprintf("%d files %s", count, action)
+	slices.Sort(normalized)
+	return slices.Compact(normalized)
 }

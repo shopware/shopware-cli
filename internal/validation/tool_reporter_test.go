@@ -180,3 +180,64 @@ func TestGitHubToolFailureEscaping(t *testing.T) {
 	assert.True(t, strings.HasPrefix(lines[0], "::stop-commands::"))
 	assert.Equal(t, "::error title=eslint::bad%250A%0A::warning::injected", lines[len(lines)-1])
 }
+
+func TestToolReportChangedFiles(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "completed", true: "failed"}[failed], func(t *testing.T) {
+			changed := ToolReport{ToolResult: ToolResult{Name: "prettier", ChangedFiles: []string{"src/file.js"}, ChangeAction: "formatted", Note: "context"}}
+			if failed {
+				changed.Errors = []ToolError{{Err: errors.New("cannot finish")}}
+			}
+			var reportErr error
+			stdout := captureOutput(func() {
+				reportErr = ReportTools([]ToolReport{changed, {ToolResult: ToolResult{Name: "skipped", SkipReason: "no sources"}}}, "json", "Formatters")
+			})
+			assert.Equal(t, failed, reportErr != nil)
+			var report struct {
+				Results []CheckResult                `json:"results"`
+				Tools   []map[string]json.RawMessage `json:"tools"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(stdout), &report))
+			assert.Empty(t, report.Results)
+			require.Len(t, report.Tools, 2)
+			assert.JSONEq(t, `["src/file.js"]`, string(report.Tools[0]["changed_files"]))
+			assert.JSONEq(t, `"formatted"`, string(report.Tools[0]["change_action"]))
+			assert.JSONEq(t, `"context"`, string(report.Tools[0]["note"]))
+			assert.JSONEq(t, `false`, string(report.Tools[0]["has_findings"]))
+			assert.NotContains(t, report.Tools[1], "changed_files")
+		})
+	}
+}
+
+func TestToolReportChangeSummary(t *testing.T) {
+	for _, scenario := range []struct {
+		name     string
+		result   ToolResult
+		findings int
+		detail   string
+	}{
+		{name: "generic singular", result: ToolResult{ChangedFiles: []string{"a.js"}}, detail: "1 file changed"},
+		{name: "generic plural", result: ToolResult{ChangedFiles: []string{"a.js", "b.js"}}, detail: "2 files changed"},
+		{name: "remaining errors", result: ToolResult{ChangedFiles: []string{"a.js", "b.js", "c.js"}, ChangeAction: "fixed", Note: "context"}, findings: 5, detail: "5 errors · 3 files fixed · context"},
+		{name: "clean write", result: ToolResult{ChangeAction: "formatted", Note: "context"}, detail: "no changes · context"},
+		{name: "no action", result: ToolResult{Note: "context"}, detail: "context"},
+		{name: "skipped", result: ToolResult{SkipReason: "no sources", ChangeAction: "fixed"}, detail: "no sources"},
+		{name: "failed", result: ToolResult{Errors: []ToolError{{Err: errors.New("cannot finish")}}, ChangeAction: "fixed"}, detail: "cannot finish"},
+		{name: "partially failed", result: ToolResult{Errors: []ToolError{{Err: errors.New("cannot finish")}}, ChangedFiles: []string{"a.js", "b.js", "c.js"}, ChangeAction: "fixed", Note: "context"}, findings: 1, detail: "cannot finish · 3 files fixed"},
+		{name: "partially failed without action", result: ToolResult{Errors: []ToolError{{Err: errors.New("cannot finish")}}, ChangedFiles: []string{"a.js"}}, detail: "cannot finish · 1 file changed"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			tool := ToolReport{ToolResult: scenario.result}
+			tool.Name = "tool"
+			for range scenario.findings {
+				tool.Findings = append(tool.Findings, CheckResult{Path: "file.js", Severity: SeverityError, Message: "Remaining issue"})
+			}
+			tool.HasFindings = len(tool.Findings) > 0
+			output := captureOutput(func() { _ = ReportTools([]ToolReport{tool}, "summary", "Tools") })
+			lines := strings.Split(output, "\n")
+			require.Greater(t, len(lines), 1)
+			assert.Equal(t, append([]string{"tool", tool.Status()}, strings.Fields(scenario.detail)...), strings.Fields(lines[1]))
+			assert.Equal(t, scenario.result.Note, tool.Note)
+		})
+	}
+}
