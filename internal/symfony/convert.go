@@ -625,7 +625,7 @@ func appendServiceChildren(mapping *yaml.Node, service *xmlService) error {
 	}
 
 	if len(service.Arguments) > 0 {
-		node, err := argumentsToNode(service.Arguments, service.Parent != "")
+		node, err := argumentsToNode(service.Arguments, service.Parent != "", true)
 		if err != nil {
 			return err
 		}
@@ -733,7 +733,7 @@ func callableToNode(callable *xmlCallable, element string) (*yaml.Node, error) {
 	return pair, nil
 }
 
-func argumentsToNode(arguments []xmlArgument, isChildDefinition bool) (*yaml.Node, error) {
+func argumentsToNode(arguments []xmlArgument, isChildDefinition bool, isConstructor bool) (*yaml.Node, error) {
 	keyed := false
 	for _, argument := range arguments {
 		if argument.Key != "" || argument.Index != "" {
@@ -746,7 +746,7 @@ func argumentsToNode(arguments []xmlArgument, isChildDefinition bool) (*yaml.Nod
 		sequence := newSequence()
 
 		for _, argument := range arguments {
-			node, err := argumentValueToNode(argument)
+			node, err := argumentValueToNode(argument, isConstructor)
 			if err != nil {
 				return nil, err
 			}
@@ -786,7 +786,7 @@ func argumentsToNode(arguments []xmlArgument, isChildDefinition bool) (*yaml.Nod
 			nextIndex++
 		}
 
-		node, err := argumentValueToNode(argument)
+		node, err := argumentValueToNode(argument, isConstructor)
 		if err != nil {
 			return nil, err
 		}
@@ -797,7 +797,7 @@ func argumentsToNode(arguments []xmlArgument, isChildDefinition bool) (*yaml.Nod
 	return mapping, nil
 }
 
-func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
+func argumentValueToNode(argument xmlArgument, isConstructor bool) (*yaml.Node, error) {
 	if err := unknownElementError("argument", argument.Unknown); err != nil {
 		return nil, err
 	}
@@ -817,12 +817,12 @@ func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
 	switch argument.Type {
 	case "":
 		if len(argument.Children) > 0 {
-			return argumentsToNode(argument.Children, false)
+			return argumentsToNode(argument.Children, false, false)
 		}
 
 		return phpizedServiceValue(argument.Value), nil
 	case "collection":
-		return argumentsToNode(argument.Children, false)
+		return argumentsToNode(argument.Children, false, false)
 	case "service":
 		if len(argument.InlineServices) > 1 {
 			return nil, errors.New("only one inline <service> is supported per argument")
@@ -836,7 +836,7 @@ func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
 			return nil, errors.New("argument type=\"service\" requires an id attribute")
 		}
 
-		return referenceNode(argument.ID, argument.OnInvalid)
+		return referenceNode(argument.ID, argument.OnInvalid, isConstructor)
 	case "expression":
 		return newString("@=" + argument.Value), nil
 	case "string":
@@ -848,7 +848,7 @@ func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
 	case "abstract":
 		return taggedScalar("!abstract", argument.Value), nil
 	case "iterator":
-		node, err := argumentsToNode(argument.Children, false)
+		node, err := argumentsToNode(argument.Children, false, false)
 		if err != nil {
 			return nil, err
 		}
@@ -857,7 +857,7 @@ func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
 
 		return node, nil
 	case "service_locator":
-		node, err := argumentsToNode(argument.Children, false)
+		node, err := argumentsToNode(argument.Children, false, false)
 		if err != nil {
 			return nil, err
 		}
@@ -870,7 +870,7 @@ func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
 			return nil, fmt.Errorf("argument type=%q requires an id attribute", argument.Type)
 		}
 
-		node, err := referenceNode(argument.ID, argument.OnInvalid)
+		node, err := referenceNode(argument.ID, argument.OnInvalid, false)
 		if err != nil {
 			return nil, err
 		}
@@ -956,7 +956,7 @@ func inlineServiceToNode(service xmlService) (*yaml.Node, error) {
 	return node, nil
 }
 
-func referenceNode(id string, onInvalid string) (*yaml.Node, error) {
+func referenceNode(id string, onInvalid string, isConstructor bool) (*yaml.Node, error) {
 	prefix := "@"
 
 	switch onInvalid {
@@ -964,10 +964,16 @@ func referenceNode(id string, onInvalid string) (*yaml.Node, error) {
 	case "ignore":
 		prefix = "@?"
 	case "null":
-		// "@?" means ignore, which removes method calls and collection
-		// entries instead of passing null for them, so the null strategy
-		// cannot be expressed in YAML.
-		return nil, errors.New(`on-invalid="null" is not supported by the YAML format, change it to on-invalid="ignore" first if dropping the dependency is acceptable`)
+		// "@?" means ignore. For a constructor argument Symfony passes null
+		// for both, but it removes method calls, properties and collection
+		// entries instead, so null cannot be expressed in YAML there.
+		if isConstructor {
+			prefix = "@?"
+
+			break
+		}
+
+		return nil, errors.New(`on-invalid="null" is not supported by the YAML format outside of constructor arguments, change it to on-invalid="ignore" first if dropping the dependency is acceptable`)
 	case "ignore_uninitialized":
 		prefix = "@!"
 	default:
@@ -985,7 +991,7 @@ func propertiesToNode(properties []xmlProperty) (*yaml.Node, error) {
 			return nil, errors.New("<property> requires a name attribute")
 		}
 
-		node, err := argumentValueToNode(property.xmlArgument)
+		node, err := argumentValueToNode(property.xmlArgument, false)
 		if err != nil {
 			return nil, fmt.Errorf("property %q: %w", property.Name, err)
 		}
@@ -1007,7 +1013,7 @@ func bindsToNode(binds []xmlArgument) (*yaml.Node, error) {
 		key := bind.Key
 		bind.Key = ""
 
-		node, err := argumentValueToNode(bind)
+		node, err := argumentValueToNode(bind, false)
 		if err != nil {
 			return nil, fmt.Errorf("bind %q: %w", key, err)
 		}
@@ -1041,7 +1047,7 @@ func callsToNode(calls []xmlCall) (*yaml.Node, error) {
 		returnsClone := phpize(call.ReturnsClone) == true
 
 		if len(call.Arguments) > 0 || returnsClone {
-			arguments, err := argumentsToNode(call.Arguments, false)
+			arguments, err := argumentsToNode(call.Arguments, false, false)
 			if err != nil {
 				return nil, fmt.Errorf("call %q: %w", call.Method, err)
 			}

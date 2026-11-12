@@ -126,9 +126,29 @@ func TestConvertErrors(t *testing.T) {
 			expectedErr: `unsupported on-invalid value "explode"`,
 		},
 		{
-			name:        "null on-invalid cannot be expressed in YAML",
-			xml:         `<container><services><service id="foo" class="Foo"><argument type="service" id="bar" on-invalid="null"/></service></services></container>`,
-			expectedErr: `on-invalid="null" is not supported by the YAML format`,
+			name:        "null on-invalid in a method call cannot be expressed in YAML",
+			xml:         `<container><services><service id="foo" class="Foo"><call method="setBar"><argument type="service" id="bar" on-invalid="null"/></call></service></services></container>`,
+			expectedErr: `on-invalid="null" is not supported by the YAML format outside of constructor arguments`,
+		},
+		{
+			name:        "null on-invalid in a collection cannot be expressed in YAML",
+			xml:         `<container><services><service id="foo" class="Foo"><argument type="collection"><argument type="service" id="bar" on-invalid="null"/></argument></service></services></container>`,
+			expectedErr: `on-invalid="null" is not supported by the YAML format outside of constructor arguments`,
+		},
+		{
+			name:        "null on-invalid in a property cannot be expressed in YAML",
+			xml:         `<container><services><service id="foo" class="Foo"><property name="bar" type="service" id="bar" on-invalid="null"/></service></services></container>`,
+			expectedErr: `on-invalid="null" is not supported by the YAML format outside of constructor arguments`,
+		},
+		{
+			name:        "null on-invalid in a service locator cannot be expressed in YAML",
+			xml:         `<container><services><service id="foo" class="Foo"><argument type="service_locator"><argument key="bar" type="service" id="bar" on-invalid="null"/></argument></service></services></container>`,
+			expectedErr: `on-invalid="null" is not supported by the YAML format outside of constructor arguments`,
+		},
+		{
+			name:        "null on-invalid in a service closure cannot be expressed in YAML",
+			xml:         `<container><services><service id="foo" class="Foo"><argument type="service_closure" id="bar" on-invalid="null"/></service></services></container>`,
+			expectedErr: `on-invalid="null" is not supported by the YAML format outside of constructor arguments`,
 		},
 		{
 			name:        "unsupported decoration-on-invalid",
