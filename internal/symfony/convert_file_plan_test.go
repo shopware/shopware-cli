@@ -21,7 +21,7 @@ func TestXMLPlanningStopsBeforeScanningMissingImports(t *testing.T) {
 		config, err := ParseServicesXML(content)
 		cancel()
 		return config, err
-	}, map[string][]byte{}, map[string]string{})
+	}, map[string]struct{}{}, map[string][]byte{}, map[string]string{})
 
 	require.ErrorIs(t, err, context.Canceled)
 }

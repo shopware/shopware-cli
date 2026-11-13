@@ -128,15 +128,8 @@ var (
 // FindXMLConfigFiles returns the services and routing XML files in the
 // configuration directory dir besides services.xml and routes.xml. They can be
 // loaded by Shopware itself or imported from PHP or YAML configuration, so the
-// files are recognized by their root element. Files matched by a glob import
-// are left out, as glob imports keep loading XML files, and so are the files
-// they import, as their imports are not rewritten.
+// files are recognized by their root element.
 func FindXMLConfigFiles(ctx context.Context, dir string) (services []string, routes []string, err error) {
-	servicesPath := filepath.Join(dir, "services.xml")
-	routesPath := filepath.Join(dir, "routes.xml")
-	imports := map[string][]string{}
-	pending := []string{}
-
 	err = filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if path == dir && errors.Is(err, fs.ErrNotExist) {
 			return fs.SkipAll
@@ -147,38 +140,21 @@ func FindXMLConfigFiles(ctx context.Context, dir string) (services []string, rou
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(path), ".xml") {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(path), ".xml") ||
+			path == filepath.Join(dir, "services.xml") || path == filepath.Join(dir, "routes.xml") {
 			return nil
 		}
 
 		content, err := os.ReadFile(path)
 		if err != nil {
-			// The conversion of services.xml and routes.xml reports it.
-			if path == servicesPath || path == routesPath {
-				return nil
-			}
 			return err
 		}
 
-		parse := parseServicesConfig
-		switch root := xmlRootName(content); {
-		case path == servicesPath:
-		case path == routesPath:
-			parse = parseRoutesConfig
-		case root == servicesXMLRoot:
+		switch xmlRootName(content) {
+		case servicesXMLRoot:
 			services = append(services, path)
-		case root == routesXMLRoot:
-			parse = parseRoutesConfig
+		case routesXMLRoot:
 			routes = append(routes, path)
-		default:
-			return nil
-		}
-
-		// A file that cannot be parsed is reported by its conversion.
-		if config, err := parse(content); err == nil {
-			imported, globbed := xmlImportMatches(path, config)
-			imports[path] = imported
-			pending = append(pending, globbed...)
 		}
 
 		return nil
@@ -187,23 +163,7 @@ func FindXMLConfigFiles(ctx context.Context, dir string) (services []string, rou
 		return nil, nil, err
 	}
 
-	retained := map[string]struct{}{}
-	for len(pending) > 0 {
-		path := pending[len(pending)-1]
-		pending = pending[:len(pending)-1]
-		if _, ok := retained[path]; ok {
-			continue
-		}
-		retained[path] = struct{}{}
-		pending = append(pending, imports[path]...)
-	}
-
-	isRetained := func(path string) bool {
-		_, ok := retained[path]
-		return ok
-	}
-
-	return slices.DeleteFunc(services, isRetained), slices.DeleteFunc(routes, isRetained), nil
+	return services, routes, nil
 }
 
 // xmlImportMatches returns the existing local XML files the file at path
@@ -250,11 +210,15 @@ func convertXMLConfigFiles(
 ) (map[string]string, error) {
 	contents := map[string][]byte{}
 	targets := map[string]string{}
+	retained := globRetainedFiles(paths, parse)
 
 	// Plan all files together, so a file imported more than once or also
 	// passed itself is converted once and every import of it is rewritten.
 	for _, path := range paths {
-		if err := planConversion(ctx, path, parse, contents, targets); err != nil {
+		if _, ok := retained[path]; ok {
+			continue
+		}
+		if err := planConversion(ctx, path, parse, retained, contents, targets); err != nil {
 			return nil, err
 		}
 	}
@@ -282,7 +246,52 @@ func convertXMLConfigFiles(
 	return targets, nil
 }
 
-func planConversion(ctx context.Context, path string, parse func([]byte) (convertibleXMLConfig, error), contents map[string][]byte, targets map[string]string) error {
+// globRetainedFiles returns the files that stay XML: the files loaded through
+// a glob import, which is not rewritten, and the files they import, as their
+// imports are not rewritten either. Files that cannot be read or parsed are
+// reported by planning.
+func globRetainedFiles(paths []string, parse func([]byte) (convertibleXMLConfig, error)) map[string]struct{} {
+	imports := map[string][]string{}
+	retained := map[string]struct{}{}
+	pending := []string{}
+
+	for queue := slices.Clone(paths); len(queue) > 0; {
+		path := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		if _, seen := imports[path]; seen {
+			continue
+		}
+		imports[path] = nil
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		config, err := parse(content)
+		if err != nil {
+			continue
+		}
+
+		imported, globbed := xmlImportMatches(path, config)
+		imports[path] = imported
+		queue = append(queue, imported...)
+		pending = append(pending, globbed...)
+	}
+
+	for len(pending) > 0 {
+		path := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if _, ok := retained[path]; ok {
+			continue
+		}
+		retained[path] = struct{}{}
+		pending = append(pending, imports[path]...)
+	}
+
+	return retained
+}
+
+func planConversion(ctx context.Context, path string, parse func([]byte) (convertibleXMLConfig, error), retained map[string]struct{}, contents map[string][]byte, targets map[string]string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -337,6 +346,10 @@ func planConversion(ctx context.Context, path string, parse func([]byte) (conver
 		}
 
 		importPath := filepath.Join(filepath.Dir(path), filepath.FromSlash(resource))
+		// A file that stays XML keeps being imported as XML.
+		if _, ok := retained[importPath]; ok {
+			continue
+		}
 		if _, err := os.Stat(importPath); err != nil {
 			if !errors.Is(err, os.ErrNotExist) {
 				return err
@@ -344,7 +357,7 @@ func planConversion(ctx context.Context, path string, parse func([]byte) (conver
 			continue
 		}
 
-		if err := planConversion(ctx, importPath, parse, contents, targets); err != nil {
+		if err := planConversion(ctx, importPath, parse, retained, contents, targets); err != nil {
 			return err
 		}
 
