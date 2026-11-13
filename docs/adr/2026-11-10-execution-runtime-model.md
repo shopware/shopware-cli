@@ -235,10 +235,10 @@ directory or environment without changing shared settings.
 #### Target wiring and workspace
 
 Resolve execution policy in application wiring and inject the selected backend.
-A local executor is constructed with the project directory as its default:
+A local executor uses the project or extension directory as its default:
 
 ```go
-executor := executor.New(local.New()).WithDir(projectRoot)
+executor := executor.New(local.New()).WithDir(workspaceRoot)
 ```
 
 A disposable container exposes the same backend contract. The container package
@@ -250,7 +250,7 @@ engine := containerdocker.New()
 backend := containerruntime.New(engine, container.RunOptions{
     Image: workloadImage,
     Mounts: []container.Mount{
-        {Source: projectRoot, Target: "/workspace"},
+        {Source: workspaceRoot, Target: "/workspace"},
     },
     User: containerUser,
 })
@@ -270,9 +270,9 @@ type Runner interface {
 The container runtime delegates `Backend.Start` to `Runner.Run`. The Docker
 adapter owns engine arguments and disposable-resource cleanup. Another engine
 can implement `Runner` without changing the executor or tool implementations.
-Selecting a backend does not install tools or copy project files. For example,
+Selecting a backend does not install tools or copy source files. For example,
 running PHP in a container requires an image containing PHP and a mount that
-makes the project files available inside it.
+makes the source files available inside it.
 
 Selection is per use case. One CLI invocation may use containerized QA and a
 host executor for certificate setup. A command requiring the running Shopware
@@ -282,10 +282,10 @@ up its tools and files. The consumer's command construction and result handling
 remain the same, provided it uses the supplied executor throughout.
 
 Use one workspace mapping to relate host paths to paths inside the target. In
-the example above, `projectRoot/src/Example.php` becomes
+the example above, `workspaceRoot/src/Example.php` becomes
 `/workspace/src/Example.php`. Use this mapping when setting working directories
 and passing file paths to tools. After parsing tool output, convert paths in
-findings back to the user's project paths before reporting them. Command
+findings back to the user's source paths before reporting them. Command
 arguments and raw output are not automatically searched and rewritten.
 
 #### Stack lifecycle and service execution

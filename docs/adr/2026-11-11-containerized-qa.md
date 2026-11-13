@@ -90,7 +90,9 @@ command := executor.Command("shopware-cli", args...).
 result, err := command.Run(ctx, streams)
 ```
 
-The example uses `/workspace` as the mounted project root. `qaFlags` preserves
+The mounted workspace can be a project or standalone extension directory. This
+example runs project validation with the source directory mounted at
+`/workspace`. `qaFlags` preserves
 the original QA flags, including `--only`, `--exclude` and reporting options, so
 tool selection and output behavior remain the same inside the container.
 Application wiring maps paths in arguments and flags into the container
