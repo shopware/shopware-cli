@@ -224,8 +224,9 @@ above `runtime.Backend`. PHP and Node helpers build ordinary commands, so
 specialized and generic calls share stream, capture and error handling. They do
 not install tools or choose an environment.
 
-For example, a consumer receives an executor and runs Composer without knowing
-whether it targets the host, a container or a stack service:
+For example, a consumer receives an executor prepared for the selected target
+and runs Composer through the same API on the host, in a container or in a
+stack service:
 
 ```go
 func installDependencies(ctx context.Context, executor *executor.Executor,
@@ -292,7 +293,11 @@ adapter owns engine arguments and disposable-resource cleanup. Another engine
 can implement `Runner` without changing the executor or tool implementations.
 Selecting a backend does not install tools or copy source files. For example,
 running PHP in a container requires an image containing PHP and a mount that
-makes the source files available inside it.
+makes the source files available inside it. Filesystem operations, dependency
+handling and preparation remain the consumer’s responsibility and must account
+for the selected target’s filesystem. The executor and related APIs provide a
+consistent way to run commands needed for preparation, but do not cover every
+requirement beyond process orchestration.
 
 Selection is per use case. One CLI invocation may use containerized QA and a
 host executor for certificate setup. A command requiring the running Shopware
@@ -570,6 +575,16 @@ cancellation, cleanup, file changes and failures after only part of an operation
 has completed. Interactive commands also need terminal and signal checks. A
 failed command must not automatically run again through the old implementation,
 since it may already have changed files or resources.
+
+### Out of scope
+
+- **Remote QA execution.** QA uses locally available source files, directly or
+  mounted into a container. SSH support targets deployment, remote shop commands
+  and database access.
+- **A general remote filesystem abstraction.** Filesystem operations and
+  file-transfer policy remain with their consumers.
+- **Automatic path rewriting in arguments or raw output.** Consumers explicitly
+  map path arguments and paths in parsed findings through the workspace mapping.
 
 ## Consequences
 
