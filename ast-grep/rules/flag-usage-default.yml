@@ -1,0 +1,47 @@
+# Reject pflag-style default markers in help, e.g. "Output (default out.json)".
+id: flag-usage-default
+language: Go
+severity: error
+message: Let pflag display defaults instead of repeating them in flag help
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  matches: flag-help
+  # Match pflag's marker; leave "(default: ...)" explanations of dynamic defaults.
+  regex: '\([Dd]efault [^()]+\)'
+
+# Local helper keeps this batch independent of shared-utility configuration.
+utils:
+  flag-help:
+    kind: interpreted_string_literal
+    regex: '^"[^"\\]*"$'
+    nthChild:
+      position: 1
+      reverse: true
+      ofRule: {not: {kind: comment}}
+    inside:
+      kind: argument_list
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          kind: selector_expression
+          all:
+            - has:
+                field: field
+                regex: '^(String|Bool|Int(8|16|32|64)?|Uint(8|16|32|64)?|Float32|Float64|Duration)(Var)?P?$'
+            - has:
+                field: operand
+                any:
+                  - pattern: $CMD.Flags()
+                  - pattern: $CMD.PersistentFlags()
+                  - all:
+                      - kind: identifier
+                      - pattern: $FLAGS
+                      - inside:
+                          kind: statement_list
+                          stopBy: {kind: block}
+                          has:
+                            any:
+                              - pattern: $FLAGS := $CMD.Flags()
+                              - pattern: $FLAGS := $CMD.PersistentFlags()

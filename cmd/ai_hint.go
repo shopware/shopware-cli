@@ -53,12 +53,12 @@ func printAIHint(ctx context.Context, w io.Writer, args []string) {
 
 	// Only suppress future recommendations once this one actually reached the user.
 	if _, err := fmt.Fprintln(w, msg); err != nil {
-		logging.FromContext(ctx).Debugf("could not write ai recommendation: %v", err)
+		logging.FromContext(ctx).Debugf("Could not write ai recommendation: %v", err)
 
 		return
 	}
 	if err := recommend.MarkShown(); err != nil {
-		logging.FromContext(ctx).Debugf("could not record ai recommendation: %v", err)
+		logging.FromContext(ctx).Debugf("Could not record ai recommendation: %v", err)
 	}
 }
 

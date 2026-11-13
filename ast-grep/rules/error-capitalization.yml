@@ -1,0 +1,27 @@
+# Reject uppercase openings in returned errors, e.g. errors.New("Cannot read config").
+id: error-capitalization
+language: Go
+severity: error
+message: Start returned error messages with lowercase text
+note: See docs/COMMAND_CONVENTIONS.md
+# Tests may deliberately simulate messages from external tools.
+ignores: ['**/*_test.go']
+
+rule:
+  kind: interpreted_string_literal
+  regex: '^"\p{Lu}[^"\\]*"$'
+  nthChild:
+    position: 1
+    ofRule: {not: {kind: comment}}
+  inside:
+    kind: argument_list
+    inside:
+      kind: call_expression
+      has:
+        field: function
+        kind: selector_expression
+        regex: '^(fmt\.Errorf|errors\.New)$'
+      inside:
+        kind: expression_list
+        inside:
+          kind: return_statement

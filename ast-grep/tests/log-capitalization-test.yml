@@ -1,0 +1,12 @@
+id: log-capitalization
+valid:
+  - 'func run() { logging.FromContext(ctx).Infof("Installed Admin API: %s", name) }'
+  - 'func run() { logging.FromContext(ctx).Infof("Installed %s", "lowercase value") }'
+  - 'func run() { other.Infof("installed Admin API") }'
+  - 'func run() { logging.FromContext(ctx).Infof(message) }'
+  - 'func run() { logging.FromContext(ctx).Infof("installed " + name) }'
+  - 'func run() { logging.FromContext(ctx).Infof(`installed Admin API`) }'
+  - 'func run() { log := logging.FromContext(ctx); { log := other; log.Infof("installed Admin API") } }'
+invalid:
+  - 'func run() { logging.FromContext(ctx).Infof("installed Admin API: %s", name) }'
+  - 'func run() { log := logging.FromContext(ctx); log.Warnw("überprüfe Admin API", "name", name) }'

@@ -14,3 +14,10 @@ var comments = &cobra.Command{
 	Short: "Build assets", // Keep this comment too
 }
 var nested = &cobra.Command{ Other: Other{Long: "", Short: "Keep this."}}
+
+func logMessages() {
+	logging.FromContext(ctx).Infof("Installed Admin API: %s", name) // Keep this comment
+	log := logging.FromContext(ctx)
+	log.Warnw("Überprüfe Admin API", "name", name)
+	other.Infof("leave this unchanged")
+}

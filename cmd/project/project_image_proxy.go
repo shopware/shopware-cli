@@ -130,7 +130,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		// Create reverse proxy that captures response bodies for caching
 		proxy := newImageReverseProxy(upstream)
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			logging.FromContext(cmd.Context()).Errorf("proxy error: %v", err)
+			logging.FromContext(cmd.Context()).Errorf("Proxy error: %v", err)
 			http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		}
 
@@ -317,7 +317,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			if err := server.Shutdown(shutdownCtx); err != nil {
-				logging.FromContext(cmd.Context()).Errorf("server shutdown: %v", err)
+				logging.FromContext(cmd.Context()).Errorf("Server shutdown: %v", err)
 				_ = server.Close()
 			}
 			cancel()
