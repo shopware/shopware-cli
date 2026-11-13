@@ -236,12 +236,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		return phpConstraintFor(releases, effectiveVersion(), filteredVersions).SupportedVersions()
 	}
 
-	theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
-		s := huh.ThemeCharm(isDark)
-		s.Focused.Title = s.Focused.Title.Foreground(tui.BlueColor)
-		s.Blurred.Title = s.Blurred.Title.Foreground(tui.BlueColor)
-		return s
-	})
+	theme := tui.SetupTheme()
 
 	onOff := func(v bool) string {
 		if v {
