@@ -145,11 +145,20 @@ type Process interface {
 }
 
 type Options struct {
-    Stdin  io.Reader // Process input; nil supplies no input.
-    Stdout io.Writer // Receives stdout as produced; nil discards it.
-    Stderr io.Writer // Receives stderr as produced; nil discards it.
-    TTY    bool      // Requests a terminal when supported by the backend.
+    Stdin   io.Reader   // Process input; nil supplies no input.
+    Stdout  io.Writer   // Receives stdout as produced; nil discards it.
+    Stderr  io.Writer   // Receives stderr as produced; nil discards it.
+    Capture CaptureMode // Configures output buffering; defaults to CaptureNone.
+    TTY     bool        // Requests a terminal when supported by the backend.
 }
+
+type CaptureMode uint8
+
+const (
+    CaptureNone CaptureMode = iota // Do not buffer output (default).
+    CaptureSeparate                // Buffer stdout and stderr separately.
+    CaptureCombined                // Buffer both streams in observed write order.
+)
 ```
 
 `Dir` sets the command's working directory (CWD) in the selected execution
@@ -157,10 +166,11 @@ environment. For containers, application wiring maps the chosen host directory
 to its container path before setting `Dir`, as described under
 [Target wiring and workspace](#target-wiring-and-workspace).
 
-Use `Stdout` and `Stderr` to stream output while the command runs.
-Enable capture to read output from `Result.Output` after completion.
-Streaming and capture can be used together. With neither configured, output
-is discarded.
+Use `Stdout` and `Stderr` in `Options` to stream output while the command runs.
+Set `Options.Capture` to retain output in `Result.Output` after completion.
+Streaming and capture can be used together. By default, output is not buffered.
+With neither configured, output is discarded. Both streaming and buffered
+output follow the same contract across all backends.
 
 `Command` describes an invocation without implicit shell parsing. `Start`
 begins execution and returns a `Process` handle. The backend owns process
@@ -472,8 +482,10 @@ executor := executor.New(ssh.New(local.New(), ssh.Options{
 })).WithDir(remoteDirectory)
 
 result, err := executor.PHP().Run("-r", phpCode).
-    WithCapture(runtime.CaptureSeparate).
-    Run(ctx, runtime.Options{Stdin: bytes.NewReader(payload)})
+    Run(ctx, runtime.Options{
+        Stdin:   bytes.NewReader(payload),
+        Capture: runtime.CaptureSeparate,
+    })
 ```
 
 Here `phpCode` is PHP code without an opening tag. The SSH adapter owns remote
