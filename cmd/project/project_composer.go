@@ -14,6 +14,7 @@ var projectComposerCmd = &cobra.Command{
   shopware-cli project composer require shopware/dev-tools
   shopware-cli project composer update --with-all-dependencies`,
 	DisableFlagParsing: true,
+	Args:               cobra.ArbitraryArgs,
 	ValidArgsFunction: func(cmd *cobra.Command, input []string, _ string) ([]string, cobra.ShellCompDirective) {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {

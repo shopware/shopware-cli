@@ -1,0 +1,57 @@
+# Require tool-list examples for --only/--exclude, e.g. "(comma-separated, e.g. eslint,rector)".
+id: flag-list-help
+language: Go
+severity: error
+message: Describe tool lists with a lowercase comma-separated example
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  # Scope to tool selections in String/StringP registrations, not locale lists.
+  matches: flag-help
+  inside:
+    kind: argument_list
+    has:
+      kind: interpreted_string_literal
+      nthChild:
+        position: 1
+        ofRule: {not: {kind: comment}}
+      regex: '^"(only|exclude)"$'
+  # Check example syntax; the installed tool registry remains the source of names.
+  not:
+    regex: '\(comma-separated, e\.g\. [a-z0-9][a-z0-9-]*(,[a-z0-9][a-z0-9-]*)*\)'
+
+# Local helper keeps this batch independent of shared-utility configuration.
+utils:
+  flag-help:
+    kind: interpreted_string_literal
+    regex: '^"[^"\\]*"$'
+    nthChild:
+      position: 1
+      reverse: true
+      ofRule: {not: {kind: comment}}
+    inside:
+      kind: argument_list
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          kind: selector_expression
+          all:
+            - has:
+                field: field
+                regex: '^StringP?$'
+            - has:
+                field: operand
+                any:
+                  - pattern: $CMD.Flags()
+                  - pattern: $CMD.PersistentFlags()
+                  - all:
+                      - kind: identifier
+                      - pattern: $FLAGS
+                      - inside:
+                          kind: statement_list
+                          stopBy: {kind: block}
+                          has:
+                            any:
+                              - pattern: $FLAGS := $CMD.Flags()
+                              - pattern: $FLAGS := $CMD.PersistentFlags()

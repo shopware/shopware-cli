@@ -98,5 +98,5 @@ func runProjectDeploymentList(cmd *cobra.Command, target deployment.Backend, for
 
 func init() {
 	projectDeploymentCmd.AddCommand(projectDeploymentListCmd)
-	projectDeploymentListCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table or json)")
+	projectDeploymentListCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table, json)")
 }

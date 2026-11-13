@@ -1,0 +1,13 @@
+id: error-capitalization
+valid:
+  - 'func run() error { return errors.New("cannot read config") }'
+  - 'func run() error { return fmt.Errorf("cannot read %s", "Config") }'
+  - 'func run() error { return fmt.Errorf(message, err) }'
+  - 'func run() error { return fmt.Errorf("Cannot " + operation) }'
+  - 'func run() error { return errors.New(`Cannot read config`) }'
+  - 'func run() { fmt.Printf("Cannot read config") }'
+  - 'func run() error { return fmt.Errorf("cannot read config: %w", errors.New("External error")) }'
+invalid:
+  - 'func run() error { return errors.New("Cannot read config") }'
+  - 'func run() (string, error) { return "", fmt.Errorf("Cannot read config: %w", err) }'
+  - 'func run() error { return errors.New("Überprüfung failed") }'

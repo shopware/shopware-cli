@@ -1,0 +1,15 @@
+id: cobra-runnable-args
+valid:
+  - 'var cmd = &cobra.Command{Use: "project"}'
+  - 'var cmd = &cobra.Command{RunE: run, Args: cobra.NoArgs}'
+  - 'var cmd = &cobra.Command{Run: run, Args: cobra.ArbitraryArgs}'
+  - 'var cmd = &cobra.Command{RunE: run, Args: cobra.ExactArgs(1)}'
+  - 'var cmd = &cobra.Command{RunE: nil}'
+  - 'var cmd = &cobra.Command{Run: nil}'
+  - 'var other = Other{RunE: run}'
+  - 'var cmd = &cobra.Command{Other: Other{RunE: run}}'
+invalid:
+  - 'var cmd = &cobra.Command{RunE: run}'
+  - 'var cmd = &cobra.Command{Run: run}'
+  - 'var cmd = &cobra.Command{RunE: run, Args: nil}'
+  - 'var cmd = &cobra.Command{RunE: run, Other: Other{Args: cobra.NoArgs}}'

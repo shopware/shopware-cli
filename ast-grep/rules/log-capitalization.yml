@@ -1,0 +1,50 @@
+# Capitalise log messages, e.g. "installed Admin API" becomes "Installed Admin API".
+id: log-capitalization
+language: Go
+severity: error
+message: Start log messages with a capital letter
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  kind: interpreted_string_literal
+  pattern: $TEXT
+  regex: '^"\p{Ll}[^"\\]*"$'
+  nthChild:
+    position: 1
+    ofRule: {not: {kind: comment}}
+  inside:
+    kind: argument_list
+    inside:
+      kind: call_expression
+      has:
+        field: function
+        kind: selector_expression
+        all:
+          - has:
+              field: field
+              regex: '^(Debug|Info|Warn|Error|DPanic|Panic|Fatal)(f|w)?$'
+          - has:
+              field: operand
+              any:
+                - matches: context-logger
+                - all:
+                    - kind: identifier
+                    - pattern: $LOGGER
+                    - inside:
+                        kind: statement_list
+                        stopBy: {kind: block}
+                        has:
+                          pattern: $LOGGER := logging.FromContext($CTX)
+
+transform:
+  BODY: substring($TEXT, startChar=1, endChar=-1)
+  CAPITALIZED: convert($BODY, toCase=capitalize)
+fix: '"$CAPITALIZED"'
+
+utils:
+  context-logger:
+    kind: call_expression
+    has:
+      field: function
+      kind: selector_expression
+      regex: '^logging\.FromContext$'

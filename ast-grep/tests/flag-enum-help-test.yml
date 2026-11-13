@@ -1,0 +1,16 @@
+id: flag-enum-help
+valid:
+  - 'func init() { cmd.Flags().String("format", "", "Output format (table, json)") }'
+  - 'func init() { cmd.Flags().String("format", "", "Output format (table,json)") }'
+  - 'func init() { cmd.Flags().String("format", "", "Report format (table, json; auto-detected if unset)") }'
+  - 'func init() { cmd.Flags().String("format", "", "SBOM format (only cyclonedx-json is supported)") }'
+  - 'func init() { cmd.Flags().String("filename", "", "Filename (JSON or YAML)") }'
+  - 'func init() { other.String("format", "", "Output format (table or json)") }'
+  - 'func init() { cmd.Flags().String("format", "", helpText) }'
+  - 'func init() { cmd.Flags().String("format", "", `Output format (table or json)`) }'
+invalid:
+  - 'func init() { cmd.Flags().String("format", "", "Output format (table or json)") }'
+  - 'func init() { cmd.Flags().String("format", "", "Output format (table, JSON)") }'
+  - 'func init() { cmd.PersistentFlags().StringP("type", "t", "", "Type (plugin|theme)") }'
+  - 'func init() { cmd.Flags().String("ci", "", "CI system (github/gitlab)") }'
+  - 'func init() { flags := cmd.Flags(); flags.String("format", "", "Output format (table or json)") }'

@@ -1,0 +1,14 @@
+id: flag-usage-default
+valid:
+  - 'func init() { cmd.Flags().String("output", "out.json", "Output file") }'
+  - 'func init() { cmd.Flags().String("output", "", "Output file (default: generated name when omitted)") }'
+  - 'func init() { other.String("output", "out.json", "Output file (default out.json)") }'
+  - 'func init() { cmd.Flags().String("name", "(default name)", "Select name") }'
+  - 'func init() { cmd.Flags().String("output", "", helpText) }'
+  - 'func init() { cmd.Flags().String("output", "", "Output " + "(default out.json)") }'
+  - 'func init() { cmd.Flags().String("output", "", `Output file (default out.json)`) }'
+invalid:
+  - 'func init() { cmd.Flags().String("output", "out.json", "Output file (default out.json)") }'
+  - 'func init() { cmd.PersistentFlags().IntP("count", "c", 5, "Count (default 5)") }'
+  - 'func init() { cmd.Flags().BoolVar(&force, "force", false, "Overwrite files (default false)") }'
+  - 'func init() { flags := cmd.Flags(); flags.String("output", "out.json", "Output (default out.json)") }'

@@ -101,6 +101,7 @@ var projectDevCmd = &cobra.Command{
 	Use:   "dev",
 	Short: "Start the development environment, with its dashboard when run in a terminal",
 	Long:  "Start the development environment. This launches the interactive TUI dashboard when run in a terminal, or starts the containers in the background otherwise. Requires a Docker environment; local and ssh environments do not manage containers.",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
