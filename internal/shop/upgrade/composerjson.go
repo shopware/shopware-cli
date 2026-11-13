@@ -10,6 +10,7 @@ import (
 
 	"github.com/shyim/go-composer"
 
+	"github.com/shopware/shopware-cli/internal/deploymenthelper"
 	"github.com/shopware/shopware-cli/internal/extension"
 )
 
@@ -68,8 +69,7 @@ func applyTargetConstraints(c *composer.Json, target string, extensionPackages [
 		c.Require[pkg] = constraint
 	}
 
-	if !c.HasPackage(deploymentHelperPackage) && !c.HasPackageDev(deploymentHelperPackage) {
-		c.AddPackage(deploymentHelperPackage, "*")
+	if deploymenthelper.EnsureRequired(c) {
 		changes = append(changes, deploymentHelperPackage+": added")
 	}
 

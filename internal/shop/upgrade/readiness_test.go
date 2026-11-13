@@ -313,3 +313,13 @@ func TestCheckGitClean(t *testing.T) {
 	check = checkGitClean(t.Context(), dir)
 	assert.Equal(t, StateOK, check.State)
 }
+
+func TestDeploymentHelperReadinessRequiresProductionDependency(t *testing.T) {
+	dir := t.TempDir()
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		RequireDev: map[string]string{"shopware/deployment-helper": "^0.5"},
+	}.String())
+	check := checkDeploymentHelper(dir)
+	assert.Equal(t, StateWarn, check.State)
+	assert.Equal(t, "no", check.Value)
+}
