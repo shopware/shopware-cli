@@ -476,17 +476,33 @@ func (e *proxyEnvironment) repointSalesChannel(ctx context.Context, fromURLs []s
 	}
 	defer cleanup()
 
+	var tried []string
+	var rowsAffected int64
+
 	for _, fromURL := range fromURLs {
 		if fromURL == toURL {
 			continue
 		}
+		tried = append(tried, fromURL)
 
-		if _, err := conn.ExecContext(ctx, "UPDATE sales_channel_domain SET url = ? WHERE url = ?", toURL, fromURL); err != nil {
+		result, err := conn.ExecContext(ctx, "UPDATE sales_channel_domain SET url = ? WHERE url = ?", toURL, fromURL)
+		if err != nil {
 			if shopNotInstalled(err.Error()) {
 				return nil
 			}
 			return fmt.Errorf("repointing sales channel url: %w", err)
 		}
+
+		if n, err := result.RowsAffected(); err == nil {
+			rowsAffected += n
+		}
+	}
+
+	// Every candidate URL was a guess (the registered previous APP_URL, or the
+	// proxy hostname); none of them matching is a real possibility, not a
+	// driver error, so it is reported rather than silently left unrepointed.
+	if len(tried) > 0 && rowsAffected == 0 {
+		return fmt.Errorf("no sales channel domain matched any of %s; set it to %s by hand", strings.Join(tried, ", "), toURL)
 	}
 
 	return nil
