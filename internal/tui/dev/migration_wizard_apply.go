@@ -6,6 +6,7 @@ import (
 
 	"github.com/shyim/go-composer"
 
+	"github.com/shopware/shopware-cli/internal/deploymenthelper"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -67,7 +68,7 @@ func ensureDeploymentHelper(projectRoot string) (changed bool, err error) {
 		return false, err
 	}
 
-	if !cj.EnsurePackage("shopware/deployment-helper", "*") {
+	if !deploymenthelper.EnsureRequired(cj) {
 		return false, nil
 	}
 
