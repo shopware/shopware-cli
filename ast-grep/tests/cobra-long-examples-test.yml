@@ -1,0 +1,21 @@
+id: cobra-long-examples
+valid:
+  - 'var cmd = &cobra.Command{Long: "Build assets", Example: "build path"}'
+  - 'var cmd = &cobra.Command{Long: "Build assets. For example: use a plugin"}'
+  - 'var cmd = &cobra.Command{Long: "Build assets.\nFor example: use a plugin"}'
+  - 'var cmd = &cobra.Command{Long: "Use literal \\nExamples: in a template"}'
+  - 'var cmd = &cobra.Command{Long: `Use literal \nExamples: in a template`}'
+  - 'var cmd = &cobra.Command{Long: generator.Long}'
+  - 'var other = Other{Long: "Examples: build"}'
+  - 'var cmd = &cobra.Command{Other: Other{Long: "Examples: build"}}'
+invalid:
+  - 'var cmd = &cobra.Command{Long: "Examples: build"}'
+  - 'var cmd = &cobra.Command{Long: "Build assets.\nExample: build path"}'
+  - 'var cmd = &cobra.Command{Long: `EXAMPLES: build path`}'
+  - |
+    var cmd = &cobra.Command{
+      Long: `Build assets.
+
+      Examples:
+        shopware-cli extension build`,
+    }

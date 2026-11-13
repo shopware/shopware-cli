@@ -1,0 +1,22 @@
+# Reject backtick command hints, e.g. ": run `shopware-cli account login`".
+id: error-hint-backticks
+language: Go
+severity: error
+message: Use double quotes instead of backticks around error hints
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  kind: interpreted_string_literal
+  regex: '(, use |: run |\(pass )`[^`]+`'
+  nthChild:
+    position: 1
+    ofRule:
+      not: {kind: comment}
+  inside:
+    kind: argument_list
+    inside:
+      kind: call_expression
+      has:
+        field: function
+        kind: selector_expression
+        regex: '^(fmt\.Errorf|errors\.New)$'

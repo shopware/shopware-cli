@@ -1,0 +1,47 @@
+# Reject unreadable NoOptDefVal literals, e.g. " " or "__PROMPT__".
+id: flag-noopt-sentinel
+language: Go
+severity: error
+message: Use a readable word for the optional flag value sentinel
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  pattern:
+    context: 'func _() { $FLAG.NoOptDefVal = $TEXT }'
+    selector: assignment_statement
+
+constraints:
+  FLAG:
+    kind: call_expression
+    has:
+      field: function
+      kind: selector_expression
+      all:
+        - has:
+            field: field
+            regex: '^Lookup$'
+        - has:
+            field: operand
+            matches: cobra-flag-set
+  TEXT:
+    all:
+      # Inspect literals only; allow common whitespace escapes as well.
+      - regex: '^("([^"\\]|\\[tnr])*"|`[^`]*`)$'
+      - regex: '(^["`]__|[ \t\r\n]|\\[tnr])'
+
+# Keep this helper local so the rule needs no utilDirs configuration.
+utils:
+  cobra-flag-set:
+    any:
+      - pattern: $CMD.Flags()
+      - pattern: $CMD.PersistentFlags()
+      - all:
+          - kind: identifier
+          - pattern: $FLAGS
+          - inside:
+              kind: statement_list
+              stopBy: {kind: block}
+              has:
+                any:
+                  - pattern: $FLAGS := $CMD.Flags()
+                  - pattern: $FLAGS := $CMD.PersistentFlags()
