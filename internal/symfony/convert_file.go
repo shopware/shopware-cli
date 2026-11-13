@@ -129,11 +129,13 @@ var (
 // configuration directory dir besides services.xml and routes.xml. They can be
 // loaded by Shopware itself or imported from PHP or YAML configuration, so the
 // files are recognized by their root element. Files matched by a glob import
-// are left out, as glob imports keep loading XML files.
+// are left out, as glob imports keep loading XML files, and so are the files
+// they import, as their imports are not rewritten.
 func FindXMLConfigFiles(ctx context.Context, dir string) (services []string, routes []string, err error) {
 	servicesPath := filepath.Join(dir, "services.xml")
 	routesPath := filepath.Join(dir, "routes.xml")
-	globbed := map[string]struct{}{}
+	imports := map[string][]string{}
+	pending := []string{}
 
 	err = filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if path == dir && errors.Is(err, fs.ErrNotExist) {
@@ -174,9 +176,9 @@ func FindXMLConfigFiles(ctx context.Context, dir string) (services []string, rou
 
 		// A file that cannot be parsed is reported by its conversion.
 		if config, err := parse(content); err == nil {
-			for _, match := range globImportMatches(path, config) {
-				globbed[match] = struct{}{}
-			}
+			imported, globbed := xmlImportMatches(path, config)
+			imports[path] = imported
+			pending = append(pending, globbed...)
 		}
 
 		return nil
@@ -185,31 +187,44 @@ func FindXMLConfigFiles(ctx context.Context, dir string) (services []string, rou
 		return nil, nil, err
 	}
 
-	isGlobbed := func(path string) bool {
-		_, ok := globbed[path]
+	retained := map[string]struct{}{}
+	for len(pending) > 0 {
+		path := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if _, ok := retained[path]; ok {
+			continue
+		}
+		retained[path] = struct{}{}
+		pending = append(pending, imports[path]...)
+	}
+
+	isRetained := func(path string) bool {
+		_, ok := retained[path]
 		return ok
 	}
 
-	return slices.DeleteFunc(services, isGlobbed), slices.DeleteFunc(routes, isGlobbed), nil
+	return slices.DeleteFunc(services, isRetained), slices.DeleteFunc(routes, isRetained), nil
 }
 
-// globImportMatches returns the existing files matched by glob imports of XML
-// files in the file at path.
-func globImportMatches(path string, config convertibleXMLConfig) []string {
-	matches := []string{}
-
+// xmlImportMatches returns the existing local XML files the file at path
+// imports, and separately those it imports through a glob pattern.
+func xmlImportMatches(path string, config convertibleXMLConfig) (imported []string, globbed []string) {
 	for _, reference := range config.importReferences() {
 		resource := *reference.resource
-		if !strings.HasSuffix(strings.ToLower(resource), ".xml") || !strings.ContainsAny(resource, "*?[{") || filepath.IsAbs(resource) {
+		if !strings.HasSuffix(strings.ToLower(resource), ".xml") || filepath.IsAbs(resource) {
 			continue
 		}
 
-		// A malformed pattern matches nothing.
-		resourceMatches, _ := filepath.Glob(filepath.Join(filepath.Dir(path), filepath.FromSlash(resource)))
-		matches = append(matches, resourceMatches...)
+		// A plain path matches itself when the file exists. A malformed
+		// pattern matches nothing.
+		matches, _ := filepath.Glob(filepath.Join(filepath.Dir(path), filepath.FromSlash(resource)))
+		imported = append(imported, matches...)
+		if strings.ContainsAny(resource, "*?[{") {
+			globbed = append(globbed, matches...)
+		}
 	}
 
-	return matches
+	return imported, globbed
 }
 
 // xmlRootName returns the namespaced name of the root element, or the zero
@@ -298,6 +313,12 @@ func planConversion(ctx context.Context, path string, parse func([]byte) (conver
 			return &XMLConversionError{Path: path, Kind: XMLConversionTargetExists, Err: fmt.Errorf("%s exists already", existing)}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
+		}
+	}
+
+	for source, planned := range targets {
+		if planned == target {
+			return &XMLConversionError{Path: path, Kind: XMLConversionTargetExists, Err: fmt.Errorf("%s is converted to %s as well", source, target)}
 		}
 	}
 

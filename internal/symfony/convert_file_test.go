@@ -209,7 +209,8 @@ func TestFindXMLConfigFiles(t *testing.T) {
 		"routes.xml":                `<routes/>`,
 		"services/gateway.xml":      `<container xmlns="http://symfony.com/schema/dic/services"/>`,
 		"routes/admin.xml":          `<?xml version="1.0"?><routes xmlns="http://symfony.com/schema/routing"/>`,
-		"packages/framework.xml":    `<container xmlns="http://symfony.com/schema/dic/services"/>`,
+		"packages/framework.xml":    `<container xmlns="http://symfony.com/schema/dic/services"><imports><import resource="../shared.xml"/></imports></container>`,
+		"shared.xml":                `<container xmlns="http://symfony.com/schema/dic/services"/>`,
 		"config.xml":                `<config xmlns="https://example.com/config"/>`,
 		"other/no-namespace.xml":    `<container/>`,
 		"other/other-namespace.xml": `<container xmlns="https://example.com/container"/>`,
@@ -257,4 +258,23 @@ func TestConvertServicesXMLFilesSharingAnImport(t *testing.T) {
 	}
 	assert.FileExists(t, filepath.Join(dir, "shared.yaml"))
 	assert.NoFileExists(t, filepath.Join(dir, "shared.xml"))
+}
+
+func TestConvertServicesXMLFilesRejectsSharedTarget(t *testing.T) {
+	dir := t.TempDir()
+	lower := filepath.Join(dir, "extra.xml")
+	upper := filepath.Join(dir, "extra.XML")
+	require.NoError(t, os.WriteFile(lower, []byte(`<container/>`), 0o644))
+	if _, err := os.Stat(upper); err == nil {
+		t.Skip("the file system is case-insensitive")
+	}
+	require.NoError(t, os.WriteFile(upper, []byte(`<container/>`), 0o644))
+
+	_, err := ConvertServicesXMLFiles(t.Context(), lower, upper)
+	var conversionErr *XMLConversionError
+	require.ErrorAs(t, err, &conversionErr)
+	assert.Equal(t, XMLConversionTargetExists, conversionErr.Kind)
+	assert.FileExists(t, lower)
+	assert.FileExists(t, upper)
+	assert.NoFileExists(t, filepath.Join(dir, "extra.yaml"))
 }
