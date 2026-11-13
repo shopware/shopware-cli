@@ -51,8 +51,8 @@ const containerConfigDir = "/shopware-cli"
 
 // dynamicConfigTemplate is the Traefik file-provider fragment: the server
 // certificate plus a router exposing Traefik's ping endpoint on
-// https://proxy.<domain>/ping. The file provider watches the directory, so
-// Traefik picks up regenerated certificates without a restart.
+// https://proxy.<domain>/ping. The file provider watches this file, not the
+// certificate files it references; see RestartTraefik.
 const dynamicConfigTemplate = `tls:
   certificates:
     - certFile: ` + containerConfigDir + `/certs/cert.pem
