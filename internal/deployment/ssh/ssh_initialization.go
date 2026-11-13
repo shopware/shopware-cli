@@ -3,18 +3,13 @@ package ssh
 import (
 	"bytes"
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 )
-
-//go:embed ssh_deployment_init.php
-var sshDeploymentInitScript string
 
 // initializationStore separates configuration storage from prompting and group coordination.
 type initializationStore interface {
@@ -45,7 +40,7 @@ func (s sshDeploymentInitState) HasValidRuntimeConfig() bool {
 type sshDeploymentInitConfig = deployment.InitializationConfig
 
 // sshDeploymentInitAction values are the JSON action names accepted by
-// ssh_deployment_init.php; keep these strings in sync with its dispatch branches.
+// php/commands/init.php; keep these strings in sync with its dispatch branches.
 type sshDeploymentInitAction string
 
 const (
@@ -97,17 +92,9 @@ func (s sshInitializationStore) Apply(ctx context.Context, config sshDeploymentI
 
 // run sends initialization input over stdin so secrets stay out of SSH command arguments.
 func (s sshInitializationStore) run(ctx context.Context, input sshDeploymentInitInput) ([]byte, error) {
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return nil, err
-	}
-	cmd := s.ssh.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(withSSHDeploymentLayout(sshDeploymentInitScript), phpOpeningTag)).Cmd
-	cmd.Stdin = bytes.NewReader(payload)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("initialize SSH deployment: %w\n%s", err, strings.TrimSpace(stderr.String()))
+	var stdout bytes.Buffer
+	if err := s.ssh.runDeploymentCommand(ctx, "init", input, true, &stdout); err != nil {
+		return nil, fmt.Errorf("initialize SSH deployment: %w", err)
 	}
 	return stdout.Bytes(), nil
 }

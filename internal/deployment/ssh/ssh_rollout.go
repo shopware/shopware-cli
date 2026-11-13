@@ -2,11 +2,9 @@ package ssh
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -25,20 +23,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-//go:embed ssh_deployment.php
-var sshDeploymentMainScript string
-
-//go:embed ssh_cachetool.php
-var sshCachetoolScript string
-
-var sshDeploymentScript = withSSHDeploymentLayout(sshCachetoolScript) + "\n" +
-	strings.TrimPrefix(sshPHPRestartScript, phpOpeningTag) + "\n" +
-	strings.TrimPrefix(sshPermissionsScript, phpOpeningTag) + "\n" +
-	strings.TrimPrefix(sshDeploymentMainScript, phpOpeningTag)
-
-//go:embed ssh_deployment_list.php
-var sshDeploymentListScript string
-
 var sshReleaseNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 type synchronizedWriter struct {
@@ -56,7 +40,7 @@ func (w *synchronizedWriter) UnwrapWriter() io.Writer {
 	return w.output
 }
 
-// sshDeploymentAction values match the action dispatch in ssh_deployment.php.
+// sshDeploymentAction values match the action dispatch in php/commands/deploy.php.
 type sshDeploymentAction string
 
 const (
@@ -182,19 +166,8 @@ func (s *SSH) ListRollouts(ctx context.Context) ([]Rollout, error) {
 	if err != nil {
 		return nil, err
 	}
-	payload, err := json.Marshal(sshDeploymentListInput{Root: root, Current: s.activeLinkName()})
+	output, err := s.deploymentCommandOutput(ctx, "list", sshDeploymentListInput{Root: root, Current: s.activeLinkName()})
 	if err != nil {
-		return nil, err
-	}
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(withSSHDeploymentLayout(sshDeploymentListScript), phpOpeningTag), "--", string(payload)).Cmd
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	output, err := cmd.Output()
-	if err != nil {
-		message := strings.TrimSpace(stderr.String())
-		if message != "" {
-			return nil, fmt.Errorf("list SSH rollouts: %s: %w", message, err)
-		}
 		return nil, fmt.Errorf("list SSH rollouts: %w", err)
 	}
 	var rollouts []Rollout
@@ -219,35 +192,17 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 	if s.env != nil && s.env.SSH != nil {
 		input.Hooks = s.env.SSH.Hooks
 	}
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return Rollout{}, err
-	}
 	// current may not exist yet.
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, phpOpeningTag), "--", string(payload)).Cmd
-	cmd.Stderr = output
-	stdin, err := cmd.StdinPipe()
+	session, err := s.openDeploymentSession(ctx, input, output)
 	if err != nil {
 		return Rollout{}, err
 	}
-	defer func() { _ = stdin.Close() }()
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return Rollout{}, err
-	}
-	defer func() { _ = stdout.Close() }()
-	if err := cmd.Start(); err != nil {
-		return Rollout{}, err
-	}
-	reader := bufio.NewReader(stdout)
-	result, protocolErr := exchangeSSHDeployment(ctx, stdin, reader, archive, input, ci.New(output))
+	result, protocolErr := exchangeSSHDeployment(ctx, session.stdin, session.reader, archive, input, ci.New(output))
 	if protocolErr == nil && input.Action == sshDeploymentActivate {
-		protocolErr = json.NewDecoder(reader).Decode(&result)
+		protocolErr = json.NewDecoder(session.reader).Decode(&result)
 	}
 	// EOF aborts any activation the client did not authorize.
-	closeErr := stdin.Close()
-	waitErr := cmd.Wait()
-	if err := errors.Join(ctx.Err(), protocolErr, closeErr, waitErr); err != nil {
+	if err := errors.Join(ctx.Err(), protocolErr, session.close()); err != nil {
 		current := input.Current
 		if current == "" {
 			current = "current"

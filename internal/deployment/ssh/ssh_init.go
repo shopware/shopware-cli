@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 
 	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 	shopinstall "github.com/shopware/shopware-cli/internal/shop/install"
@@ -76,34 +78,32 @@ func (s *SSH) initializeDeployment(ctx context.Context, prompt func(context.Cont
 
 // promptDeploymentInitialization collects runtime and optional first-install values without writing them.
 func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
-	configureInstall := !state.HasCurrent && !state.HasInstallConfig
-	confirmed := true
-	databaseMode := "guided"
+	configureInstall := tui.No
+	if !state.HasCurrent && !state.HasInstallConfig {
+		configureInstall = tui.Yes
+	}
 	appURL := ""
 	if s.env != nil {
 		appURL = s.env.URL
 	}
-	databaseURL := ""
 	databaseHost := "127.0.0.1"
 	databasePort := "3306"
 	databaseName := "shopware"
 	databaseUser := "shopware"
 	databasePassword := ""
-	locale := "en-GB"
-	currency := "EUR"
-	adminUsername := "admin"
-	adminEmail := ""
+	locale := shopinstall.DefaultLocale
+	currency := shopinstall.DefaultCurrency
+	adminUsername := shopinstall.DefaultAdminUsername
 	adminPassword := ""
-	salesChannelURL := ""
 
 	proceed := true
 	err := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().
-			Title("This environment is not set up for deployments yet. Continue with setup?").
-			Affirmative("Continue").
-			Negative("Cancel").
+		huh.NewSelect[bool]().
+			Title("Set up this environment for deployments?").
+			Description("Requirements:\n• The server runs PHP 8.4 or higher\n• The SSH user is the same user that runs PHP (web server / PHP-FPM)").
+			Options(huh.NewOption("Continue", true), huh.NewOption("Cancel", false)).
 			Value(&proceed),
-	)).WithTheme(tui.ShopwareTheme()).RunWithContext(ctx)
+	)).WithTheme(tui.SetupTheme()).RunWithContext(ctx)
 	if errors.Is(err, huh.ErrUserAborted) {
 		return sshDeploymentInitConfig{}, false, nil
 	}
@@ -114,110 +114,142 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 	requiredValue := tui.CombineValidators(tui.ValidateRequired, tui.ValidateSingleLine)
 	applicationURL := tui.CombineValidators(requiredValue, tui.ValidateHTTPURL)
 
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Application URL").
-				Placeholder("https://shop.example.com").
-				Validate(applicationURL).
-				Value(&appURL),
-			huh.NewSelect[string]().
-				Title("Database configuration").
-				Options(
-					huh.NewOption("Enter database credentials", "guided"),
-					huh.NewOption("Enter a complete DATABASE_URL", "url"),
-				).
-				Value(&databaseMode),
-		),
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Database host").
-				Validate(requiredValue).
-				Value(&databaseHost),
-			huh.NewInput().
-				Title("Database port").
-				Validate(tui.ValidatePort).
-				Value(&databasePort),
-			huh.NewInput().
-				Title("Database name").
-				Validate(requiredValue).
-				Value(&databaseName),
-			huh.NewInput().
-				Title("Database user").
-				Validate(requiredValue).
-				Value(&databaseUser),
-			huh.NewInput().
-				Title("Database password").
-				EchoMode(huh.EchoModePassword).
-				Value(&databasePassword),
-		).WithHideFunc(func() bool { return databaseMode != "guided" }),
-		huh.NewGroup(
-			huh.NewInput().
-				Title("DATABASE_URL").
-				Placeholder("mysql://user:password@host:3306/database").
-				Validate(validateDatabaseURL).
-				Value(&databaseURL),
-		).WithHideFunc(func() bool { return databaseMode != "url" }),
-		huh.NewGroup(
-			huh.NewConfirm().
-				Title("Configure values for a possible first Shopware installation?").
-				Description("Deployment Helper uses these only when it detects an uninstalled database.").
-				Value(&configureInstall),
-		),
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Installation locale").
-				Validate(requiredValue).
-				Value(&locale),
-			huh.NewInput().
-				Title("Installation currency").
-				Validate(requiredValue).
-				Value(&currency),
-			huh.NewInput().
-				Title("Administrator username").
-				Validate(requiredValue).
-				Value(&adminUsername),
-			huh.NewInput().
-				Title("Administrator email (optional)").
-				Validate(tui.OptionalValidator(tui.ValidateEmail)).
-				Value(&adminEmail),
-			huh.NewInput().
-				Title("Administrator password").
-				Description("Removed from the server after a successful Deployment Helper run.").
-				EchoMode(huh.EchoModePassword).
-				Validate(tui.CombineValidators(requiredValue, shopinstall.ValidateAdminPassword)).
-				Value(&adminPassword),
-			huh.NewInput().
-				Title("Sales channel URL (optional)").
-				Description("Leave empty to use the application URL.").
-				Validate(tui.OptionalValidator(applicationURL)).
-				Value(&salesChannelURL),
-		).WithHideFunc(func() bool { return !configureInstall }),
-		huh.NewGroup(
-			huh.NewConfirm().
-				Title("Write this deployment configuration to the SSH host?").
-				Description("Initialization runs once. Existing unrelated variables are preserved; edit .env.local manually for later changes.").
-				Affirmative("Write configuration").
-				Negative("Cancel").
-				Value(&confirmed),
-		),
-	).WithTheme(tui.ShopwareTheme())
-	if err := form.RunWithContext(ctx); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			return sshDeploymentInitConfig{}, false, nil
-		}
-		return sshDeploymentInitConfig{}, false, err
+	localeOptions := make([]huh.Option[string], len(shopinstall.Languages))
+	for i, language := range shopinstall.Languages {
+		localeOptions[i] = huh.NewOption(language.Label+" ("+language.ID+")", language.ID)
 	}
 
-	if databaseMode == "guided" {
-		databaseURL = buildDatabaseURL(databaseHost, databasePort, databaseName, databaseUser, databasePassword)
+	for {
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Application URL").
+					Placeholder("https://shop.example.com").
+					Validate(applicationURL).
+					Value(&appURL),
+			),
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Database Host").
+					Validate(requiredValue).
+					Value(&databaseHost),
+			),
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Database Port").
+					Validate(tui.ValidatePort).
+					Value(&databasePort),
+			),
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Database Name").
+					Validate(requiredValue).
+					Value(&databaseName),
+			),
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Database User").
+					Validate(requiredValue).
+					Value(&databaseUser),
+			),
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Database Password").
+					EchoMode(huh.EchoModePassword).
+					Value(&databasePassword),
+			),
+			huh.NewGroup(
+				tui.NewYesNo().
+					Title("Configure a first Shopware installation?").
+					Description("These settings are used only when the database has not been installed yet.").
+					Value(&configureInstall),
+			),
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Installation Locale").
+					Description("Select the primary language for your storefront").
+					Height(10).
+					Options(localeOptions...).
+					Value(&locale),
+			).WithHideFunc(func() bool { return configureInstall != tui.Yes }),
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Installation Currency").
+					Description("Select the default currency for pricing").
+					Options(huh.NewOptions(shopinstall.Currencies...)...).
+					Value(&currency),
+			).WithHideFunc(func() bool { return configureInstall != tui.Yes }),
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Administrator Username").
+					Validate(requiredValue).
+					Value(&adminUsername),
+			).WithHideFunc(func() bool { return configureInstall != tui.Yes }),
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Administrator Password").
+					Description("Removed from the server after a successful Deployment Helper run.").
+					EchoMode(huh.EchoModePassword).
+					Validate(tui.CombineValidators(requiredValue, shopinstall.ValidateAdminPassword)).
+					Value(&adminPassword),
+			).WithHideFunc(func() bool { return configureInstall != tui.Yes }),
+		).WithTheme(tui.SetupTheme())
+		if err := form.RunWithContext(ctx); err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				return sshDeploymentInitConfig{}, false, nil
+			}
+			return sshDeploymentInitConfig{}, false, err
+		}
+
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, tui.SectionHeadingStyle.Render("Summary"))
+		fmt.Fprintln(os.Stderr)
+		labelStyle := lipgloss.NewStyle().Width(22)
+		fmt.Fprintf(os.Stderr, "  %s %s\n", labelStyle.Render("Application URL:"), appURL)
+		fmt.Fprintf(os.Stderr, "  %s %s\n", labelStyle.Render("Database host:"), net.JoinHostPort(databaseHost, databasePort))
+		fmt.Fprintf(os.Stderr, "  %s %s\n", labelStyle.Render("Database name:"), databaseName)
+		fmt.Fprintf(os.Stderr, "  %s %s\n", labelStyle.Render("Database user:"), databaseUser)
+		if configureInstall == tui.Yes {
+			fmt.Fprintf(os.Stderr, "  %s %s\n", labelStyle.Render("Installation locale:"), locale)
+			fmt.Fprintf(os.Stderr, "  %s %s\n", labelStyle.Render("Installation currency:"), currency)
+			fmt.Fprintf(os.Stderr, "  %s %s\n", labelStyle.Render("Administrator:"), adminUsername)
+		} else {
+			fmt.Fprintf(os.Stderr, "  %s %s\n", labelStyle.Render("First installation:"), tui.RedText.Render("No"))
+		}
+		fmt.Fprintln(os.Stderr)
+
+		selectConfirm := "proceed"
+		confirmForm := huh.NewForm(huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("What would you like to do?").
+				Description("Write this configuration to the SSH host. For later changes, edit .env.local on the server.").
+				Options(
+					huh.NewOption("Proceed", "proceed"),
+					huh.NewOption("Restart form", "restart"),
+					huh.NewOption("Cancel", "cancel"),
+				).
+				Value(&selectConfirm),
+		)).WithTheme(tui.SetupTheme())
+		if err := confirmForm.RunWithContext(ctx); err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				return sshDeploymentInitConfig{}, false, nil
+			}
+			return sshDeploymentInitConfig{}, false, err
+		}
+		if selectConfirm == "cancel" {
+			return sshDeploymentInitConfig{}, false, nil
+		}
+		if selectConfirm == "proceed" {
+			break
+		}
 	}
+
 	config := sshDeploymentInitConfig{
 		RuntimeValues: map[string]string{
 			"APP_ENV":      "prod",
 			"APP_DEBUG":    "0",
 			"APP_URL":      appURL,
-			"DATABASE_URL": databaseURL,
+			"DATABASE_URL": buildDatabaseURL(databaseHost, databasePort, databaseName, databaseUser, databasePassword),
 		},
 	}
 	if !slices.Contains(state.RuntimeKeys, "APP_SECRET") {
@@ -227,21 +259,15 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 		}
 		config.RuntimeValues["APP_SECRET"] = secret
 	}
-	if configureInstall {
+	if configureInstall == tui.Yes {
 		config.InstallValues = map[string]string{
 			"INSTALL_LOCALE":         locale,
 			"INSTALL_CURRENCY":       strings.ToUpper(currency),
 			"INSTALL_ADMIN_USERNAME": adminUsername,
 			"INSTALL_ADMIN_PASSWORD": adminPassword,
 		}
-		if adminEmail != "" {
-			config.InstallValues["INSTALL_ADMIN_EMAIL"] = adminEmail
-		}
-		if salesChannelURL != "" {
-			config.InstallValues["SALES_CHANNEL_URL"] = salesChannelURL
-		}
 	}
-	return config, confirmed, nil
+	return config, true, nil
 }
 
 // validateDatabaseURL requires a single-line MySQL or MariaDB URL with a host and database.

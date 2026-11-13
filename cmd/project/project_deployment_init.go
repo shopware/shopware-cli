@@ -22,7 +22,12 @@ The project directory defaults to the current directory. Select the environment
 with -e and follow the prompts to provide its initialization values.
 
 For unattended setup, pass --init-config with a JSON file or '-' to read from
-stdin. After initialization, the command prints any remaining setup steps.`,
+stdin. After initialization, the command prints any remaining setup steps.
+
+Requirements:
+  - The target server runs PHP 8.4 or higher
+  - The SSH user is the same user that runs PHP (web server / PHP-FPM), so
+    files created during a deployment are readable and writable by the shop`,
 	Example: `  shopware-cli project deploy init -e production
   shopware-cli -n project deploy init -e production --init-config - < init.json`,
 	Args: cobra.MaximumNArgs(1),
