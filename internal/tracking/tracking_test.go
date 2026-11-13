@@ -15,7 +15,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/cliversion"
+	"github.com/shopware/shopware-cli/internal/userconfig"
 )
+
+// enableTracking isolates user preferences and restores the environment after the test.
+func enableTracking(t *testing.T) {
+	t.Helper()
+	t.Setenv(userconfig.PathEnv, filepath.Join(t.TempDir(), "config.yaml"))
+	t.Setenv("DO_NOT_TRACK", "")
+	require.NoError(t, os.Unsetenv("DO_NOT_TRACK"))
+}
 
 // resetInit resets the lazy initialization so each test starts fresh.
 func resetInit(t *testing.T) {
@@ -26,6 +35,7 @@ func resetInit(t *testing.T) {
 }
 
 func TestTrackSendsUDPPayload(t *testing.T) {
+	enableTracking(t)
 	resetInit(t)
 	clearCIEnvVars(t)
 
@@ -66,6 +76,35 @@ func TestTrackRespectsDoNotTrack(t *testing.T) {
 
 	// Should return without sending anything
 	Track(t.Context(), "should_not_send", nil)
+}
+
+func TestTrackRespectsUserConfig(t *testing.T) {
+	enableTracking(t)
+	resetInit(t)
+	clearCIEnvVars(t)
+
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("telemetry: false\n"), 0o600))
+	t.Setenv("SHOPWARE_CLI_CONFIG", configPath)
+
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	ensureInitialized()
+	addr = conn.LocalAddr().String()
+
+	assert.False(t, enabled())
+	Track(t.Context(), "should_not_send", nil)
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(200*time.Millisecond)))
+	_, err = conn.Read(make([]byte, 4096))
+	assert.Error(t, err, "no event must be sent when telemetry is disabled in the user config")
+
+	require.NoError(t, os.WriteFile(configPath, []byte("telemetry: true\n"), 0o600))
+	assert.True(t, enabled())
+	t.Setenv("DO_NOT_TRACK", "1")
+	assert.False(t, enabled())
 }
 
 // clearCIEnvVars unsets all CI environment variables that resolveID checks,
