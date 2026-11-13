@@ -312,3 +312,23 @@ func TestConvertServicesXMLFilesKeepsGlobImportedFiles(t *testing.T) {
 	assert.Contains(t, string(services), "resource: packages/*.xml")
 	assert.Contains(t, string(services), "resource: shared.xml")
 }
+
+// A file imported by an absolute path stays XML, as the planner does not
+// rewrite absolute imports.
+func TestConvertServicesXMLFilesKeepsAbsolutelyImportedFiles(t *testing.T) {
+	dir := t.TempDir()
+	extra := filepath.Join(dir, "extra.xml")
+	services := filepath.Join(dir, "services.xml")
+	require.NoError(t, os.WriteFile(extra, []byte(`<container/>`), 0o644))
+	require.NoError(t, os.WriteFile(services, []byte(`<container><imports><import resource="`+extra+`"/></imports></container>`), 0o644))
+
+	// extra.xml is passed itself as well, like a file found by its namespace.
+	converted, err := ConvertServicesXMLFiles(t.Context(), services, extra)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{services: filepath.Join(dir, "services.yaml")}, converted)
+	assert.FileExists(t, extra)
+
+	content, err := os.ReadFile(filepath.Join(dir, "services.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "resource: "+extra)
+}

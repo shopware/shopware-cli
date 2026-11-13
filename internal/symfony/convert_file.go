@@ -166,25 +166,31 @@ func FindXMLConfigFiles(ctx context.Context, dir string) (services []string, rou
 	return services, routes, nil
 }
 
-// xmlImportMatches returns the existing local XML files the file at path
-// imports, and separately those it imports through a glob pattern.
-func xmlImportMatches(path string, config convertibleXMLConfig) (imported []string, globbed []string) {
+// xmlImportMatches returns the existing XML files the file at path imports,
+// and separately those imported in a way the planner does not rewrite: through
+// a glob pattern or an absolute path.
+func xmlImportMatches(path string, config convertibleXMLConfig) (imported []string, kept []string) {
 	for _, reference := range config.importReferences() {
 		resource := *reference.resource
-		if !strings.HasSuffix(strings.ToLower(resource), ".xml") || filepath.IsAbs(resource) {
+		if !strings.HasSuffix(strings.ToLower(resource), ".xml") {
 			continue
+		}
+
+		pattern := resource
+		if !filepath.IsAbs(resource) {
+			pattern = filepath.Join(filepath.Dir(path), filepath.FromSlash(resource))
 		}
 
 		// A plain path matches itself when the file exists. A malformed
 		// pattern matches nothing.
-		matches, _ := filepath.Glob(filepath.Join(filepath.Dir(path), filepath.FromSlash(resource)))
+		matches, _ := filepath.Glob(pattern)
 		imported = append(imported, matches...)
-		if strings.ContainsAny(resource, "*?[{") {
-			globbed = append(globbed, matches...)
+		if filepath.IsAbs(resource) || strings.ContainsAny(resource, "*?[{") {
+			kept = append(kept, matches...)
 		}
 	}
 
-	return imported, globbed
+	return imported, kept
 }
 
 // xmlRootName returns the namespaced name of the root element, or the zero
@@ -210,7 +216,7 @@ func convertXMLConfigFiles(
 ) (map[string]string, error) {
 	contents := map[string][]byte{}
 	targets := map[string]string{}
-	retained := globRetainedFiles(paths, parse)
+	retained := retainedXMLFiles(paths, parse)
 
 	// Plan all files together, so a file imported more than once or also
 	// passed itself is converted once and every import of it is rewritten.
@@ -246,11 +252,11 @@ func convertXMLConfigFiles(
 	return targets, nil
 }
 
-// globRetainedFiles returns the files that stay XML: the files loaded through
-// a glob import, which is not rewritten, and the files they import, as their
+// retainedXMLFiles returns the files that stay XML: the files loaded through
+// an import the planner does not rewrite, and the files they import, as their
 // imports are not rewritten either. Files that cannot be read or parsed are
 // reported by planning.
-func globRetainedFiles(paths []string, parse func([]byte) (convertibleXMLConfig, error)) map[string]struct{} {
+func retainedXMLFiles(paths []string, parse func([]byte) (convertibleXMLConfig, error)) map[string]struct{} {
 	imports := map[string][]string{}
 	retained := map[string]struct{}{}
 	pending := []string{}
@@ -272,10 +278,10 @@ func globRetainedFiles(paths []string, parse func([]byte) (convertibleXMLConfig,
 			continue
 		}
 
-		imported, globbed := xmlImportMatches(path, config)
+		imported, kept := xmlImportMatches(path, config)
 		imports[path] = imported
 		queue = append(queue, imported...)
-		pending = append(pending, globbed...)
+		pending = append(pending, kept...)
 	}
 
 	for len(pending) > 0 {
