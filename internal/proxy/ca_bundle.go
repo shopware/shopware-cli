@@ -101,6 +101,28 @@ func bundleFresh(bundlePath, caPath string) bool {
 	return !bi.ModTime().Before(ci.ModTime())
 }
 
+// EnsureImagePulled makes sure image is present locally, pulling it with
+// Docker's own progress streamed live if it is not. Call it before
+// EnsureContainerCABundle: that step's `docker run --entrypoint cat` would
+// otherwise trigger the same multi-hundred-MB pull itself, with its output
+// captured instead of shown — indistinguishable from a hang on a slow link.
+func EnsureImagePulled(ctx context.Context, image string) error {
+	if exec.CommandContext(ctx, "docker", "image", "inspect", image).Run() == nil {
+		return nil
+	}
+
+	// docker pull prints its own progress (layers, sizes) to both streams; that
+	// alone replaces the swallowed, hang-like silence this guards against.
+	cmd := exec.CommandContext(ctx, "docker", "pull", image)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("pulling %s: %w", image, err)
+	}
+
+	return nil
+}
+
 // imageSystemCABundle reads the system CA bundle straight out of image, so the
 // combined bundle matches exactly the public CAs that image ships. Its own
 // entrypoint is bypassed (--entrypoint cat) and only stdout is used, so the

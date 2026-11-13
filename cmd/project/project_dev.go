@@ -41,6 +41,11 @@ func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) error {
 		if err != nil {
 			return err
 		}
+		// Pull the shop image, if needed, with its own visible progress — before
+		// the spinner below hides it inside the CA-bundle step.
+		if err := proxy.EnsureImagePulled(ctx, env.cfg.DockerOptions().PHP.WebImage()); err != nil {
+			return err
+		}
 		if err := runStep(ctx, "Preparing shared proxy...", env.bootstrapInfra); err != nil {
 			return err
 		}
