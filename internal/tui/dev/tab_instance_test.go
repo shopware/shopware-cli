@@ -505,3 +505,22 @@ func TestWindowLines(t *testing.T) {
 	assert.Equal(t, "c\nd\ne", windowLines(lines, 2, 4, 3), "the focused block ends in view")
 	assert.Equal(t, "b\nc", windowLines(lines, 1, 3, 2), "a block taller than the window starts in view")
 }
+
+func TestInstanceModel_RemovedStreamingSourceDoesNotReportDone(t *testing.T) {
+	m := NewInstanceModel(t.Context(), "/tmp", false)
+	m.SetSize(120, 40)
+
+	// A watcher is stopped, then its process exits and the stream closes.
+	stopped := make(chan string)
+	m.AddStreamingSource("Admin Watcher", stopped)
+	m.RemoveSource("Admin Watcher")
+	close(stopped)
+
+	// A watcher that ends on its own still reports it.
+	crashed := make(chan string)
+	m.AddStreamingSource("Storefront Watcher", crashed)
+	close(crashed)
+
+	assert.Equal(t, taggedLine{source: "Storefront Watcher", done: true}, <-m.linesChan)
+	assert.Empty(t, m.linesChan, "the removed source must stay silent")
+}

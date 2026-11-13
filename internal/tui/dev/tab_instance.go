@@ -593,14 +593,29 @@ func (m *InstanceModel) startSource(i int) tea.Cmd {
 }
 
 // pumpChan forwards an externally-fed line channel into the shared fan-in
-// channel, tagging each line with its source name.
+// channel, tagging each line with its source name. Once the source is removed
+// or replaced it goes quiet: a stopped watcher's stream ends some time after
+// the stop, and its "done" would otherwise be taken for the end of a watcher
+// restarted under the same name in the meantime.
 func (m *InstanceModel) pumpChan(name string, in <-chan string) tea.Cmd {
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.cancels[name] = cancel
 	out := m.linesChan
 	go func() {
+		// Keep draining after cancellation so the producer never blocks.
 		for line := range in {
-			out <- taggedLine{source: name, line: line}
+			select {
+			case <-ctx.Done():
+			case out <- taggedLine{source: name, line: line}:
+			}
 		}
-		out <- taggedLine{source: name, done: true}
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+		case out <- taggedLine{source: name, done: true}:
+		}
 	}()
 	return nil
 }
