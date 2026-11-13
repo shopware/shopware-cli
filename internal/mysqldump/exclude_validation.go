@@ -2,11 +2,41 @@ package mysqldump
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 )
+
+// ExcludedReferenceConflict identifies a retained reference to an omitted parent.
+type ExcludedReferenceConflict struct {
+	// ChildTable contains the retained referencing rows.
+	ChildTable string
+	// ParentTable contains the omitted referenced rows.
+	ParentTable string
+	// ForeignKey identifies the reference between the tables.
+	ForeignKey string
+}
+
+// ExcludedReferenceError reports all confirmed dangling references in the dump.
+type ExcludedReferenceError struct {
+	// Conflicts lists confirmed references in stable order.
+	Conflicts []ExcludedReferenceConflict
+}
+
+func (e *ExcludedReferenceError) Error() string {
+	messages := make([]string, len(e.Conflicts))
+	for i, conflict := range e.Conflicts {
+		messages[i] = fmt.Sprintf(
+			"cannot dump table %s: retained rows reference excluded rows in %s via foreign key %s",
+			conflict.ChildTable,
+			conflict.ParentTable,
+			conflict.ForeignKey,
+		)
+	}
+	return strings.Join(messages, "\n")
+}
 
 // validateExcludedReferences rejects ambiguous delete actions and checks affected
 // references from tables that export data.
@@ -14,21 +44,50 @@ func (d *Dumper) validateExcludedReferences(ctx context.Context, schemas map[str
 	if err := d.validateOverlappingDeleteActions(schemas); err != nil {
 		return err
 	}
+
 	if d.db == nil {
 		return nil
 	}
+
+	var conflicts []ExcludedReferenceConflict
+
 	for _, table := range slices.Sorted(maps.Keys(schemas)) {
-		if d.filterMap[table] == IgnoreMapPlacement || d.filterMap[table] == NoDataMapPlacement {
+		if d.filterMap[table] == IgnoreMapPlacement ||
+			d.filterMap[table] == NoDataMapPlacement {
 			continue
 		}
+
 		schema := schemas[table]
 		for _, fk := range schema.ForeignKeys {
 			parent := schemas[strings.ToLower(fk.ReferencedTable)]
+
 			if err := d.validateExcludedReference(ctx, schema, parent, fk); err != nil {
-				return err
+				var conflict *ExcludedReferenceError
+				if !errors.As(err, &conflict) {
+					return err
+				}
+
+				conflicts = append(conflicts, conflict.Conflicts...)
 			}
 		}
 	}
+
+	if len(conflicts) > 0 {
+		slices.SortFunc(conflicts, func(a, b ExcludedReferenceConflict) int {
+			if c := strings.Compare(a.ChildTable, b.ChildTable); c != 0 {
+				return c
+			}
+
+			if c := strings.Compare(a.ParentTable, b.ParentTable); c != 0 {
+				return c
+			}
+
+			return strings.Compare(a.ForeignKey, b.ForeignKey)
+		})
+
+		return &ExcludedReferenceError{Conflicts: conflicts}
+	}
+
 	return nil
 }
 
@@ -38,6 +97,11 @@ func (d *Dumper) validateExcludedReference(ctx context.Context, schema, parent *
 	table := strings.ToLower(schema.Name)
 	referenced := strings.ToLower(fk.ReferencedTable)
 	if parent == nil {
+		if d.excludeWhere[referenced] == "" &&
+			d.filterMap[referenced] != NoDataMapPlacement &&
+			!d.hasConfiguredKeyRewrite(table, fk.Columns) {
+			return nil
+		}
 		return fmt.Errorf(
 			"cannot validate foreign key %s on table %s: schema for referenced table %s is unavailable",
 			fk.Name,
@@ -75,12 +139,9 @@ func (d *Dumper) validateExcludedReference(ctx context.Context, schema, parent *
 	}
 
 	if dangling {
-		return fmt.Errorf(
-			"cannot dump table %s: retained rows reference excluded rows in %s via foreign key %s",
-			schema.Name,
-			parent.Name,
-			fk.Name,
-		)
+		return &ExcludedReferenceError{Conflicts: []ExcludedReferenceConflict{{
+			ChildTable: schema.Name, ParentTable: parent.Name, ForeignKey: fk.Name,
+		}}}
 	}
 	return nil
 }
