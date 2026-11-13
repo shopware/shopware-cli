@@ -37,6 +37,11 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
+		// Setup starts containers after the sudo steps, so check Docker first.
+		if err := system.ValidateProjectDependencies(ctx, true, nil, "set up the shared proxy", "", ""); err != nil {
+			return err
+		}
+
 		baseDomain, change, err := resolveDomainFlag(cmd)
 		if err != nil {
 			return err
