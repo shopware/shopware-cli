@@ -1,0 +1,19 @@
+id: flag-noopt-sentinel
+valid:
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = "select" }'
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = "" }'
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = sentinel }'
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = "ask-" + mode }'
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = `select` }'
+  - 'func init() { other.NoOptDefVal = " " }'
+  - 'func init() { other.Lookup("name").NoOptDefVal = " " }'
+  - 'func init() { cmd.Flags().Lookup("name").DefValue = " " }'
+  - 'func init() { flags := cmd.Flags(); { flags := other; flags.Lookup("name").NoOptDefVal = " " } }'
+invalid:
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = " " }'
+  - 'func init() { cmd.PersistentFlags().Lookup("name").NoOptDefVal = "__PROMPT__" }'
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = "ask user" }'
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = "\t" }'
+  - 'func init() { cmd.Flags().Lookup("name").NoOptDefVal = ` ` }'
+  - 'func init() { flags := cmd.Flags(); flags.Lookup("name").NoOptDefVal = " " }'
+  - 'func init() { local := cmd.PersistentFlags(); local.Lookup("name").NoOptDefVal = "__PROMPT__" }'
