@@ -129,10 +129,10 @@ arguments, SSH quoting and Compose service selection:
 ```go
 // orchestration/runtime
 type Command struct {
-    Name string
-    Args []string
-    Dir  string
-    Env  map[string]string
+    Name string            // Executable name or path in the target environment.
+    Args []string          // Arguments passed without shell parsing.
+    Dir  string            // Working directory in the target environment.
+    Env  map[string]string // Overrides for the target's inherited environment.
 }
 
 type Backend interface {
@@ -145,12 +145,20 @@ type Process interface {
 }
 
 type Options struct {
-    Stdin  io.Reader
-    Stdout io.Writer
-    Stderr io.Writer
-    TTY    bool
+    Stdin  io.Reader // Process input; nil supplies no input.
+    Stdout io.Writer // Receives stdout as produced; nil discards it.
+    Stderr io.Writer // Receives stderr as produced; nil discards it.
+    TTY    bool      // Requests a terminal when supported by the backend.
 }
 ```
+
+`Dir` refers to the selected target's filesystem. Application wiring maps a host
+directory to its container path before setting it, as described under
+[Target wiring and workspace](#target-wiring-and-workspace).
+
+Output writers receive data while the process runs, without waiting for `Wait`.
+Leaving them nil does not enable capture. Request capture explicitly to retain
+output in `Result.Output`, with or without simultaneous streaming.
 
 `Command` describes an invocation without implicit shell parsing. `Start`
 begins execution and returns a `Process` handle. The backend owns process
