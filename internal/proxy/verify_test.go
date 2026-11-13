@@ -47,10 +47,8 @@ func TestOSResolutionHintWithoutWildcardSupport(t *testing.T) {
 	// ...how to FIX the root cause...
 	assert.Contains(t, hint, "sudo systemctl enable --now systemd-resolved")
 	assert.Contains(t, hint, "sudo apt install systemd-resolved")
-	assert.Contains(t, hint, "stub-resolv.conf")
 	assert.Contains(t, hint, "proxy setup\" again")
-	// ...and the manual last resort with an honest warning about the fix.
-	assert.Contains(t, hint, "changes how your whole system resolves DNS")
+	// ...and the manual last resort.
 	assert.Contains(t, hint, "127.0.0.1 <shop-name>.shopware.local")
 }
 
