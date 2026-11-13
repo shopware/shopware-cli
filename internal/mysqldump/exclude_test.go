@@ -2,7 +2,9 @@ package mysqldump
 
 import (
 	"bytes"
+	"errors"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -401,4 +403,77 @@ func TestSetNullUsesFinalParentFilters(t *testing.T) {
 	dumper.limitWhere = map[string]string{"parent": "id IN (SELECT id FROM frozen_parent_rows)"}
 	dumper.computeExcludeSetNull(dumper.schemaCache)
 	assert.Contains(t, dumper.selectColumnExpression("child", "parent_id"), "frozen_parent_rows")
+}
+
+func TestNoDataReportsAllDanglingReferences(t *testing.T) {
+	db, mock := getDB(t)
+	t.Cleanup(func() { _ = db.Close() })
+	dumper := NewMySQLDumper(db)
+	dumper.schemaCache = map[string]*TableSchema{
+		"parent":           {Name: "parent", PrimaryKey: []string{"id"}, Columns: notNullColumns("id")},
+		"versioned_parent": {Name: "versioned_parent", PrimaryKey: []string{"id", "version_id"}, Columns: notNullColumns("id", "version_id")},
+		"other_child": {Name: "other_child", Columns: notNullColumns("parent_id", "version_id"), ForeignKeys: []ForeignKeySchema{
+			{Name: "fk.composite", Columns: []string{"parent_id", "version_id"}, ReferencedTable: "versioned_parent", ReferencedColumns: []string{"id", "version_id"}},
+		}},
+		"empty_child": {Name: "empty_child", Columns: notNullColumns("parent_id"), ForeignKeys: []ForeignKeySchema{
+			{Name: "fk.empty", Columns: []string{"parent_id"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}},
+		}},
+		"child": {Name: "child", Columns: notNullColumns("a", "b"), ForeignKeys: []ForeignKeySchema{
+			{Name: "fk.z", Columns: []string{"b"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}},
+			{Name: "fk.a", Columns: []string{"a"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}},
+		}},
+	}
+	dumper.filterMap = map[string]string{"parent": NoDataMapPlacement, "versioned_parent": NoDataMapPlacement}
+	mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+	err := dumper.computeExcludeFilters(t.Context())
+	require.Error(t, err)
+	var conflicts *ExcludedReferenceError
+	require.ErrorAs(t, err, &conflicts)
+	assert.Equal(t, []ExcludedReferenceConflict{
+		{ChildTable: "child", ParentTable: "parent", ForeignKey: "fk.a"},
+		{ChildTable: "child", ParentTable: "parent", ForeignKey: "fk.z"},
+		{ChildTable: "other_child", ParentTable: "versioned_parent", ForeignKey: "fk.composite"},
+	}, conflicts.Conflicts)
+	assert.Contains(t, err.Error(), "fk.a")
+	assert.Contains(t, err.Error(), "fk.z")
+	assert.Less(t, strings.Index(err.Error(), "fk.a"), strings.Index(err.Error(), "fk.z"))
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestNoDataStopsOnValidationQueryFailure(t *testing.T) {
+	db, mock := getDB(t)
+	t.Cleanup(func() { _ = db.Close() })
+	dumper := NewMySQLDumper(db)
+	dumper.schemaCache = map[string]*TableSchema{
+		"parent": {Name: "parent", PrimaryKey: []string{"id"}},
+		"child": {Name: "child", ForeignKeys: []ForeignKeySchema{
+			{Name: "first", Columns: []string{"a"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}},
+			{Name: "second", Columns: []string{"b"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}},
+			{Name: "third", Columns: []string{"c"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}},
+		}},
+	}
+	dumper.filterMap = map[string]string{"parent": NoDataMapPlacement}
+	failure := errors.New("query failed")
+	mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT EXISTS").WillReturnError(failure)
+	err := dumper.computeExcludeFilters(t.Context())
+	assert.ErrorIs(t, err, failure)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestNoDataSkipsUnaffectedMissingParent(t *testing.T) {
+	db, mock := getDB(t)
+	t.Cleanup(func() { _ = db.Close() })
+	dumper := NewMySQLDumper(db)
+	dumper.schemaCache = map[string]*TableSchema{
+		"omitted": {Name: "omitted"},
+		"child":   {Name: "child", ForeignKeys: []ForeignKeySchema{{Name: "fk", ReferencedTable: "ignored"}}},
+	}
+	dumper.filterMap = map[string]string{"omitted": NoDataMapPlacement, "ignored": IgnoreMapPlacement}
+	assert.NoError(t, dumper.computeExcludeFilters(t.Context()))
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

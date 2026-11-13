@@ -1,8 +1,13 @@
 package shop
 
 import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -115,13 +120,19 @@ skip_customer_data_tables:
 			prepared, err := prepareDumpConfig(&cfg, tc.opts)
 			require.NoError(t, err)
 			assert.Contains(t, prepared.NoData, "always_excluded")
-			for _, table := range []string{"payone_payment_card", "unzer_payment_*"} {
+			for _, table := range []string{
+				"payone_payment_card", "unzer_payment_*",
+				"swag_paypal_order_transactions", "swag_paypal_transaction_report",
+				"swag_paypal_vault_token", "swag_paypal_vault_token_mapping",
+			} {
 				if tc.excluded {
 					assert.Contains(t, prepared.NoData, table)
 				} else {
 					assert.NotContains(t, prepared.NoData, table)
 				}
 			}
+			assert.NotContains(t, prepared.NoData, "swag_paypal_pos_sales_channel")
+			assert.NotContains(t, prepared.NoData, "swag_paypal_pos_sales_channel_product")
 		})
 	}
 }
@@ -339,6 +350,94 @@ func TestApplyLimitOverridesValidation(t *testing.T) {
 		t.Run(tc.override, func(t *testing.T) {
 			err := applyLimitOverrides(&ConfigDump{}, []string{tc.override})
 			assert.EqualError(t, err, tc.expectedErr)
+		})
+	}
+}
+
+func TestDumpReferenceGuidance(t *testing.T) {
+	conflicts := &mysqldump.ExcludedReferenceError{Conflicts: []mysqldump.ExcludedReferenceConflict{
+		{ChildTable: "plugin_order", ParentTable: "order", ForeignKey: "order_fk"},
+		{ChildTable: "plugin_customer", ParentTable: "customer", ForeignKey: "customer_fk"},
+		{ChildTable: "plugin_order", ParentTable: "order_transaction", ForeignKey: "transaction_fk"},
+	}}
+	cause := fmt.Errorf("wrapped: %w", conflicts)
+	for _, enabled := range []bool{false, true} {
+		t.Run(strconv.FormatBool(enabled), func(t *testing.T) {
+			err := explainDumpError(cause, enabled)
+			require.ErrorIs(t, err, cause)
+			var preserved *mysqldump.ExcludedReferenceError
+			require.ErrorAs(t, err, &preserved)
+			if !enabled {
+				assert.Same(t, cause, err)
+				return
+			}
+			_, snippet, ok := strings.Cut(err.Error(), "\ndump:\n")
+			require.True(t, ok, "expected an actionable project configuration example")
+			var cfg struct {
+				Dump ConfigDump `yaml:"dump"`
+			}
+			require.NoError(t, yaml.Unmarshal([]byte("dump:\n"+snippet), &cfg))
+			assert.Equal(t, []string{"plugin_customer", "plugin_order"}, cfg.Dump.SkipCustomerDataTables)
+		})
+	}
+}
+
+func TestDumpReferenceGuidancePreservesOtherFailures(t *testing.T) {
+	cause := errors.New("query failed")
+	assert.Same(t, cause, explainDumpError(cause, true))
+}
+
+func TestDumpLockPrivilegeGuidance(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		cause error
+		hint  bool
+	}{
+		{
+			name: "MariaDB",
+			cause: &mysql.MySQLError{
+				Number:  1227,
+				Message: "Access denied; you need (at least one of) the RELOAD privilege(s) for this operation",
+			},
+			hint: true,
+		},
+		{
+			name: "MySQL",
+			cause: &mysql.MySQLError{
+				Number:  1227,
+				Message: "Access denied; you need (at least one of) the RELOAD or FLUSH_TABLES privilege(s) for this operation",
+			},
+			hint: true,
+		},
+		{
+			name: "FLUSH_TABLES",
+			cause: &mysql.MySQLError{
+				Number:  1227,
+				Message: "Access denied; you need the FLUSH_TABLES privilege",
+			},
+			hint: true,
+		},
+		{
+			name: "other privilege",
+			cause: &mysql.MySQLError{
+				Number:  1227,
+				Message: "Access denied; you need the SUPER privilege",
+			},
+		},
+		{
+			name:  "connection failure",
+			cause: errors.New("connection refused"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped := fmt.Errorf("database operation: %w", tc.cause)
+			err := explainDumpError(wrapped, false)
+			assert.ErrorIs(t, err, tc.cause)
+			if tc.hint {
+				assert.Contains(t, err.Error(), "--skip-lock-tables")
+			} else {
+				assert.Same(t, wrapped, err)
+			}
 		})
 	}
 }

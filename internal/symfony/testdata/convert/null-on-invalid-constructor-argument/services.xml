@@ -1,0 +1,18 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <argument type="service" id="order_return.repository" on-invalid="null"/>
+            <argument type="service" id="logger"/>
+        </service>
+        <service id="Shop\B" class="Shop\B">
+            <argument key="$repository" type="service" id="order_return.repository" on-invalid="null"/>
+        </service>
+        <service id="Shop\C" class="Shop\C">
+            <argument type="service">
+                <service class="Shop\Inner">
+                    <argument type="service" id="order_return.repository" on-invalid="null"/>
+                </service>
+            </argument>
+        </service>
+    </services>
+</container>

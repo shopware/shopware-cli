@@ -16,12 +16,26 @@ import (
 // key values, and restrictive edges are checked for dangling exported rows.
 // Must run after prefetchAllSchemas because it walks the cached foreign keys.
 func (d *Dumper) computeExcludeFilters(ctx context.Context) error {
-	if len(d.ExcludeMap) == 0 {
+	hasNoData := false
+	for _, placement := range d.filterMap {
+		if placement == NoDataMapPlacement {
+			hasNoData = true
+			break
+		}
+	}
+	if len(d.ExcludeMap) == 0 && !hasNoData {
 		return nil
 	}
 
 	resolver := d.newExcludeResolver(ctx)
 	if resolver == nil {
+		if hasNoData {
+			schemas := make(map[string]*TableSchema, len(d.schemaCache))
+			for name, schema := range d.schemaCache {
+				schemas[strings.ToLower(name)] = schema
+			}
+			return d.validateExcludedReferences(ctx, schemas)
+		}
 		return nil
 	}
 	resolver.markAffectedTables()

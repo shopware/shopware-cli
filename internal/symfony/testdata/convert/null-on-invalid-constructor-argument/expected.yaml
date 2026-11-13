@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+services:
+    Shop\A:
+        arguments:
+            - '@?order_return.repository'
+            - '@logger'
+
+    Shop\B:
+        arguments:
+            $repository: '@?order_return.repository'
+
+    Shop\C:
+        arguments:
+            - !service
+              class: Shop\Inner
+              arguments:
+                - '@?order_return.repository'
