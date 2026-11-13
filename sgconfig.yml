@@ -1,4 +1,6 @@
 ruleDirs:
   - ast-grep/rules
+utilDirs:
+  - ast-grep/utils
 testConfigs:
   - testDir: ast-grep/tests

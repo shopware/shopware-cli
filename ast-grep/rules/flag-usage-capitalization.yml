@@ -1,0 +1,18 @@
+# Reject lowercase flag help, e.g. "select name"; fix to "Select name".
+id: flag-usage-capitalization
+language: Go
+severity: error
+message: Flag usage must start with a capital letter
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  pattern: $TEXT
+  matches: flag-usage
+  regex: '^"\p{Ll}[^"\\]*"$'
+
+transform:
+  TRIMMED: replace($TEXT, replace='([^.])\."$', by='$1"')
+  BODY: substring($TRIMMED, startChar=1, endChar=-1)
+  CAPITALIZED: convert($BODY, toCase=capitalize)
+
+fix: '"$CAPITALIZED"'

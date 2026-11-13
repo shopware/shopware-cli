@@ -1,0 +1,30 @@
+# Reject lowercase Short openings, e.g. "build assets"; fix to "Build assets".
+id: cobra-short-capitalization
+language: Go
+severity: error
+message: Command Short must start with a capital letter
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  kind: interpreted_string_literal
+  pattern: $TEXT
+  # Only report lowercase openings in plain quoted strings.
+  regex: '^"\p{Ll}[^"\\]*"$'
+  inside:
+    kind: literal_element
+    inside:
+      pattern:
+        context: 'cobra.Command{Short: $VALUE}'
+        selector: keyed_element
+      inside:
+        kind: literal_value
+        inside:
+          pattern: cobra.Command{$$$FIELDS}
+
+# Also remove a trailing period so overlapping help fixes converge in one pass.
+transform:
+  TRIMMED: replace($TEXT, replace='([^.])\."$', by='$1"')
+  BODY: substring($TRIMMED, startChar=1, endChar=-1)
+  CAPITALIZED: convert($BODY, toCase=capitalize)
+
+fix: '"$CAPITALIZED"'

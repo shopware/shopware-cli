@@ -22,7 +22,7 @@ func TestOnlyExtensionsAcceptsSpaceSeparatedValue(t *testing.T) {
 			return nil
 		},
 	}
-	command.Flags().String("only-extensions", "", "extensions")
+	command.Flags().String("only-extensions", "", "Extensions")
 	command.SetArgs([]string{"--only-extensions", "PluginA,PluginB"})
 
 	require.NoError(t, command.Execute())

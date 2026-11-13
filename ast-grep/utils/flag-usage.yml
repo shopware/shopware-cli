@@ -1,0 +1,38 @@
+# Match flag help literals, e.g. "Help" in cmd.Flags().Bool("x", false, "Help").
+id: flag-usage
+language: Go
+rule:
+  kind: interpreted_string_literal
+  # Help is the last argument; ignore comments after a trailing comma.
+  nthChild:
+    position: 1
+    reverse: true
+    ofRule:
+      not: {kind: comment}
+  inside:
+    kind: argument_list
+    inside:
+      kind: call_expression
+      has:
+        field: function
+        kind: selector_expression
+        all:
+          - has:
+              field: field
+              regex: '^(Bool|BytesBase64|BytesHex|Count|Duration|Float32|Float64|IP|IPMask|IPNet|Int(8|16|32|64)?|String|StringArray|StringToInt|StringToInt64|StringToString|Uint(8|16|32|64)?)(Slice)?(Var)?P?$|^VarP?F?$'
+          - has:
+              field: operand
+              any:
+                - pattern: $CMD.Flags()
+                - pattern: $CMD.PersistentFlags()
+                # Resolve simple local aliases declared in the same block.
+                - all:
+                    - kind: identifier
+                    - pattern: $FLAGS
+                    - inside:
+                        kind: statement_list
+                        stopBy: {kind: block}
+                        has:
+                          any:
+                            - pattern: $FLAGS := $CMD.Flags()
+                            - pattern: $FLAGS := $CMD.PersistentFlags()

@@ -1,3 +1,4 @@
+# Reject empty command descriptions, e.g. Long: "".
 id: cobra-empty-long
 language: Go
 severity: error
