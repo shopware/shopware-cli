@@ -42,7 +42,7 @@ func NewGitHubActionsCache(prefix string) (*GitHubActionsCache, error) {
 	}
 
 	if client == nil {
-		return nil, errors.New("GitHub Actions cache client is not available")
+		return nil, errors.New("cannot use GitHub Actions cache: client is not available")
 	}
 
 	return &GitHubActionsCache{

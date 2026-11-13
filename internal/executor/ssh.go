@@ -401,7 +401,7 @@ func (s *SSHExecutor) remoteMySQLSocket(ctx context.Context) (string, error) {
 
 	socket := strings.TrimSpace(stdout)
 	if socket == "" {
-		return "", errors.New("DATABASE_URL uses localhost, but no MySQL unix socket is configured for PHP on the remote host (pdo_mysql.default_socket and mysqli.default_socket are empty)")
+		return "", errors.New("cannot connect using DATABASE_URL with localhost: no MySQL unix socket is configured for PHP on the remote host (pdo_mysql.default_socket and mysqli.default_socket are empty)")
 	}
 
 	return socket, nil

@@ -78,7 +78,7 @@ func (u *ProjectUpgrader) loadStoreStatus(ctx context.Context, current, target *
 
 	updates, err := u.extensionUpdates(ctx, current.String(), target.String(), toCheck)
 	if err != nil {
-		logging.FromContext(ctx).Debugf("store update check failed: %v", err)
+		logging.FromContext(ctx).Debugf("Store update check failed: %v", err)
 		return nil
 	}
 
@@ -108,7 +108,7 @@ func (u *ProjectUpgrader) loadStorePlugins(ctx context.Context, target *version.
 
 	plugins, err := u.storePlugins(ctx, "en_GB", target.String(), names)
 	if err != nil {
-		logging.FromContext(ctx).Debugf("store plugin lookup failed: %v", err)
+		logging.FromContext(ctx).Debugf("Store plugin lookup failed: %v", err)
 		return nil
 	}
 
@@ -125,7 +125,7 @@ func (u *ProjectUpgrader) loadStorePlugins(ctx context.Context, target *version.
 func (u *ProjectUpgrader) projectRepositories(ctx context.Context) *repository.Set {
 	composerJSON, err := composer.ReadJson(filepath.Join(u.projectRoot, "composer.json"))
 	if err != nil {
-		logging.FromContext(ctx).Debugf("read composer.json for repositories: %v", err)
+		logging.FromContext(ctx).Debugf("Read composer.json for repositories: %v", err)
 		return repository.NewSet(repository.New(repository.PackagistURL, nil))
 	}
 
@@ -135,7 +135,7 @@ func (u *ProjectUpgrader) projectRepositories(ctx context.Context) *repository.S
 		auth = &composer.Auth{}
 	}
 	if mergeErr := auth.MergeEnv(); mergeErr != nil {
-		logging.FromContext(ctx).Debugf("merge COMPOSER_AUTH: %v", mergeErr)
+		logging.FromContext(ctx).Debugf("Merge COMPOSER_AUTH: %v", mergeErr)
 	}
 
 	return u.repositories(composerJSON, auth)
