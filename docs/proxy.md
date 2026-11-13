@@ -311,9 +311,9 @@ a fallback it is only consulted for names the gateway cannot resolve:
 
 ```bash
 sudo apt-get install -y libnss-resolve
-# Append `resolve` as the LAST source on the existing hosts line, preserving
-# whatever sources (files, dns, mymachines, …) are already configured.
-sudo sed -i -E '/^hosts:/{/\bresolve\b/!s/[[:space:]]*$/ resolve/}' /etc/nsswitch.conf
+# Make `resolve` the LAST source on the existing hosts line (the package puts
+# it before `dns`), preserving the other sources (files, dns, myhostname, …).
+sudo sed -i -E '/^hosts:/{s/[[:space:]]+resolve([[:space:]]*\[[^]]*\])?//;s/[[:space:]]*$/ resolve/}' /etc/nsswitch.conf
 ```
 
 Verify: `getent hosts test.shopware.local` returns `127.0.0.1`, and

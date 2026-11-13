@@ -175,6 +175,8 @@ func osResolutionHint(baseDomain string, wildcardSupported bool) string {
 // it: add resolved to nsswitch as a fallback *after* dns. It must be last,
 // because on WSL resolved only knows the proxy domain (no internet upstream), so
 // putting it first would break internet DNS.
+// libnss-resolve puts itself before dns on install, so the sed moves it to
+// the end of the hosts line and keeps the other sources.
 func WSLResolverGuidance() string {
 	return strings.Join([]string{
 		"Running under WSL: systemd-resolved answers, but getent (what this check and",
@@ -182,8 +184,7 @@ func WSLResolverGuidance() string {
 		"\"dns\", never before it, so internet DNS keeps using the Windows gateway:",
 		"",
 		"  sudo apt-get install -y libnss-resolve",
-		"  sudo sed -i -E '/^hosts:/d' /etc/nsswitch.conf",
-		"  echo 'hosts: files dns resolve' | sudo tee -a /etc/nsswitch.conf",
+		"  sudo sed -i -E '/^hosts:/{s/[[:space:]]+resolve([[:space:]]*\\[[^]]*\\])?//;s/[[:space:]]*$/ resolve/}' /etc/nsswitch.conf",
 		"",
 		"Then run \"shopware-cli project proxy verify\" again. Verify internet still",
 		"resolves with: getent hosts one.one.one.one",
