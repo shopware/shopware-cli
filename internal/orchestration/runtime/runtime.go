@@ -26,7 +26,7 @@ type Command struct {
 	Env map[string]string
 }
 
-// Options controls the process streams and terminal behavior.
+// Options controls process streams, output capture and terminal behavior.
 // The caller owns the streams. A blocked output write can delay completion.
 // Stdout and Stderr writes are serialized per execution, so they may share a writer.
 type Options struct {
@@ -40,6 +40,10 @@ type Options struct {
 
 	// Stderr receives process standard error. A nil writer discards it.
 	Stderr io.Writer
+
+	// Capture selects unbounded output retention, defaulting to CaptureNone.
+	// The executor consumes it before dispatch, so backends receive CaptureNone.
+	Capture CaptureMode
 
 	// TTY requests terminal allocation.
 	TTY bool

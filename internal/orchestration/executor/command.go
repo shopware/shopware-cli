@@ -12,7 +12,6 @@ import (
 type Command struct {
 	executor *Executor
 	spec     runtime.Command
-	capture  runtime.CaptureMode
 }
 
 // Description returns an independent copy of the portable command description.
@@ -37,20 +36,12 @@ func (c *Command) WithEnv(env map[string]string) *Command {
 	return command
 }
 
-// WithCapture returns a copy that retains output in the selected mode.
-// Captured output is unbounded until the process completes; callers control its lifetime.
-func (c *Command) WithCapture(mode runtime.CaptureMode) *Command {
-	command := c.clone()
-	command.capture = mode
-	return command
-}
-
 // clone isolates the mutable argument and environment data.
 func (c *Command) clone() *Command {
 	spec := c.spec
 	spec.Args = append([]string(nil), c.spec.Args...)
 	spec.Env = maps.Clone(c.spec.Env)
-	return &Command{executor: c.executor, spec: spec, capture: c.capture}
+	return &Command{executor: c.executor, spec: spec}
 }
 
 // Run starts the command and waits for it to finish. The result retains
@@ -58,7 +49,7 @@ func (c *Command) clone() *Command {
 func (c *Command) Run(ctx context.Context, options runtime.Options) (runtime.Result, error) {
 	process, err := c.Start(ctx, options)
 	if err != nil {
-		return runtime.Result{ExitCode: -1, Output: runtime.CapturedOutput{Mode: c.capture}}, err
+		return runtime.Result{ExitCode: -1, Output: runtime.CapturedOutput{Mode: options.Capture}}, err
 	}
 
 	return process.Wait()
@@ -66,18 +57,19 @@ func (c *Command) Run(ctx context.Context, options runtime.Options) (runtime.Res
 
 // Start starts the command and returns its process handle.
 func (c *Command) Start(ctx context.Context, options runtime.Options) (runtime.Process, error) {
-	switch c.capture {
+	switch options.Capture {
 	case runtime.CaptureNone:
 		return c.executor.backend.Start(ctx, c.clone().spec, options)
 	case runtime.CaptureSeparate, runtime.CaptureCombined:
 	default:
 		return nil, &runtime.ExecutionError{
 			Stage: runtime.StageStart,
-			Err:   fmt.Errorf("invalid capture mode %d", c.capture),
+			Err:   fmt.Errorf("invalid capture mode %d", options.Capture),
 		}
 	}
 
-	capture := &outputCapture{mode: c.capture}
+	capture := &outputCapture{mode: options.Capture}
+	options.Capture = runtime.CaptureNone
 	options.Stdout = captureWriter{
 		capture: capture,
 		target:  options.Stdout,
@@ -101,10 +93,10 @@ func (c *Command) Start(ctx context.Context, options runtime.Options) (runtime.P
 
 // Capture runs the command and retains stdout and stderr separately.
 func (c *Command) Capture(ctx context.Context) (runtime.Result, error) {
-	return c.WithCapture(runtime.CaptureSeparate).Run(ctx, runtime.Options{})
+	return c.Run(ctx, runtime.Options{Capture: runtime.CaptureSeparate})
 }
 
 // CombinedOutput runs the command and retains both output streams in observed write order.
 func (c *Command) CombinedOutput(ctx context.Context) (runtime.Result, error) {
-	return c.WithCapture(runtime.CaptureCombined).Run(ctx, runtime.Options{})
+	return c.Run(ctx, runtime.Options{Capture: runtime.CaptureCombined})
 }

@@ -35,8 +35,6 @@ type ContainerQARequest struct {
 	Flags []string
 	// User selects the container user; empty uses the image default.
 	User string
-	// Capture controls retained output independently of forwarded streams.
-	Capture runtime.CaptureMode
 }
 
 // RunContainerQA runs a complete QA command using the supplied container runner.
@@ -78,5 +76,5 @@ func RunContainerQA(ctx context.Context, runner container.Runner, request Contai
 	return executor.New(backend).WithDir(workspace.TargetRoot()).
 		Command("shopware-cli", args...).
 		WithEnv(map[string]string{"SHOPWARE_CLI_TOOLING_CONTEXT": "1"}).
-		WithCapture(request.Capture).Run(ctx, streams)
+		Run(ctx, streams)
 }
