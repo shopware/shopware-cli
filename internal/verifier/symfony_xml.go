@@ -14,7 +14,8 @@ import (
 )
 
 // SymfonyXMLConverter converts deprecated Symfony XML configuration files
-// (services.xml and routes.xml) of platform plugins into their YAML
+// (services.xml, routes.xml and the other services and routing XML files in
+// the configuration directory) of platform plugins into their YAML
 // counterparts.
 type SymfonyXMLConverter struct{}
 
@@ -25,26 +26,42 @@ func (SymfonyXMLConverter) Name() string {
 func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary {
 	found := false
 	pendingFiles := make(map[string]struct{})
-	conversions := []struct {
-		fileName string
-		convert  func(context.Context, string) (map[string]string, error)
-		plan     func(context.Context, string) (map[string]string, error)
-	}{
-		{"services.xml", symfony.ConvertServicesXMLFile, symfony.PlanServicesXMLFile},
-		{"routes.xml", symfony.ConvertRoutesXMLFile, symfony.PlanRoutesXMLFile},
-	}
 
 	for _, configDir := range s.collectConfigDirs(config) {
+		if ctx.Err() != nil {
+			return ToolSummary{}
+		}
+
+		services, routes, err := symfony.FindXMLConfigFiles(ctx, configDir)
+		if err != nil {
+			execution.Fail(&ToolError{Err: fmt.Errorf("cannot read XML configuration: %w", err)})
+			continue
+		}
+
+		conversions := []struct {
+			fileName string
+			files    []string
+			convert  func(context.Context, ...string) (map[string]string, error)
+			plan     func(context.Context, ...string) (map[string]string, error)
+		}{
+			{"services.xml", services, symfony.ConvertServicesXMLFiles, symfony.PlanServicesXMLFiles},
+			{"routes.xml", routes, symfony.ConvertRoutesXMLFiles, symfony.PlanRoutesXMLFiles},
+		}
+
 		for _, conversion := range conversions {
 			if ctx.Err() != nil {
 				return ToolSummary{}
 			}
 			xmlPath := filepath.Join(configDir, conversion.fileName)
+			files := conversion.files
 
-			if _, err := os.Stat(xmlPath); err != nil {
-				if !errors.Is(err, os.ErrNotExist) {
-					execution.Fail(&ToolError{Err: fmt.Errorf("cannot read XML configuration: %w", err)})
-				}
+			if _, err := os.Stat(xmlPath); err == nil {
+				files = append([]string{xmlPath}, files...)
+			} else if !errors.Is(err, os.ErrNotExist) {
+				execution.Fail(&ToolError{Err: fmt.Errorf("cannot read XML configuration: %w", err)})
+				continue
+			}
+			if len(files) == 0 {
 				continue
 			}
 			found = true
@@ -54,7 +71,7 @@ func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig, executi
 				convert = conversion.plan
 			}
 
-			converted, err := convert(ctx, xmlPath)
+			converted, err := convert(ctx, files...)
 			if err != nil {
 				if finding, ok := symfonyXMLFinding(err, config.RootDir); ok {
 					execution.AddFindings(finding)
