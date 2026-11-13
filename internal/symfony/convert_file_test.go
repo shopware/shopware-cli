@@ -32,11 +32,11 @@ func TestConvertXMLFileFixtures(t *testing.T) {
 			require.NoError(t, os.CopyFS(tmpDir, os.DirFS(filepath.Join(fixturesDir, entry.Name(), "input"))))
 
 			entryFile := filepath.Join(tmpDir, "services.xml")
-			convert := ConvertServicesXMLFile
+			convert := ConvertServicesXMLFiles
 
 			if _, err := os.Stat(entryFile); err != nil {
 				entryFile = filepath.Join(tmpDir, "routes.xml")
-				convert = ConvertRoutesXMLFile
+				convert = ConvertRoutesXMLFiles
 			}
 
 			converted, err := convert(t.Context(), entryFile)
@@ -108,7 +108,7 @@ func TestConvertServicesXMLFileRefusesWhenYamlExists(t *testing.T) {
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container/>`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "services.yaml"), []byte("services:\n"), 0o644))
 
-	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
+	_, err := ConvertServicesXMLFiles(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "exists already")
 
 	assert.FileExists(t, servicesXML)
@@ -121,7 +121,7 @@ func TestConvertServicesXMLFileRefusesWhenYmlExists(t *testing.T) {
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container/>`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "services.yml"), []byte("services:\n"), 0o644))
 
-	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
+	_, err := ConvertServicesXMLFiles(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "exists already")
 
 	assert.FileExists(t, servicesXML)
@@ -147,7 +147,7 @@ func TestConvertServicesXMLFileKeepsEverythingOnError(t *testing.T) {
     </services>
 </container>`), 0o644))
 
-	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
+	_, err := ConvertServicesXMLFiles(t.Context(), servicesXML)
 	assert.ErrorContains(t, err, "unsupported element <stack>")
 	var conversionErr *XMLConversionError
 	require.ErrorAs(t, err, &conversionErr)
@@ -166,7 +166,7 @@ func TestConvertServicesXMLFileUnparsableXML(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container`), 0o644))
 
-	_, err := ConvertServicesXMLFile(t.Context(), servicesXML)
+	_, err := ConvertServicesXMLFiles(t.Context(), servicesXML)
 	assert.Error(t, err)
 	var conversionErr *XMLConversionError
 	require.ErrorAs(t, err, &conversionErr)
@@ -190,7 +190,7 @@ func TestConvertServicesXMLFileReportsStatFailures(t *testing.T) {
 			require.NoError(t, os.WriteFile(xmlPath, []byte(scenario.content), 0o644))
 			// A symlink loop produces a stat error even when tests run as root.
 			require.NoError(t, os.Symlink(scenario.link, filepath.Join(root, scenario.link)))
-			converted, err := ConvertServicesXMLFile(t.Context(), xmlPath)
+			converted, err := ConvertServicesXMLFiles(t.Context(), xmlPath)
 			var pathErr *os.PathError
 			require.ErrorAs(t, err, &pathErr)
 			assert.Equal(t, filepath.Join(root, scenario.link), pathErr.Path)
@@ -200,4 +200,61 @@ func TestConvertServicesXMLFileReportsStatFailures(t *testing.T) {
 			assert.Equal(t, scenario.content, string(original))
 		})
 	}
+}
+
+func TestFindXMLConfigFiles(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"services.xml":              `<container><imports><import resource="packages/*.xml"/></imports></container>`,
+		"routes.xml":                `<routes/>`,
+		"services/gateway.xml":      `<container xmlns="http://symfony.com/schema/dic/services"/>`,
+		"routes/admin.xml":          `<?xml version="1.0"?><routes xmlns="http://symfony.com/schema/routing"/>`,
+		"packages/framework.xml":    `<container xmlns="http://symfony.com/schema/dic/services"/>`,
+		"config.xml":                `<config xmlns="https://example.com/config"/>`,
+		"other/no-namespace.xml":    `<container/>`,
+		"other/other-namespace.xml": `<container xmlns="https://example.com/container"/>`,
+		"other/invalid.xml":         `<container`,
+	}
+	for name, content := range files {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
+	}
+
+	services, routes, err := FindXMLConfigFiles(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join(dir, "services", "gateway.xml")}, services)
+	assert.Equal(t, []string{filepath.Join(dir, "routes", "admin.xml")}, routes)
+}
+
+func TestFindXMLConfigFilesWithoutDirectory(t *testing.T) {
+	services, routes, err := FindXMLConfigFiles(t.Context(), filepath.Join(t.TempDir(), "missing"))
+	require.NoError(t, err)
+	assert.Empty(t, services)
+	assert.Empty(t, routes)
+}
+
+func TestConvertServicesXMLFilesSharingAnImport(t *testing.T) {
+	dir := t.TempDir()
+	shared := `<container><services><service id="Shop\Shared" class="Shop\Shared"/></services></container>`
+	files := map[string]string{
+		"a.xml":      `<container><imports><import resource="shared.xml"/></imports></container>`,
+		"b.xml":      `<container><imports><import resource="shared.xml"/></imports></container>`,
+		"shared.xml": shared,
+	}
+	for name, content := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
+	}
+
+	// shared.xml is passed itself as well, like a file found next to its importers.
+	converted, err := ConvertServicesXMLFiles(t.Context(), filepath.Join(dir, "b.xml"), filepath.Join(dir, "shared.xml"), filepath.Join(dir, "a.xml"))
+	require.NoError(t, err)
+	assert.Len(t, converted, 3)
+
+	for _, name := range []string{"a", "b"} {
+		content, err := os.ReadFile(filepath.Join(dir, name+".yaml"))
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "resource: shared.yaml")
+	}
+	assert.FileExists(t, filepath.Join(dir, "shared.yaml"))
+	assert.NoFileExists(t, filepath.Join(dir, "shared.xml"))
 }
