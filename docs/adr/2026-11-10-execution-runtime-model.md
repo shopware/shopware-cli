@@ -157,9 +157,10 @@ environment. For containers, application wiring maps the chosen host directory
 to its container path before setting `Dir`, as described under
 [Target wiring and workspace](#target-wiring-and-workspace).
 
-Output writers receive data while the process runs, without waiting for `Wait`.
-Leaving them nil does not enable capture. Request capture explicitly to retain
-output in `Result.Output`, with or without simultaneous streaming.
+Use `Stdout` and `Stderr` to stream output while the command runs.
+Enable capture to read output from `Result.Output` after completion.
+Streaming and capture can be used together. With neither configured, output
+is discarded.
 
 `Command` describes an invocation without implicit shell parsing. `Start`
 begins execution and returns a `Process` handle. The backend owns process
