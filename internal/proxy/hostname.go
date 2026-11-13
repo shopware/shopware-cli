@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/system"
 )
 
 // ProjectHostname derives the hostname a project should be reachable at
@@ -26,19 +25,24 @@ func ProjectHostname(projectRoot string, cfg *shop.Config, baseDomain string) (s
 		}
 
 		if host := parsed.Hostname(); host != "" && host != "localhost" && net.ParseIP(host) == nil {
+			if err := ValidateDomain(host); err != nil {
+				return "", fmt.Errorf("the configured url has an invalid hostname: %w", err)
+			}
 			return host, nil
 		}
 	}
 
-	// Docker Compose project names allow underscores, but DNS labels do not, so
-	// map them to dashes (matching LocalDomainHostname) before validating and
-	// using the name as a hostname label.
-	name := strings.ReplaceAll(filepath.Base(projectRoot), "_", "-")
-	if err := system.ValidateDockerComposeName(name); err != nil {
-		return "", fmt.Errorf("cannot derive a hostname from directory name %q: %w", filepath.Base(projectRoot), err)
+	// The directory name becomes a DNS label: underscores (valid in a
+	// directory name, not in DNS) become dashes and it is lowercased, matching
+	// LocalDomainHostname (used by `create --local-domain`) — a directory like
+	// "MyShop" must not dead-end here just because that path accepts it.
+	name := strings.ToLower(strings.ReplaceAll(filepath.Base(projectRoot), "_", "-"))
+	hostname := fmt.Sprintf("%s.%s", name, baseDomain)
+	if err := ValidateDomain(hostname); err != nil {
+		return "", fmt.Errorf("cannot derive a hostname from directory name %q: %w; rename the directory, or set an explicit \"url\" in the project config", filepath.Base(projectRoot), err)
 	}
 
-	return fmt.Sprintf("%s.%s", name, baseDomain), nil
+	return hostname, nil
 }
 
 // LocalDomainHostname returns the stable proxy hostname for a project name,
