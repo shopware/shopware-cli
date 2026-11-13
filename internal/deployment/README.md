@@ -52,3 +52,36 @@ remove it when no longer needed. URL-encode database credentials in
 Secrets are sent over SSH stdin, not remote command arguments. Successful setup
 prints the remaining database, web server and deployment steps; it does not
 install Shopware or provision shared storage for a host group.
+
+## Remote PHP payload
+
+SSH operations package the embedded `ssh/php` directory with `internal/phar`.
+Each file in `php/commands` is an entrypoint (deploy, init, list, logs or
+prune). The shared bootstrap configures CLI error output and loads the function
+libraries in `php/lib`. Those libraries contain reusable layout, filesystem,
+metadata, protocol, environment, process, permissions and retention operations
+without running a command. Add shared PHP code there and load it from the
+bootstrap; Go no longer joins PHP source strings. Relative `require_once` paths
+work both locally and in the PHAR.
+
+Commands share their building blocks instead of repeating them: `layout.php`
+decodes the input, resolves state paths and the active release and takes the
+deployment lock; `filesystem.php` checks for real directories and regular files
+and publishes files atomically; `protocol.php` holds the status and
+authorization lines exchanged with the Go client. On the Go side, one-shot
+commands run through `runDeploymentCommand` and interactive rollouts through
+`openDeploymentSession`, so packaging, stdin ordering and error reporting live
+in one place.
+
+The loader reads exactly the PHAR's length from stdin before executing it. Init
+JSON follows the archive on stdin so credentials never enter process arguments.
+Interactive rollout sessions send the PHAR first, then use the same stdin stream
+for artifact bytes and preparation/activation messages. Other commands pass
+their non-sensitive JSON options as arguments. The temporary PHAR is removed on
+shutdown. The remote PHP needs the `phar` extension and a writable
+`sys_get_temp_dir()`. Loader and PHP errors go to stderr, so stdout stays
+reserved for command output.
+
+The payload tests execute the packaged entrypoints with local PHP, including
+initialization and a full rollout, rollback and prune lifecycle. Install PHP to
+run these checks; they are skipped when PHP is unavailable.

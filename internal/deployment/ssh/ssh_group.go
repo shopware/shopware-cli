@@ -290,7 +290,10 @@ func (s *SSH) openDeploymentSession(ctx context.Context, input sshRolloutInput, 
 	if err != nil {
 		return nil, err
 	}
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, phpOpeningTag), "--", string(payload)).Cmd
+	cmd, program, err := s.deploymentCommand(ctx, "deploy", string(payload))
+	if err != nil {
+		return nil, err
+	}
 	cmd.Stderr = output
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -305,6 +308,12 @@ func (s *SSH) openDeploymentSession(ctx context.Context, input sshRolloutInput, 
 		_ = stdin.Close()
 		_ = stdout.Close()
 		return nil, err
+	}
+	if _, err := io.Copy(stdin, program); err != nil {
+		_ = stdin.Close()
+		waitErr := cmd.Wait()
+		_ = stdout.Close()
+		return nil, fmt.Errorf("cannot send deployment PHP archive: %w", errors.Join(err, waitErr))
 	}
 	return &sshDeploymentSession{cmd: cmd, stdin: stdin, stdout: stdout, reader: bufio.NewReader(stdout), input: input, output: output}, nil
 }

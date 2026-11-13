@@ -1,13 +1,11 @@
 package ssh
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 )
 
@@ -30,16 +28,9 @@ func (s *SSH) rollbackCandidates(ctx context.Context) ([]sshCandidate, error) {
 	if err != nil {
 		return nil, err
 	}
-	payload, err := json.Marshal(sshRolloutInput{Root: root, Current: s.activeLinkName(), Action: sshDeploymentCandidates})
+	output, err := s.deploymentCommandOutput(ctx, "deploy", sshRolloutInput{Root: root, Current: s.activeLinkName(), Action: sshDeploymentCandidates})
 	if err != nil {
-		return nil, err
-	}
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, phpOpeningTag), "--", string(payload)).Cmd
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("discover SSH rollback candidates: %s: %w", strings.TrimSpace(stderr.String()), err)
+		return nil, fmt.Errorf("discover SSH rollback candidates: %w", err)
 	}
 	var candidates []sshCandidate
 	if err := json.Unmarshal(output, &candidates); err != nil {

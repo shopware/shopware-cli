@@ -72,12 +72,20 @@ func writeSSHInitializationNextSteps(source *SSH, targets []*SSH, environment st
 	}
 	fmt.Fprintln(&summary, tui.DimStyle.Render("  Edit custom environment variables here. This file is shared across releases."))
 	fmt.Fprintln(&summary, "\n"+heading("1. Prepare your server"))
+	fmt.Fprintln(&summary, "  Make sure PHP 8.4 or higher is installed and the SSH user is the same user that runs PHP.")
 	fmt.Fprintln(&summary, "  Make sure the database and database user exist and are reachable.")
 	fmt.Fprintln(&summary, "  Point your web server's document root to:")
 	for _, target := range targets {
 		fmt.Fprintf(&summary, "    %q: %q\n", target.env.SSH.Host, path.Join(target.directory, "public"))
 	}
 	fmt.Fprintln(&summary, tui.DimStyle.Render("  This directory becomes available during the first rollout."))
+	if len(targets) > 1 {
+		fmt.Fprintln(&summary, "  This environment deploys to multiple hosts, so they must all see the same files:")
+		fmt.Fprintln(&summary, "    Share the \"shared\" directory between all hosts (for example with NFS),")
+		fmt.Fprintln(&summary, "    or configure S3 storage for every Shopware filesystem.")
+		fmt.Fprintln(&summary, "  With S3 storage, \"shared/.env.local\" is still a local file:")
+		fmt.Fprintln(&summary, "    keep it identical on every host and copy each change to all of them manually.")
+	}
 	fmt.Fprintln(&summary, "\n"+heading("2. Build and roll out your first deployment"))
 	fmt.Fprintln(&summary, "  Run locally:")
 	fmt.Fprintln(&summary)

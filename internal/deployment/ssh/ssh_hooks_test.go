@@ -3,6 +3,7 @@ package ssh
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,8 +68,10 @@ func TestHostHooksAroundActivation(t *testing.T) {
 			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, php, "-r", strings.TrimPrefix(sshDeploymentScript, "<?php\n"), "--", string(payload))
-			cmd.Stdin = strings.NewReader("ACTIVATE event\n")
+			program, err := deploymentPayload("deploy")
+			require.NoError(t, err)
+			cmd := exec.CommandContext(ctx, php, program.PHPArgs(string(payload))...)
+			cmd.Stdin = io.MultiReader(program.Stdin(), strings.NewReader("ACTIVATE event\n"))
 			cmd.WaitDelay = time.Second
 			output, err := cmd.CombinedOutput()
 			require.NoError(t, ctx.Err(), string(output))

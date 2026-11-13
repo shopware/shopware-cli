@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,16 +32,9 @@ func TestSSHDeploymentLogsCancellationAndValidation(t *testing.T) {
 }
 
 func TestDeploymentLogReferences(t *testing.T) {
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP required")
-	}
 	root := t.TempDir()
 	list := func() []string {
-		payload, err := json.Marshal(sshDeploymentLogsInput{Root: root, List: true})
-		require.NoError(t, err)
-		data, err := exec.CommandContext(t.Context(), php, "-r", strings.TrimPrefix(sshDeploymentLogsScript, "<?php\n"), "--", string(payload)).CombinedOutput()
-		require.NoError(t, err, string(data))
+		data := runLocalDeploymentCommand(t, "logs", sshDeploymentLogsInput{Root: root, List: true})
 		var references []string
 		require.NoError(t, json.Unmarshal(data, &references))
 		return references

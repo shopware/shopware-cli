@@ -1,6 +1,9 @@
 package phar
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"io"
@@ -10,6 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -102,4 +106,56 @@ func TestBuild(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, first, second)
 	})
+}
+
+func TestPayloadPreservesInteractiveStdin(t *testing.T) {
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Skip("PHP required")
+	}
+	payload, err := Build(fstest.MapFS{"main.php": {Data: []byte("<?php echo \"READY\\n\"; fflush(STDOUT); echo fgets(STDIN);")}}, "main.php")
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, php, payload.PHPArgs()...)
+	stdin, err := cmd.StdinPipe()
+	require.NoError(t, err)
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	defer func() { _ = stdin.Close() }()
+	_, err = io.Copy(stdin, payload.Stdin())
+	require.NoError(t, err)
+	reader := bufio.NewReader(stdout)
+	ready, err := reader.ReadString('\n')
+	require.NoError(t, err)
+	assert.Equal(t, "READY\n", ready)
+	_, err = io.WriteString(stdin, "ACTIVATE\n")
+	require.NoError(t, err)
+	reply, err := reader.ReadString('\n')
+	require.NoError(t, err)
+	assert.Equal(t, "ACTIVATE\n", reply)
+	require.NoError(t, stdin.Close())
+	require.NoError(t, cmd.Wait())
+}
+
+func TestPayloadRejectsTruncatedArchive(t *testing.T) {
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Skip("PHP required")
+	}
+	payload, err := Build(fstest.MapFS{"main.php": {Data: []byte("<?php echo 'executed';")}}, "main.php")
+	require.NoError(t, err)
+	dir := t.TempDir()
+	cmd := exec.CommandContext(t.Context(), php, append([]string{"-d", "sys_temp_dir=" + dir}, payload.PHPArgs()...)...)
+	cmd.Stdin = io.LimitReader(payload.Stdin(), int64(len(payload.archive)-1))
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
+	require.Error(t, err)
+	assert.Empty(t, string(output), "loader errors must not reach stdout")
+	assert.Contains(t, stderr.String(), "Cannot write temporary phar")
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, files)
 }

@@ -1,56 +1,24 @@
 <?php
-// Passed to PHP -r. Never interpret metadata's archive field as a target path.
-function pruneName(mixed $name): bool
-{
-    return is_string($name) && strlen($name) <= 128
-        && preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9._-]*\z/', $name) === 1;
-}
-
-function pruneDirectory(string $path): bool
-{
-    if (is_link($path) || (file_exists($path) && !is_dir($path))) {
-        throw new RuntimeException("Expected a real directory: $path");
-    }
-    return is_dir($path);
-}
-
-function pruneFile(string $path): void
-{
-    if (is_link($path) || !is_file($path)) {
-        throw new RuntimeException("Expected a regular file: $path");
-    }
-}
-
-function pruneTime(mixed $value): DateTimeImmutable
-{
-    // Require an absolute timestamp, not PHP's relative-date expressions.
-    if (!is_string($value)
-        || preg_match('/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})\z/', $value) !== 1) {
-        throw new RuntimeException('Invalid deployment timestamp');
-    }
-    $time = new DateTimeImmutable($value);
-    $errors = DateTimeImmutable::getLastErrors();
-    if ($errors !== false && ($errors['warning_count'] || $errors['error_count'])) {
-        throw new RuntimeException('Invalid deployment timestamp');
-    }
-    return $time;
-}
 
 function pruneRecords(string $directory, string $identity, array &$reasons, array &$temporary): array
 {
     $records = [];
+
     if (!is_dir($directory)) {
         return $records;
     }
+
     foreach (new FilesystemIterator($directory) as $entry) {
         $filename = $entry->getFilename();
+
         if (!str_ends_with($filename, '.json')) {
             // Only prune-owned files are disposable. Deployment writes may hold
             // an otherwise unknown checksum and must remain protected.
             if ($identity === 'release'
                 && preg_match('/\A([a-zA-Z0-9][a-zA-Z0-9._-]*)\.json\.(prune-tmp|tmp)-[a-f0-9]{16}\z/', $filename, $match) === 1
-                && pruneName($match[1]) && !$entry->isLink() && $entry->isFile()) {
+                && deploymentValidName($match[1]) && !$entry->isLink() && $entry->isFile()) {
                 $owned = $match[2] === 'prune-tmp';
+
                 if (!$owned) {
                     $marker = json_decode((string) file_get_contents($entry->getPathname()), true);
                     $published = "$directory/{$match[1]}.json";
@@ -62,64 +30,83 @@ function pruneRecords(string $directory, string $identity, array &$reasons, arra
                         && is_string($marker['sha256'] ?? null)
                         && ($record['sha256'] ?? null) === $marker['sha256'];
                 }
+
                 if ($owned) {
                     $temporary[] = $entry->getPathname();
+
                     continue;
                 }
             }
             $reasons[] = "Unrecognized metadata file: $directory/$filename";
+
             continue;
         }
+
         $name = substr($filename, 0, -5);
-        if (!pruneName($name)) {
+
+        if (!deploymentValidName($name)) {
             throw new RuntimeException("Invalid metadata filename: $filename");
         }
-        pruneFile($entry->getPathname());
+
+        deploymentRegularFile($entry->getPathname(), 'metadata', true);
         $object = json_decode((string) file_get_contents($entry->getPathname()), false, 512, JSON_THROW_ON_ERROR);
+
         if (!$object instanceof stdClass) {
             throw new RuntimeException("Invalid metadata: $filename");
         }
+
         $record = (array) $object;
+
         foreach (['release', 'reference', 'activation_pending'] as $field) {
-            if (array_key_exists($field, $record) && !pruneName($record[$field])) {
+            if (array_key_exists($field, $record) && !deploymentValidName($record[$field])) {
                 throw new RuntimeException("Invalid $field in $filename");
             }
         }
+
         // Older callers used a local archive path as the deployment identity.
         foreach (['deployment', 'archive'] as $field) {
             if (array_key_exists($field, $record) && !is_string($record[$field])) {
                 throw new RuntimeException("Invalid $field in $filename");
             }
         }
+
         if (isset($record[$identity]) && $record[$identity] !== $name) {
             throw new RuntimeException("Metadata identity does not match filename: $filename");
         }
+
         if (array_key_exists('sha256', $record)) {
-            if (!is_string($record['sha256']) || preg_match('/\A[a-f0-9]{64}\z/', $record['sha256']) !== 1) {
+            if (!deploymentValidChecksum($record['sha256'])) {
                 throw new RuntimeException("Invalid checksum in $filename");
             }
         } else {
             $reasons[] = "Missing checksum in metadata: $directory/$filename";
         }
+
         foreach (['created_at', 'deployed_at'] as $field) {
             if (array_key_exists($field, $record)) {
-                pruneTime($record[$field]);
+                deploymentParseTimestamp($record[$field]) ?? throw new RuntimeException("Invalid $field in $filename");
             }
         }
+
         if (array_key_exists('ready', $record) && !is_bool($record['ready'])) {
             throw new RuntimeException("Invalid ready flag in $filename");
         }
+
         if (array_key_exists('pruning', $record)
             && (!is_bool($record['pruning']) || ($record['pruning']
                 && (($record['ready'] ?? null) !== false || !isset($record['release'], $record['sha256']))))) {
             throw new RuntimeException("Invalid pruning marker in $filename");
         }
+
         if (array_key_exists('status', $record) && !is_string($record['status'])) {
             throw new RuntimeException("Invalid status in $filename");
         }
+
         $records[$name] = $record;
     }
+
     ksort($records, SORT_STRING);
+
     return $records;
 }
 
@@ -130,21 +117,27 @@ function pruneRemoveTree(string $path): void
         if (!unlink($path)) {
             throw new RuntimeException("Cannot remove release entry: $path");
         }
+
         return;
     }
+
     if (!is_dir($path)) {
         throw new RuntimeException("Unexpected release entry: $path");
     }
+
     // Only directories need write access to unlink children. Preserve all other
     // mode bits, never chmod files or symlink targets, and only do this after
     // publishing the resumable pruning marker (never during plan validation).
     $mode = fileperms($path) & 07777;
+
     if (($mode & 0700) !== 0700 && !chmod($path, $mode | 0700)) {
         throw new RuntimeException("Cannot restore directory access: $path");
     }
+
     foreach (new FilesystemIterator($path) as $entry) {
         pruneRemoveTree($entry->getPathname());
     }
+
     if (!rmdir($path)) {
         throw new RuntimeException("Cannot remove release directory: $path");
     }
@@ -156,77 +149,48 @@ function pruneValidateTree(string $path): void
         if ($entry->isLink() || $entry->isFile()) {
             continue;
         }
+
         if (!$entry->isDir()) {
             throw new RuntimeException("Unexpected release entry: {$entry->getPathname()}");
         }
+
         pruneValidateTree($entry->getPathname());
     }
 }
 
 function pruneMarkRelease(string $file, string $name, string $checksum): void
 {
-    $directory = dirname($file);
-    if (!pruneDirectory($directory) && !mkdir($directory, 0700)) {
-        throw new RuntimeException("Cannot create release metadata directory: $directory");
-    }
-    $temporary = $file . '.prune-tmp-' . bin2hex(random_bytes(8));
-    $stream = fopen($temporary, 'x');
-    try {
-        $data = json_encode(['release' => $name, 'sha256' => $checksum, 'ready' => false, 'pruning' => true], JSON_THROW_ON_ERROR);
-        if ($stream === false || fwrite($stream, $data) !== strlen($data) || !fflush($stream)) {
-            throw new RuntimeException("Cannot record pending cleanup for release $name");
-        }
-        if (!rename($temporary, $file)) {
-            throw new RuntimeException("Cannot publish pending cleanup for release $name");
-        }
-    } finally {
-        if (is_resource($stream)) {
-            fclose($stream);
-        }
-        if (is_file($temporary)) {
-            unlink($temporary);
-        }
-    }
+    deploymentDirectory(dirname($file), 0700);
+    $marker = ['release' => $name, 'sha256' => $checksum, 'ready' => false, 'pruning' => true];
+    deploymentWriteAtomic($file, json_encode($marker, JSON_THROW_ON_ERROR), "pending cleanup for release $name", null, 'prune-tmp');
 }
 
 function prunePlan(array $input, array &$progress): array
 {
-    $root = $input['root'] ?? null;
-    if (!is_string($root) || $root === '' || $root[0] !== '/' || str_contains($root, "\0")
-        || !is_int($input['keep'] ?? null) || $input['keep'] < 0 || !is_bool($input['dry_run'] ?? null)) {
+    $root = deploymentRoot($input);
+
+    if (!is_int($input['keep'] ?? null) || $input['keep'] < 0 || !is_bool($input['dry_run'] ?? null)) {
         throw new RuntimeException('Invalid prune input');
     }
-    $root = rtrim($root, '/') ?: '/';
+
     $current = deploymentCurrentPath($input, $root);
     $result = ['deployments' => [], 'artifacts' => []];
-    if (!pruneDirectory($root) || !pruneDirectory("$root/.shopware-cli")) {
+    $state = deploymentStatePath($root);
+
+    if (!deploymentRealDirectory($root) || !deploymentRealDirectory($state)) {
         return $result;
     }
-    $state = "$root/.shopware-cli";
-    $lockPath = "$state/deployment.lock";
-    pruneFile($lockPath);
-    $lock = fopen($lockPath, 'r+');
-    if ($lock === false) {
-        throw new RuntimeException('Cannot open deployment lock');
-    }
+
+    deploymentRegularFile(path_join($state, 'deployment.lock'), 'deployment lock', true);
+    $lock = deploymentLock($root, 'r+');
+
     try {
-        if (!flock($lock, LOCK_EX | LOCK_NB)) {
-            throw new RuntimeException("Another deployment holds the lock for $root");
+        foreach ([path_join($root, 'releases'), path_join($root, 'runtime'), path_join($state, 'releases'), path_join($state, 'rollouts'), path_join($state, 'logs'), path_join($state, 'artifacts')] as $directory) {
+            deploymentRealDirectory($directory);
         }
-        foreach (["$root/releases", "$root/runtime", "$state/releases", "$state/rollouts", "$state/logs", "$state/artifacts"] as $directory) {
-            pruneDirectory($directory);
-        }
-        $active = null;
-        if (is_link($current)) {
-            $target = realpath($current);
-            if ($target === false || !is_dir($target) || dirname($target) !== realpath("$root/releases")
-                || is_link("$root/releases/" . basename($target))) {
-                throw new RuntimeException("cannot use active symlink $current: it must point to a real direct child of releases");
-            }
-            $active = basename($target);
-        } elseif (file_exists($current)) {
-            throw new RuntimeException("cannot use active path $current: it must be a symlink");
-        }
+
+        $active = deploymentActiveRelease($root, $current);
+        $active = $active === null ? null : basename($active);
 
         $reasons = &$progress['artifact_skip_reasons'];
         $temporary = [];
@@ -234,39 +198,53 @@ function prunePlan(array $input, array &$progress): array
         $rollouts = pruneRecords("$state/rollouts", 'reference', $reasons, $temporary);
         $history = [];
         $historyHashes = [];
+
         foreach ($rollouts as $reference => $record) {
             // Missing identity is incomplete, not proof of a managed legacy release.
             $name = $record['release'] ?? $record['reference'] ?? null;
+
             if ($name === null) {
                 $reasons[] = "Missing release identity in rollout: $reference";
+
                 continue;
             }
+
             $history[$name][$reference] = $record;
+
             if (isset($record['sha256'])) {
                 if (isset($historyHashes[$name]) && $historyHashes[$name] !== $record['sha256']) {
                     throw new RuntimeException("Inconsistent rollout checksums for release $name");
                 }
+
                 $historyHashes[$name] = $record['sha256'];
             }
+
             if (isset($records[$name]['sha256'], $record['sha256'])
                 && $records[$name]['sha256'] !== $record['sha256']) {
                 throw new RuntimeException("Inconsistent checksum for release $name");
             }
         }
+
         // Validate recorded activations even for absent or protected directories.
         $pending = [];
+
         foreach ($records as $name => $record) {
             if (($record['pruning'] ?? false) === true) {
                 if ((string) $name === $active) {
                     throw new RuntimeException("Refusing to resume cleanup of active release $name");
                 }
+
                 $pending[] = $name;
+
                 continue;
             }
+
             if (!isset($record['reference'], $record['deployed_at'], $record['sha256'])) {
                 continue;
             }
+
             $event = $rollouts[$record['reference']] ?? null;
+
             if ($event === null || ($event['status'] ?? null) !== 'successful'
                 || ($event['release'] ?? null) !== (string) $name
                 || ($event['sha256'] ?? null) !== $record['sha256']
@@ -276,16 +254,21 @@ function prunePlan(array $input, array &$progress): array
         }
 
         $candidates = [];
-        if (is_dir("$root/releases")) {
-            foreach (new FilesystemIterator("$root/releases") as $entry) {
+
+        if (is_dir(path_join($root, 'releases'))) {
+            foreach (new FilesystemIterator(path_join($root, 'releases')) as $entry) {
                 $name = $entry->getFilename();
-                if (!pruneName($name) || $entry->isLink() || !$entry->isDir()) {
+
+                if (!deploymentValidName($name) || $entry->isLink() || !$entry->isDir()) {
                     $reasons[] = "Unmanaged release entry: $name";
+
                     continue;
                 }
+
                 $record = $records[$name] ?? null;
                 $events = $history[$name] ?? [];
                 $eligible = false;
+
                 if ($record !== null) {
                     $eligible = ($record['release'] ?? null) === $name && ($record['ready'] ?? false) === true
                         && !array_key_exists('activation_pending', $record)
@@ -295,25 +278,32 @@ function prunePlan(array $input, array &$progress): array
                 } else {
                     $reasons[] = "Missing metadata for release: $name";
                 }
+
                 $latest = null;
+
                 foreach ($events as $reference => $event) {
                     if (($event['status'] ?? null) !== 'successful'
                         || ($event['reference'] ?? null) !== (string) $reference || !isset($event['sha256'])
                         || (isset($event['release']) && !isset($event['deployed_at']))
                         || (!isset($event['deployed_at']) && !isset($event['created_at']))) {
                         $eligible = false;
+
                         continue;
                     }
-                    $time = pruneTime($event['deployed_at'] ?? $event['created_at']);
+
+                    $time = deploymentParseTimestamp($event['deployed_at'] ?? $event['created_at']);
+
                     if ($latest === null || $time > $latest) {
                         $latest = $time;
                     }
                 }
+
                 if ($eligible && $latest !== null) {
                     $candidates[$name] = $latest;
                 }
             }
         }
+
         uksort($candidates, static fn ($a, $b) => ($candidates[$b] <=> $candidates[$a]) ?: strcmp((string) $a, (string) $b));
         $remove = array_slice(array_keys($candidates), $input['keep']);
         $remove = array_values(array_filter($remove, static fn ($name) => (string) $name !== $active));
@@ -321,39 +311,49 @@ function prunePlan(array $input, array &$progress): array
         sort($remove, SORT_STRING);
         $files = [];
         $removeHashes = [];
+
         foreach ($remove as $name) {
             // Runtime is owned by the same managed release, not an independent
             // retention candidate. Unknown runtime entries are never inspected.
-            foreach (["$root/releases/$name", "$root/runtime/$name"] as $path) {
-                if (pruneDirectory($path)) {
+            foreach ([path_join($root, 'releases', $name), path_join($root, 'runtime', $name)] as $path) {
+                if (deploymentRealDirectory($path)) {
                     pruneValidateTree($path);
                 }
             }
+
             $removeHashes[$name] = $records[$name]['sha256'] ?? $historyHashes[$name];
             $files[$name] = [];
+
             if (isset($records[$name])) {
                 unset($records[$name]);
             }
+
             $logNames = [$name];
+
             foreach ($history[$name] ?? [] as $reference => $event) {
-                $files[$name]["$state/rollouts/$reference.json"] = true;
+                $files[$name][path_join($state, 'rollouts', "$reference.json")] = true;
                 $logNames[] = $reference;
                 unset($rollouts[$reference]);
             }
+
             foreach ($logNames as $logName) {
                 // Do not remove a legacy rollout log that is another retained release's helper log.
-                if ($logName != $name && file_exists("$root/releases/$logName") && !in_array($logName, $remove, true)) {
+                if ($logName != $name && file_exists(path_join($root, 'releases', $logName)) && !in_array($logName, $remove, true)) {
                     continue;
                 }
-                $path = "$state/logs/$logName.log";
-                if (file_exists($path) || is_link($path)) {
-                    pruneFile($path);
+
+                $path = path_join($state, 'logs', "$logName.log");
+
+                if (deploymentRegularFile($path, 'deployment log')) {
                     $files[$name][$path] = true;
                 }
             }
+
             $result['deployments'][] = ['reference' => (string) $name];
         }
+
         $retainedHashes = [];
+
         foreach (array_merge(array_values($records), array_values($rollouts)) as $record) {
             if (isset($record['sha256'])) {
                 $retainedHashes[$record['sha256']] = true;
@@ -362,18 +362,23 @@ function prunePlan(array $input, array &$progress): array
         $reasons = array_values(array_unique($reasons));
         sort($reasons, SORT_STRING);
         $result['artifact_skip_reasons'] = $reasons;
+
         if (is_dir("$state/artifacts")) {
             foreach (new FilesystemIterator("$state/artifacts") as $entry) {
                 if (preg_match('/\A([a-f0-9]{64})\.tar\.gz\z/', $entry->getFilename(), $match) !== 1) {
                     continue;
                 }
-                pruneFile($entry->getPathname());
+
+                deploymentRegularFile($entry->getPathname(), 'cached artifact', true);
+
                 if ($reasons === [] && !isset($retainedHashes[$match[1]])) {
                     $result['artifacts'][] = $entry->getFilename();
                 }
             }
         }
+
         sort($result['artifacts'], SORT_STRING);
+
         // The entire plan, including logs and cached archives, is validated first.
         if (!$input['dry_run']) {
             foreach ($temporary as $path) {
@@ -381,54 +386,43 @@ function prunePlan(array $input, array &$progress): array
                     throw new RuntimeException("Cannot remove abandoned pruning metadata: $path");
                 }
             }
+
             foreach ($remove as $name) {
                 // Persist intent first; ready=false also blocks rollout reuse after
                 // an interruption. Keep the marker until every related file is gone.
-                $marker = "$state/releases/$name.json";
+                $marker = path_join($state, 'releases', "$name.json");
                 pruneMarkRelease($marker, (string) $name, $removeHashes[$name]);
                 $progress['incomplete_deployments'] = [(string) $name];
+
                 foreach (["$root/releases/$name", "$root/runtime/$name"] as $path) {
-                    if (pruneDirectory($path)) {
+                    if (deploymentRealDirectory($path)) {
                         pruneRemoveTree($path);
                     }
                 }
+
                 foreach (array_keys($files[$name]) as $path) {
                     if (!unlink($path)) {
                         throw new RuntimeException("Cannot remove deployment metadata or log: $path");
                     }
                 }
+
                 if (!unlink($marker)) {
                     throw new RuntimeException("Cannot remove completed cleanup marker: $marker");
                 }
                 $progress['deployments'][] = ['reference' => (string) $name];
                 $progress['incomplete_deployments'] = [];
             }
+
             foreach ($result['artifacts'] as $filename) {
-                if (!unlink("$state/artifacts/$filename")) {
+                if (!unlink(path_join($state, 'artifacts', $filename))) {
                     throw new RuntimeException("Cannot remove cached artifact: $filename");
                 }
                 $progress['artifacts'][] = $filename;
             }
         }
+
         return $result;
     } finally {
         fclose($lock);
     }
-}
-
-$progress = ['deployments' => [], 'artifacts' => [], 'artifact_skip_reasons' => [], 'incomplete_deployments' => []];
-try {
-    // Warnings must never leak into the machine-readable stdout response.
-    set_error_handler(static function (int $severity, string $message): never {
-        throw new RuntimeException($message);
-    });
-    $input = json_decode($argv[1] ?? '', true, 512, JSON_THROW_ON_ERROR);
-    if (!is_array($input)) {
-        throw new RuntimeException('Invalid prune input');
-    }
-    echo json_encode(prunePlan($input, $progress), JSON_THROW_ON_ERROR) . "\n";
-} catch (Throwable $error) {
-    echo json_encode($progress, JSON_THROW_ON_ERROR) . "\n";
-    fwrite(STDERR, $error->getMessage() . "\n");
-    exit(1);
 }
