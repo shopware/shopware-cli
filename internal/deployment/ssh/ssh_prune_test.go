@@ -3,7 +3,6 @@ package ssh
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,10 +14,6 @@ import (
 )
 
 func TestPruneConfirmedPlan(t *testing.T) {
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP is required")
-	}
 	for _, change := range []string{"unchanged", "activation", "artifact", "empty preview"} {
 		t.Run(change, func(t *testing.T) {
 			root := t.TempDir()
@@ -32,12 +27,12 @@ func TestPruneConfirmedPlan(t *testing.T) {
 			require.NoError(t, os.Symlink(filepath.Join(root, "releases/A"), filepath.Join(root, "current")))
 			run := func(options DeploymentPruneOptions) (DeploymentPruneResult, error) {
 				t.Helper()
-				payload, err := json.Marshal(struct {
+				cmd, archive := localDeploymentCommand(t, "prune", struct {
 					Root string `json:"root"`
 					DeploymentPruneOptions
 				}{root, options})
-				require.NoError(t, err)
-				output, err := exec.CommandContext(t.Context(), php, "-r", strings.TrimPrefix(withSSHDeploymentLayout(sshDeploymentPruneScript), "<?php\n"), "--", string(payload)).Output()
+				cmd.Stdin = archive
+				output, err := cmd.Output()
 				var result DeploymentPruneResult
 				require.NoError(t, json.Unmarshal(output, &result))
 				return result, err
