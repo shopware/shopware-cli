@@ -380,7 +380,12 @@ func (s *sshDeploymentSession) prepare(ctx context.Context) error {
 	if err := s.authorize(ctx, sshRolloutPrepare); err != nil {
 		return err
 	}
-	return readRolloutMessage(s.reader, sshRolloutReady+" "+s.input.Reference)
+	// Use a separate prefix buffer: remote stderr may still be writing to s.output.
+	warningOutput := s.output
+	if host, ok := warningOutput.(*hostWriter); ok {
+		warningOutput = &hostWriter{output: host.output, name: host.name}
+	}
+	return waitForSSHPreparation(ctx, s.reader, s.input.Reference, warningOutput)
 }
 
 func (s *sshDeploymentSession) activate(ctx context.Context) error {
