@@ -43,8 +43,8 @@ func TestPreparationCancellationWarnsBeforeRemoteFinishes(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			remote, server := io.Pipe()
-			defer remote.Close()
-			defer server.Close()
+			t.Cleanup(func() { assert.NoError(t, remote.Close()) })
+			t.Cleanup(func() { assert.NoError(t, server.Close()) })
 			stdin := &cancellationWriter{cancel: cancel}
 			warnings := make(chan string, 1)
 			done := make(chan error, 1)

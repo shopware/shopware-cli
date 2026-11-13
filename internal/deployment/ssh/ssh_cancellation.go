@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 const sshPreparationCancellationWarning = "Cancellation does not stop the Deployment Helper on the server; it may still be running. The database may already be updated. This rollout did not activate the release. Check the server and deployment logs before retrying; retrying the same deployment can activate the prepared release."
 
-var errSSHPreparationCanceled = errors.New("cannot finish release preparation: " + sshPreparationCancellationWarning)
+var errSSHPreparationCanceled = errors.New("cannot finish release preparation: " + strings.TrimSuffix(sshPreparationCancellationWarning, "."))
 
 // waitForSSHPreparation warns immediately on cancellation, even if the remote
 // helper keeps the SSH streams open. Activation has not been authorized yet.
