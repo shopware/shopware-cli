@@ -35,7 +35,7 @@ type CheckResult struct {
 // Verify runs the proxy health checks bottom-up and stops at the first
 // failure, since later layers depend on earlier ones. It never mutates any
 // state, so it is safe to run at any time.
-func Verify(ctx context.Context, baseDomain string) []CheckResult {
+func Verify(ctx context.Context, baseDomain string, checkTrust bool) []CheckResult {
 	// The shared proxy needs the shared DNS container and OS resolver wiring,
 	// neither of which is supported natively on Windows; running the checks there
 	// only produces a misleading "run setup" timeout, so stop with a clear result.
@@ -47,6 +47,12 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 		}}
 	}
 
+	return runChecks(ctx, verifyChecks(ctx, baseDomain, checkTrust))
+}
+
+// verifyChecks lists the layers of the proxy chain in dependency order.
+// checkTrust adds the HTTPS check, which only passes with a trusted CA.
+func verifyChecks(ctx context.Context, baseDomain string, checkTrust bool) []verifyCheck {
 	probe := randomProbeHostname(baseDomain)
 
 	checks := []verifyCheck{
@@ -78,16 +84,19 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 			idleHint: "Run \"shopware-cli project proxy up\" in a shop to start it",
 			idle:     func(ctx context.Context, _ error) bool { return containerIdle(ctx, ContainerName) },
 		},
-		{
+	}
+
+	if checkTrust {
+		checks = append(checks, verifyCheck{
 			name: fmt.Sprintf("HTTPS works and is trusted (https://%s/ping)", PingHostname(baseDomain)),
 			run: func(ctx context.Context) error {
 				return checkHTTPS(ctx, PingHostname(baseDomain))
 			},
 			hint: "Run \"shopware-cli project proxy setup\" so browsers trust the local HTTPS certificates (if sudo is blocked, it prints what to ask your IT team; Firefox needs certutil: " + certutilInstallHint() + ")",
-		},
+		})
 	}
 
-	return runChecks(ctx, checks)
+	return checks
 }
 
 // verifyCheck is one layer of the proxy chain. idle, when set, decides whether

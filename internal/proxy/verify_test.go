@@ -171,3 +171,16 @@ func TestDNSWrongAnswerIsNeverIdle(t *testing.T) {
 
 	assert.False(t, dnsIdle(t.Context(), fmt.Errorf("%w (asked for probe)", errWrongAnswer)))
 }
+
+func TestVerifyChecksTrustOnlyWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	withTrust := verifyChecks(t.Context(), "shopware.local", true)
+	withoutTrust := verifyChecks(t.Context(), "shopware.local", false)
+
+	// Without trust only the last layer, the HTTPS check, is left out.
+	require.Len(t, withoutTrust, len(withTrust)-1)
+	for i, check := range withoutTrust {
+		assert.Equal(t, withTrust[i].name, check.name)
+	}
+}

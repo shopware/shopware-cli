@@ -33,7 +33,7 @@ failing layer is reported with a hint how to fix it.`,
 			return err
 		}
 
-		ready, notStarted := runProxyVerification(cmd.Context(), settings.BaseDomain())
+		ready, notStarted := runProxyVerification(cmd.Context(), settings.BaseDomain(), true)
 		// "Not started yet" is not a fault — the machine may simply be set up but
 		// idle (e.g. after a teardown). Only a real broken layer exits non-zero.
 		if !ready && !notStarted {
@@ -50,8 +50,8 @@ failing layer is reported with a hint how to fix it.`,
 // e.g. before the first `proxy up` or after a `teardown`), so callers can tell a
 // broken setup from an idle one. Shared by `proxy verify` and the final step of
 // `proxy setup`.
-func runProxyVerification(ctx context.Context, baseDomain string) (ready, notStarted bool) {
-	results := proxy.Verify(ctx, baseDomain)
+func runProxyVerification(ctx context.Context, baseDomain string, checkTrust bool) (ready, notStarted bool) {
+	results := proxy.Verify(ctx, baseDomain, checkTrust)
 
 	ready = true
 	onlyPending := true
