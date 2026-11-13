@@ -39,9 +39,18 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 		var errs []error
 
 		for _, entry := range reg.Projects {
-			env, err := newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, "")
-			if err == nil {
-				err = env.down(ctx, false)
+			var err error
+			if _, statErr := os.Stat(entry.ProjectRoot); errors.Is(statErr, os.ErrNotExist) {
+				// The project directory is gone, so there is nothing to stop
+				// or restore: only drop its registration.
+				if err = proxy.ForgetProject(entry.ProjectRoot); err == nil {
+					fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Deregistered "+entry.Hostname) + tui.DimText.Render("  "+entry.ProjectRoot+" no longer exists"))
+				}
+			} else {
+				var env *proxyEnvironment
+				if env, err = newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, ""); err == nil {
+					err = env.down(ctx, false)
+				}
 			}
 			if err != nil {
 				fmt.Println(tui.RedText.Render(fmt.Sprintf("  Could not deregister %s: %s", entry.Hostname, err)))
