@@ -1,0 +1,33 @@
+id: context-logging
+valid:
+  - 'package example; import "log"; func run(ctx context.Context) { log := printer; log.Println("Starting") }'
+  - 'package example; import "log"; func run(ctx context.Context) { var log Printer; log.Println("Starting") }'
+  - 'package example; import "log"; func run(ctx context.Context, log Printer) { log.Println("Starting") }'
+  - 'package example; import "log"; func (log *Printer) Run(ctx context.Context) { log.Println("Starting") }'
+  - 'package example; import "log"; func run() { log.Println("Starting") }'
+  - 'package example; import "log"; func run(ctx string) { log.Println("Starting") }'
+  - 'package example; import "log"; func run(_ context.Context) { log.Println("Starting") }'
+  - 'package example; import "log"; func run(context.Context) { log.Println("Starting") }'
+  - 'package example; import "log"; func run(ctx context.Context) { logging.FromContext(ctx).Info("Starting") }'
+  - 'package example; import "example.com/log"; func run(ctx context.Context) { log.Println("Starting") }'
+  - 'package example; func run(ctx context.Context) { log.Println("Starting") }'
+  - 'package example; import standardlog "log"; func run(ctx context.Context) { standardlog.Println("Starting") }'
+  - 'package example; import "log"; func run(ctx other.Context) { log.Println("Starting") }'
+  - 'package example; import "log"; func first(ctx context.Context) {}; func second() { log.Println("Starting") }'
+  - 'package example; import "log"; func run(ctx context.Context) { log.SetFlags(0) }'
+invalid:
+  - 'package example; import "log"; func run(ctx context.Context) { log.Print("Starting") }'
+  - 'package example; import "log"; func run(requestContext context.Context) { log.Printf("Starting %s", name) }'
+  - 'package example; import "log"; func run(ctx context.Context) { log.Println(message) }'
+  - 'package example; import "log"; func (s *Service) Run(ctx context.Context) { log.Println("Starting") }'
+  - 'package example; import "log"; var run = func(ctx context.Context) { log.Println("Starting") }'
+  - 'package example; import "log"; func run(ctx context.Context) { defer func() { log.Println("Closing") }() }'
+  - |
+    package example
+    import (
+      "context"
+      "log"
+    )
+    func run(ctx context.Context) {
+      log.Printf("Starting %s", name)
+    }

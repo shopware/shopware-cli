@@ -1,0 +1,70 @@
+# Reject log.Print* when context is available; use logging.FromContext(ctx).
+id: context-logging
+language: Go
+severity: error
+message: Use logging.FromContext with the available context instead of standard logging
+note: See AGENTS.md (Error Handling)
+
+rule:
+  kind: call_expression
+  has:
+    field: function
+    kind: selector_expression
+    regex: '^log\.Print(f|ln)?$'
+  # Conservatively skip scopes that declare their own value named log.
+  not:
+    any:
+      - inside:
+          kind: statement_list
+          stopBy: end
+          has:
+            any:
+              - pattern: log := $VALUE
+              - pattern: var log = $VALUE
+              - pattern: var log $TYPE
+              - pattern: var log $TYPE = $VALUE
+      - inside:
+          stopBy: end
+          any:
+            - kind: function_declaration
+            - kind: method_declaration
+            - kind: func_literal
+          has:
+            kind: parameter_list
+            has:
+              kind: parameter_declaration
+              has: {field: name, regex: '^log$'}
+  all:
+    # Include closures capturing the context of an enclosing function or method.
+    - inside:
+        stopBy: end
+        any:
+          - kind: function_declaration
+          - kind: method_declaration
+          - kind: func_literal
+        has:
+          field: parameters
+          has:
+            kind: parameter_declaration
+            all:
+              - has:
+                  field: type
+                  regex: '^context\.Context$'
+              - has:
+                  field: name
+                  kind: identifier
+                  not: {regex: '^_$'}
+    # Recognise the unaliased standard-library import, not an unrelated logger.
+    - inside:
+        kind: source_file
+        stopBy: end
+        has:
+          kind: import_declaration
+          has:
+            kind: import_spec
+            stopBy: end
+            has:
+              field: path
+              regex: '^"log"$'
+            not:
+              has: {field: name, regex: '.'}

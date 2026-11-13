@@ -59,7 +59,7 @@ func GetInstalledPHPVersion(ctx context.Context) (string, error) {
 	// Check if PHP is installed
 	phpPath, err := resolvePHPBinary()
 	if err != nil {
-		return "", fmt.Errorf("PHP is not installed: %w", err)
+		return "", fmt.Errorf("cannot find PHP installation: %w", err)
 	}
 
 	return GetPHPVersionOfBinary(ctx, phpPath)
@@ -69,7 +69,7 @@ func GetInstalledPHPVersion(ctx context.Context) (string, error) {
 func GetAvailablePHPExtensions(ctx context.Context) ([]string, error) {
 	phpPath, err := resolvePHPBinary()
 	if err != nil {
-		return nil, fmt.Errorf("PHP is not installed: %w", err)
+		return nil, fmt.Errorf("cannot find PHP installation: %w", err)
 	}
 
 	cmd := exec.CommandContext(ctx, phpPath, "-m")

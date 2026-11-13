@@ -76,7 +76,7 @@ depends = ["format-check", "build", "test", "vet", "lint", "lint-workflows", "te
 
 [tasks.lint-conventions]
 description = "Check project conventions"
-run = "ast-grep scan cmd/"
+run = "ast-grep scan ."
 
 [tasks.test-lint-rules]
 description = "Test project lint rules and fixes"
@@ -88,7 +88,7 @@ run = [
 
 [tasks.fix-conventions]
 description = "Apply project convention fixes"
-run = "ast-grep scan cmd/ --update-all"
+run = "ast-grep scan . --update-all"
 
 [tasks.lint-workflows]
 description = "Validate GitHub Actions workflows"

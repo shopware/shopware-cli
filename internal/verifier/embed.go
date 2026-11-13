@@ -5,7 +5,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path"
 
@@ -74,7 +73,7 @@ func SetupTools(ctx context.Context, currentVersion string) error {
 	composerInstall.Dir = path.Join(installDir, "php")
 
 	if output, err := composerInstall.CombinedOutput(); err != nil {
-		log.Println(string(output))
+		logging.FromContext(ctx).Error(string(output))
 		return fmt.Errorf("failed to install composer dependencies: %w", err)
 	}
 
@@ -82,7 +81,7 @@ func SetupTools(ctx context.Context, currentVersion string) error {
 	jsInstall.Dir = path.Join(installDir, "js")
 
 	if output, err := jsInstall.CombinedOutput(); err != nil {
-		log.Println(string(output))
+		logging.FromContext(ctx).Error(string(output))
 		return fmt.Errorf("failed to install npm dependencies: %w", err)
 	}
 

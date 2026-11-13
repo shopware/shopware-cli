@@ -93,7 +93,7 @@ func locateDartSass(ctx context.Context) (string, error) {
 
 	// Store the downloaded folder in cache
 	if err := cache.StoreFolderCache(ctx, cacheKey, downloadDir); err != nil {
-		logging.FromContext(ctx).Debugf("cannot cache dart-sass folder: %v", err)
+		logging.FromContext(ctx).Debugf("Cannot cache dart-sass folder: %v", err)
 	}
 
 	// Create a permanent directory for the restored cache

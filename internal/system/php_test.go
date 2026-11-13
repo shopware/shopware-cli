@@ -13,7 +13,7 @@ func TestGetPHPVersionNotInstalled(t *testing.T) {
 	t.Setenv("PHP_BINARY", "")
 	t.Setenv("PATH", "")
 	_, err := GetInstalledPHPVersion(t.Context())
-	assert.ErrorContains(t, err, "PHP is not installed")
+	assert.ErrorContains(t, err, "cannot find PHP installation")
 }
 
 func TestGetPHPVersionPrefersPHPBinaryEnv(t *testing.T) {
@@ -62,7 +62,7 @@ func TestGetAvailablePHPExtensionsNotInstalled(t *testing.T) {
 	t.Setenv("PHP_BINARY", "")
 	t.Setenv("PATH", "")
 	_, err := GetAvailablePHPExtensions(t.Context())
-	assert.ErrorContains(t, err, "PHP is not installed")
+	assert.ErrorContains(t, err, "cannot find PHP installation")
 }
 
 func TestGetAvailablePHPExtensions(t *testing.T) {

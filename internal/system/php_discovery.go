@@ -84,7 +84,7 @@ func UnusablePHPBinaryEnv(ctx context.Context) error {
 }
 
 func unusablePHPBinaryError(err error) error {
-	return fmt.Errorf("PHP_BINARY is set but unusable: %w", err)
+	return fmt.Errorf("cannot use configured PHP_BINARY: %w", err)
 }
 
 // newPHPInstallation converts a discovered PHP into a PHPInstallation, dropping

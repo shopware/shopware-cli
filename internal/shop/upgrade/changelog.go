@@ -62,7 +62,7 @@ func (u *ProjectUpgrader) LoadExtensionChangelogs(ctx context.Context, target st
 
 	plugins, err := u.storePlugins(ctx, "en_GB", target, names)
 	if err != nil {
-		logging.FromContext(ctx).Debugf("store changelog lookup failed: %v", err)
+		logging.FromContext(ctx).Debugf("Store changelog lookup failed: %v", err)
 		return nil
 	}
 
