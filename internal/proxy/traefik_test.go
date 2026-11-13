@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -54,4 +56,36 @@ func TestEqualStringSets(t *testing.T) {
 	assert.True(t, equalStringSets([]string{"a", "b"}, []string{"b", "a"}))
 	assert.False(t, equalStringSets([]string{"a"}, []string{"a", "b"}))
 	assert.False(t, equalStringSets([]string{"a", "b"}, []string{"a"}))
+}
+
+func TestBusyPortsReportsOnlyPortsInUse(t *testing.T) {
+	taken, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", ":0")
+	assert.NoError(t, err)
+	defer func() { _ = taken.Close() }()
+
+	free, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", ":0")
+	assert.NoError(t, err)
+	freePort := free.Addr().(*net.TCPAddr).Port
+	assert.NoError(t, free.Close())
+
+	takenPort := taken.Addr().(*net.TCPAddr).Port
+
+	assert.Equal(t, []int{takenPort}, busyPorts(t.Context(), freePort, takenPort))
+}
+
+func TestPortConflictErrorNamesEveryBusyPort(t *testing.T) {
+	err := portConflictError([]int{80, 443})
+
+	assert.ErrorContains(t, err, "80")
+	assert.ErrorContains(t, err, "443")
+}
+
+func TestReadablePortConflictOnlyRewritesPortFailures(t *testing.T) {
+	other := errors.New("docker [run]: exit status 125\nno such image")
+	assert.Same(t, other, readablePortConflict(other))
+
+	conflict := errors.New("docker [run -d ...]: exit status 125\nBind for 0.0.0.0:80 failed: port is already allocated")
+	assert.NotContains(t, readablePortConflict(conflict).Error(), "docker [run")
+
+	assert.NoError(t, readablePortConflict(nil))
 }

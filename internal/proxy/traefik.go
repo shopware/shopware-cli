@@ -7,7 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+
+	"github.com/shopware/shopware-cli/internal/docker"
 )
 
 const (
@@ -148,13 +151,17 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		return nil
 	}
 
+	if busy := busyPorts(ctx, 80, 443, StorefrontAssetsPort); len(busy) > 0 {
+		return portConflictError(busy)
+	}
+
 	if err := EnsureNetwork(ctx); err != nil {
 		return err
 	}
 
 	if containerExists(ctx) {
 		_, err := runDocker(ctx, "start", ContainerName)
-		return err
+		return readablePortConflict(err)
 	}
 
 	_, err = runDocker(ctx, "run", "-d",
@@ -182,7 +189,60 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		"--entrypoints.websecure.address=:443",
 		fmt.Sprintf("--entrypoints.sfassets.address=:%d", StorefrontAssetsPort),
 	)
+	if err != nil {
+		// A failed run leaves a "created" container behind; without removing
+		// it the next attempt would take the start path and fail differently.
+		_, _ = runDocker(context.WithoutCancel(ctx), "rm", "-f", ContainerName)
+	}
+
+	return readablePortConflict(err)
+}
+
+// readablePortConflict replaces Docker's own port-binding failure, which
+// carries the whole `docker run` line, with the readable conflict message. It
+// catches what busyPorts cannot see from the host, such as a port published by
+// another container on loopback only, or a privileged port on Linux. Other errors pass through unchanged.
+func readablePortConflict(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	for _, marker := range []string{"port is already allocated", "address already in use", "ports are not available"} {
+		if strings.Contains(err.Error(), marker) {
+			return portConflictError(nil)
+		}
+	}
+
 	return err
+}
+
+// busyPorts returns those of ports another program already listens on.
+func busyPorts(ctx context.Context, ports ...int) []int {
+	return slices.DeleteFunc(ports, func(port int) bool { return docker.IsPortFree(ctx, port) })
+}
+
+// portConflictError explains that the shared proxy cannot bind its host ports.
+// It has to own exactly these ports for the shop URLs to work, so unlike a
+// project's service ports there is no free port to fall back to. An empty busy
+// list means Docker reported the conflict without the probe pinning the port.
+func portConflictError(busy []int) error {
+	const advice = "(for example nginx, Apache, Valet or another container) and run the command again"
+
+	if len(busy) == 0 {
+		return fmt.Errorf("cannot start the shared proxy: one of the ports 80, 443 and %d is already in use, stop the program using it %s", StorefrontAssetsPort, advice)
+	}
+
+	names := make([]string, len(busy))
+	for i, port := range busy {
+		names[i] = strconv.Itoa(port)
+	}
+
+	subject, verb, object := "port", "is", "it"
+	if len(busy) > 1 {
+		subject, verb, object = "ports", "are", "them"
+	}
+
+	return fmt.Errorf("cannot start the shared proxy: %s %s %s already in use, stop the program using %s %s", subject, strings.Join(names, ", "), verb, object, advice)
 }
 
 // containerIsCurrent reports whether the existing container was created with
