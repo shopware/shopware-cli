@@ -131,7 +131,7 @@ arguments, SSH quoting and Compose service selection:
 type Command struct {
     Name string            // Executable name or path in the target environment.
     Args []string          // Arguments passed without shell parsing.
-    Dir  string            // Working directory in the target environment.
+    Dir  string            // Command's working directory (CWD) in the target.
     Env  map[string]string // Overrides for the target's inherited environment.
 }
 
@@ -152,8 +152,9 @@ type Options struct {
 }
 ```
 
-`Dir` refers to the selected target's filesystem. Application wiring maps a host
-directory to its container path before setting it, as described under
+`Dir` sets the command's working directory (CWD) in the selected execution
+environment. For containers, application wiring maps the chosen host directory
+to its container path before setting `Dir`, as described under
 [Target wiring and workspace](#target-wiring-and-workspace).
 
 Output writers receive data while the process runs, without waiting for `Wait`.
