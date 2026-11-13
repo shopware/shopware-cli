@@ -117,6 +117,21 @@ func RegisteredHostname(projectRoot string) (string, error) {
 	return "", nil
 }
 
+// ForgetProject removes the project's registry entry without touching the
+// project itself, for a project whose directory no longer exists.
+func ForgetProject(projectRoot string) error {
+	reg, err := LoadRegistry()
+	if err != nil {
+		return err
+	}
+
+	if !reg.Remove(projectRoot) {
+		return nil
+	}
+
+	return reg.Save()
+}
+
 // FindByHostname returns the entry using hostname, if any, ignoring the
 // entry (if any) belonging to exceptProjectRoot. It is used to detect
 // hostname collisions between two different projects.
