@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -52,6 +53,31 @@ func TestProjectHostname(t *testing.T) {
 
 		root := filepath.Join(t.TempDir(), "My Shop!")
 		_, err := ProjectHostname(root, &shop.Config{}, "shopware.local")
+		assert.Error(t, err)
+	})
+
+	t.Run("lowercases a mixed-case directory name instead of rejecting it", func(t *testing.T) {
+		t.Parallel()
+
+		root := filepath.Join(t.TempDir(), "MyShop")
+		hostname, err := ProjectHostname(root, &shop.Config{}, "shopware.local")
+		assert.NoError(t, err)
+		assert.Equal(t, "myshop.shopware.local", hostname)
+	})
+
+	t.Run("rejects a directory name whose label is longer than 63 characters", func(t *testing.T) {
+		t.Parallel()
+
+		root := filepath.Join(t.TempDir(), strings.Repeat("a", 70))
+		_, err := ProjectHostname(root, &shop.Config{}, "shopware.local")
+		assert.Error(t, err)
+	})
+
+	t.Run("rejects a configured url host that is not a valid dns name", func(t *testing.T) {
+		t.Parallel()
+
+		root := filepath.Join(t.TempDir(), "my-shop")
+		_, err := ProjectHostname(root, &shop.Config{URL: "https://my shop.shopware.local"}, "shopware.local")
 		assert.Error(t, err)
 	})
 
