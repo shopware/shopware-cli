@@ -1,0 +1,22 @@
+id: cobra-use-angle-brackets
+valid:
+  - 'var cmd = &cobra.Command{Use: "validate path"}'
+  - 'var cmd = &cobra.Command{Use: "package path [branch]"}'
+  - 'var cmd = &cobra.Command{Use: "activate name..."}'
+  - 'var cmd = &cobra.Command{Use: "console command [args...]"}'
+  - 'var cmd = &cobra.Command{Use: generator.Use}'
+  - 'var cmd = &cobra.Command{Use: "build " + "<path>"}'
+  - 'var cmd = &cobra.Command{Use: "build \"<path>\""}'
+  - 'var cmd = &cobra.Command{Use: `build <path>`}'
+  - 'var other = Other{Use: "build <path>"}'
+  - 'var cmd = &cobra.Command{Other: Other{Use: "build <path>"}}'
+invalid:
+  - 'var cmd = &cobra.Command{Use: "build <path>"}'
+  - 'var cmd = &cobra.Command{Use: "build [<path>]"}'
+  - 'var cmd = &cobra.Command{Use: "build <path"}'
+  - 'var cmd = &cobra.Command{Use: "build path>"}'
+  - |
+    var cmd = &cobra.Command{
+      Use: "build <path>", // Keep this comment
+      Short: "Build assets",
+    }

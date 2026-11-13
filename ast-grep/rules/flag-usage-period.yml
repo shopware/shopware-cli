@@ -1,0 +1,19 @@
+# Reject trailing flag help periods, e.g. "Select name."; fix to "Select name".
+id: flag-usage-period
+language: Go
+severity: error
+message: Flag usage must not end with a period
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  pattern: $TEXT
+  matches: flag-usage
+  # Leave escaped strings and ellipses alone, as with cobra-short-period.
+  regex: '^"[^"\\]*[^."\\]\."$'
+
+transform:
+  TRIMMED: replace($TEXT, replace='\."$', by='"')
+  BODY: substring($TRIMMED, startChar=1, endChar=-1)
+  CAPITALIZED: convert($BODY, toCase=capitalize)
+
+fix: '"$CAPITALIZED"'

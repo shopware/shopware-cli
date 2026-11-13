@@ -1,0 +1,22 @@
+# Reject angle brackets in Use, e.g. "build <path>"; use "build path" instead.
+id: cobra-use-angle-brackets
+language: Go
+severity: error
+message: Command Use must use bare required arguments or bracketed optional arguments, without angle brackets
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  pattern:
+    context: 'cobra.Command{Use: $TEXT}'
+    selector: keyed_element
+  inside:
+    kind: literal_value
+    inside:
+      pattern: cobra.Command{$$$FIELDS}
+
+# Leave escaped strings and computed usage text for manual review.
+constraints:
+  TEXT:
+    all:
+      - regex: '^"[^"\\]*"$'
+      - regex: '[<>]'

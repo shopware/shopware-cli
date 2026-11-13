@@ -1,0 +1,19 @@
+id: cobra-short-capitalization
+valid:
+  - 'var cmd = &cobra.Command{Short: "Build assets"}'
+  - 'var cmd = &cobra.Command{Short: "Überprüfe assets"}'
+  - 'var cmd = &cobra.Command{Short: generator.Short}'
+  - 'var cmd = &cobra.Command{Short: "build " + "assets"}'
+  - 'var cmd = &cobra.Command{Short: "build \"quoted\" assets"}'
+  - 'var cmd = &cobra.Command{Short: `build assets`}'
+  - 'var other = Other{Short: "build assets"}'
+  - 'var cmd = &cobra.Command{Other: Other{Short: "build assets"}}'
+invalid:
+  - 'var cmd = &cobra.Command{Short: "build Admin API assets."}'
+  - 'var cmd = &cobra.Command{Short: "build assets"}'
+  - 'var cmd = &cobra.Command{Short: "überprüfe assets"}'
+  - |
+    var cmd = &cobra.Command{
+      Use: "build",
+      Short: "build assets", // Keep this comment
+    }
