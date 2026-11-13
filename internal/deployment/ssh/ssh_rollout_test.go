@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shopware/shopware-cli/internal/ci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -57,10 +56,11 @@ func TestDeploymentHandshakeDoesNotAuthorizeCancellation(t *testing.T) {
 			bufio.NewReader(strings.NewReader(response)),
 			bytes.NewReader(nil),
 			sshRolloutInput{Reference: "id"},
-			ci.New(io.Discard),
+			io.Discard,
 		)
 		require.ErrorIs(t, err, context.Canceled)
 		assert.NotContains(t, stdin.String(), "ACTIVATE")
+		assert.NotContains(t, stdin.String(), "CONTINUE", "cancellation before preparation must not start the helper")
 	}
 	require.Error(t, readRolloutMessage(bufio.NewReader(strings.NewReader(strings.Repeat("x", 5000))), "READY"))
 	require.ErrorIs(t, readRolloutMessage(bufio.NewReader(strings.NewReader("")), "READY"), io.EOF)
@@ -75,7 +75,7 @@ func TestDeploymentHandshakeSkipsCachedArchive(t *testing.T) {
 		bufio.NewReader(strings.NewReader("CACHED id\nPREPARE id\nREADY id\nACTIVE id\n")),
 		archive,
 		sshRolloutInput{Reference: "id", Size: int64(archive.Len())},
-		ci.New(io.Discard),
+		io.Discard,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, "must remain unread", archive.String())
@@ -91,7 +91,7 @@ func TestDeploymentHandshakeUploadsMissingArchive(t *testing.T) {
 		bufio.NewReader(strings.NewReader("UPLOAD id\nPREPARE id\nREADY id\nACTIVE id\n")),
 		strings.NewReader(archive),
 		sshRolloutInput{Reference: "id", Size: int64(len(archive))},
-		ci.New(io.Discard),
+		io.Discard,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, archive+"CONTINUE id\nACTIVATE id\n", stdin.String())
@@ -112,7 +112,7 @@ func TestDeploymentHandshakeReusesPreparedRelease(t *testing.T) {
 			var stdin, output bytes.Buffer
 			result, err := exchangeSSHDeployment(t.Context(), &stdin,
 				bufio.NewReader(strings.NewReader(tc.response)), archive,
-				sshRolloutInput{Reference: "id", Deployment: "happy-euclid"}, ci.New(&output))
+				sshRolloutInput{Reference: "id", Deployment: "happy-euclid"}, &output)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantInput, stdin.String())
 			assert.Equal(t, "must remain unread", archive.String())
