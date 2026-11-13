@@ -212,12 +212,28 @@ func (m *Model) restartContainersForConfig() tea.Cmd {
 		if err == nil {
 			err = env.WriteCompose()
 		}
+		// A changed PHP version selects another image, whose CA bundle must
+		// exist before the containers mount it.
+		if err == nil && env.ProxyHost() != "" {
+			err = ensureCABundle(ctx, env.WebImage())
+		}
 		if err != nil {
 			return configRestartDoneMsg{err: err}
 		}
 		output, err := composeCommand(ctx, projectRoot, "up", "-d").CombinedOutput()
 		return configRestartDoneMsg{err: err, output: strings.Split(string(output), "\n")}
 	}
+}
+
+// ensureCABundle builds the combined CA bundle a proxied project mounts for image.
+func ensureCABundle(ctx context.Context, image string) error {
+	caPath, err := proxy.CACertPath()
+	if err != nil {
+		return err
+	}
+
+	_, err = proxy.EnsureContainerCABundle(ctx, image, caPath)
+	return err
 }
 
 func (m *Model) stopContainers() tea.Cmd {
