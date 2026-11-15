@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/archiver"
@@ -28,7 +27,7 @@ var (
 var extensionPackageCmd = &cobra.Command{
 	Use:   "package path [branch]",
 	Short: "Build a distributable extension ZIP",
-	Long:  "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag-or-branch>.zip when a tag or branch is available, or <name>.zip otherwise, unless --filename is set.",
+	Long:  "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. With a compatibility_date of 2026-11-15 or later, --disable-git leaves out paths marked export-ignore in .gitattributes, as the Git checkout does. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag-or-branch>.zip when a tag or branch is available, or <name>.zip otherwise, unless --filename is set.",
 	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		extPath, err := filepath.Abs(args[0])
@@ -81,8 +80,7 @@ var extensionPackageCmd = &cobra.Command{
 
 		// Extract files using strategy
 		if disableGit {
-			err = cp.Copy(extPath, extDir, copyOptions())
-			if err != nil {
+			if err := extension.CopyWorkingCopy(extPath, extDir, extCfg); err != nil {
 				return fmt.Errorf("copy files: %w", err)
 			}
 		} else {
@@ -225,7 +223,7 @@ var extensionPackageCmd = &cobra.Command{
 
 func init() {
 	extensionRootCmd.AddCommand(extensionPackageCmd)
-	extensionPackageCmd.Flags().BoolVar(&disableGit, "disable-git", false, "Package the working copy instead of a clean Git checkout (symlinks are skipped)")
+	extensionPackageCmd.Flags().BoolVar(&disableGit, "disable-git", false, "Package the working copy instead of a clean Git checkout (symlinks are skipped; export-ignore in .gitattributes applies from compatibility_date 2026-11-15)")
 	extensionPackageCmd.Flags().BoolVar(&extensionReleaseMode, "release", false, "Prepare a release build: generate the changelog if enabled and, for apps, remove the secret from manifest.xml")
 	extensionPackageCmd.Flags().String("overwrite-app-backend-url", "", "Replace the scheme and host of the app backend URLs in manifest.xml (apps only)")
 	extensionPackageCmd.Flags().String("overwrite-app-backend-secret", "", "Set the app secret in manifest.xml (apps only)")
@@ -272,12 +270,4 @@ func executeHooks(ctx context.Context, ext extension.Extension, hooks []string, 
 	}
 
 	return nil
-}
-
-func copyOptions() cp.Options {
-	return cp.Options{
-		OnSymlink: func(string) cp.SymlinkAction {
-			return cp.Skip
-		},
-	}
 }
