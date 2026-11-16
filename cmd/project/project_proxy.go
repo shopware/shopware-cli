@@ -139,7 +139,7 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 
 	// Pull the shop image, if needed, with its own visible progress — before
 	// the spinner below hides it inside the CA-bundle step.
-	if err := proxy.EnsureImagePulled(ctx, env.WebImage()); err != nil {
+	if err := executor.EnsureDockerImage(ctx, env.WebImage()); err != nil {
 		return err
 	}
 
