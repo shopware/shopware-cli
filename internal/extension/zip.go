@@ -158,7 +158,7 @@ func addComposerReplacements(composer map[string]interface{}, minVersion string)
 
 			defer func() {
 				if err := composerFile.Close(); err != nil {
-					log.Printf("failed to close composer file: %v", err)
+					log.Printf("Failed to close composer file: %v", err)
 				}
 			}()
 

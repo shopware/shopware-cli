@@ -462,14 +462,14 @@ func (c *Config) Dump(dir string) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("failed to close file: %v", err)
+			log.Printf("Failed to close file: %v", err)
 		}
 	}()
 
 	encoder := yaml.NewEncoder(file)
 	defer func() {
 		if err := encoder.Close(); err != nil {
-			log.Printf("failed to close encoder: %v", err)
+			log.Printf("Failed to close encoder: %v", err)
 		}
 	}()
 

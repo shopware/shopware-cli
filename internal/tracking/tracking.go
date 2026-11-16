@@ -123,19 +123,19 @@ func Track(ctx context.Context, eventName string, tags map[string]string) {
 
 	payload, err := json.Marshal(e)
 	if err != nil {
-		logging.FromContext(ctx).Debugf("tracking: failed to marshal event: %v", err)
+		logging.FromContext(ctx).Debugf("Tracking: failed to marshal event: %v", err)
 		return
 	}
 
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "udp", addr)
 	if err != nil {
-		logging.FromContext(ctx).Debugf("tracking: failed to connect: %v", err)
+		logging.FromContext(ctx).Debugf("Tracking: failed to connect: %v", err)
 		return
 	}
 	defer func() { _ = conn.Close() }()
 
 	if _, err := conn.Write(payload); err != nil {
-		logging.FromContext(ctx).Debugf("tracking: failed to send event: %v", err)
+		logging.FromContext(ctx).Debugf("Tracking: failed to send event: %v", err)
 	}
 }
