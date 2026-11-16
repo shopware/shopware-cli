@@ -75,8 +75,11 @@ type EnvironmentSSHConfig struct {
 
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
-	// where_append conditions collected from this file and its includes, resolved by ReadConfig
+	// !append conditions collected from this file and its includes, resolved by ReadConfig
 	pendingWhereAppend []tableCondition
+	// Original project conditions, excluding local overrides and included values.
+	sourceWhere    map[string]any
+	hasSourceWhere bool
 	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is used only when environments.local is absent.
 	URL string `yaml:"url,omitempty" jsonschema:"deprecated=true"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
@@ -880,7 +883,28 @@ func WriteConfig(cfg *Config, dir string) error {
 	// file — keep them out of the committed configuration.
 	cfg = cfg.withoutDockerPorts()
 
-	data, err := yaml.Marshal(cfg)
+	var document yaml.Node
+	if err := document.Encode(cfg); err != nil {
+		return fmt.Errorf("cannot encode shop configuration: %w", err)
+	}
+	if cfg.hasSourceWhere {
+		if dump := mappingValue(&document, "dump"); dump != nil {
+			for i := 0; i+1 < len(dump.Content); i += 2 {
+				if dump.Content[i].Value == "where" {
+					dump.Content = append(dump.Content[:i], dump.Content[i+2:]...)
+					break
+				}
+			}
+			if len(cfg.sourceWhere) > 0 {
+				var where yaml.Node
+				if err := where.Encode(cfg.sourceWhere); err != nil {
+					return fmt.Errorf("cannot encode dump conditions: %w", err)
+				}
+				dump.Content = append(dump.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "where"}, &where)
+			}
+		}
+	}
+	data, err := yaml.Marshal(&document)
 	if err != nil {
 		return fmt.Errorf("failed to marshal shop configuration: %w", err)
 	}
@@ -954,7 +978,7 @@ func (c *ConfigDump) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// applyWhereAppend ANDs all collected where_append conditions onto dump.where.
+// applyWhereAppend ANDs all collected !append conditions onto dump.where.
 func (c *Config) applyWhereAppend() {
 	if len(c.pendingWhereAppend) == 0 {
 		return
@@ -1012,6 +1036,15 @@ func readConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	if err != nil {
 		return nil, err
 	}
+
+	// Retain the project's source conditions before local overrides and includes.
+	source, err := readConfigAsMap(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
+	}
+	dump, _ := source["dump"].(map[string]any)
+	config.sourceWhere, _ = dump["where"].(map[string]any)
+	config.hasSourceWhere = true
 
 	merged, err := applyLocalOverride(ctx, fileName, true, config)
 	if err != nil {
@@ -1119,6 +1152,16 @@ func applyLocalOverride(ctx context.Context, fileName string, hasBase bool, conf
 		return false, err
 	}
 
+	// Keep local additions pending while includes resolve the base condition.
+	var localAppend []tableCondition
+	dump, _ := mergedMap["dump"].(map[string]any)
+	where, _ := dump["where"].(map[string]any)
+	for table, value := range where {
+		if combined, ok := value.(localWhereAppend); ok {
+			where[table] = combined.base
+			localAppend = append(localAppend, tableCondition{table: table, condition: combined.condition})
+		}
+	}
 	mergedYAML, err := marshalMap(mergedMap)
 	if err != nil {
 		return false, err
@@ -1128,6 +1171,9 @@ func applyLocalOverride(ctx context.Context, fileName string, hasBase bool, conf
 		return false, err
 	}
 
+	if config.ConfigDump != nil {
+		config.ConfigDump.whereAppend = append(config.ConfigDump.whereAppend, localAppend...)
+	}
 	return true, nil
 }
 

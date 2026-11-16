@@ -1,12 +1,17 @@
 package shop
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/mysqldump"
 )
 
 func readWhereConfig(t *testing.T, files map[string]string) *Config {
@@ -92,7 +97,27 @@ dump:
 `,
 	})
 
-	assert.Equal(t, map[string]string{"System_Config": "(a) AND (b)"}, cfg.ConfigDump.Where)
+	assert.Equal(t, map[string]string{"system_config": "(a) AND (b)"}, cfg.ConfigDump.Where)
+
+	// Exercise the dumper's actual query lookup, stopping after its row count.
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"name", "type"}).AddRow("system_config", "BASE TABLE"))
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLES").WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "ENGINE", "TABLE_COLLATION", "TABLE_COMMENT", "ROW_FORMAT", "AUTO_INCREMENT"}).AddRow("system_config", "InnoDB", "utf8mb4_unicode_ci", "", "", nil))
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS").WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "COLUMN_NAME", "COLUMN_TYPE", "CHARACTER_SET_NAME", "IS_NULLABLE", "COLUMN_DEFAULT", "EXTRA", "COLLATION_NAME", "COLUMN_COMMENT", "GENERATION_EXPRESSION"}))
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS").WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX"}))
+	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery("SELECT DISTINCT.*KEY_COLUMN_USAGE").WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME", "REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION"}))
+	mock.ExpectQuery("SELECT.*TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS").WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE"}))
+	stop := errors.New("stop after filtered query")
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `system_config` WHERE \\(a\\) AND \\(b\\)").WillReturnError(stop)
+	dumper := mysqldump.NewMySQLDumper(db)
+	configureDumper(dumper, cfg.ConfigDump, DumpDatabaseOptions{SkipLockTables: true})
+	require.ErrorIs(t, dumper.Dump(t.Context(), io.Discard), stop)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestWhereStillOverridesIncludedCondition(t *testing.T) {
@@ -132,4 +157,49 @@ dump:
 	})
 
 	assert.Equal(t, map[string]string{"t": "(a OR b) AND (c)"}, cfg.ConfigDump.Where)
+}
+
+func TestWhereAppendLocalOverrideWithIncludes(t *testing.T) {
+	cfg := readWhereConfig(t, map[string]string{
+		"project.yml":       "compatibility_date: \"2026-01-01\"\ninclude: [inc.yml]\ndump:\n  where:\n    t: project\n",
+		"inc.yml":           "dump:\n  where:\n    t: included\n",
+		"project.local.yml": "dump:\n  where:\n    t: !append local\n",
+	})
+	assert.Equal(t, "(included) AND (local)", cfg.ConfigDump.Where["t"])
+}
+
+func TestWhereAppendWritePreservesSource(t *testing.T) {
+	for _, local := range []bool{false, true} {
+		t.Run(map[bool]string{false: "project", true: "local"}[local], func(t *testing.T) {
+			files := map[string]string{
+				"project.yml": "compatibility_date: \"2026-01-01\"\ninclude: [mid.yml]\ndump:\n  where:\n    t: !append own\n",
+				"mid.yml":     "include: [inc.yml]\ndump:\n  where:\n    t: !append middle\n",
+				"inc.yml":     "dump:\n  where:\n    t: base\n",
+			}
+			if local {
+				files["project.local.yml"] = "dump:\n  where:\n    t: !append local\n"
+			}
+			cfg := readWhereConfig(t, files)
+			want := cfg.ConfigDump.Where["t"]
+			for range 2 {
+				require.NoError(t, WriteConfig(cfg, "."))
+				source, err := readConfigAsMap("project.yml")
+				require.NoError(t, err)
+				assert.Equal(t, map[string]any{"t": appendValue("own")}, source["dump"].(map[string]any)["where"])
+				cfg, err = ReadConfig(t.Context(), "project.yml", false)
+				require.NoError(t, err)
+				assert.Equal(t, want, cfg.ConfigDump.Where["t"])
+			}
+			// Removing the original addition must not leave it in a saved base.
+			source, err := readConfigAsMap("project.yml")
+			require.NoError(t, err)
+			delete(source["dump"].(map[string]any), "where")
+			data, err := marshalMap(source)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile("project.yml", data, 0o644))
+			cfg, err = ReadConfig(t.Context(), "project.yml", false)
+			require.NoError(t, err)
+			assert.NotContains(t, cfg.ConfigDump.Where["t"], "own")
+		})
+	}
 }

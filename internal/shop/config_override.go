@@ -172,7 +172,7 @@ func mergeMap(dst, src map[string]any, currentPath string, overridePaths map[str
 		if srcAppend, ok := srcVal.(appendValue); ok {
 			switch d := dstVal.(type) {
 			case string:
-				dst[key] = "(" + d + ") AND (" + string(srcAppend) + ")"
+				dst[key] = localWhereAppend{base: d, condition: string(srcAppend)}
 				continue
 			case appendValue:
 				dst[key] = appendValue("(" + string(d) + ") AND (" + string(srcAppend) + ")")
@@ -266,8 +266,13 @@ func marshalMap(m map[string]any) ([]byte, error) {
 	return yaml.Marshal(m)
 }
 
-// appendValue is a dump.where condition tagged with !append. It keeps the tag
-// when a config is merged as a generic map and written back as YAML.
+// localWhereAppend keeps the base replaceable until includes are resolved.
+type localWhereAppend struct {
+	base      string
+	condition string
+}
+
+// appendValue preserves a dump.where !append tag through generic map merging.
 type appendValue string
 
 func (v appendValue) MarshalYAML() (any, error) {
