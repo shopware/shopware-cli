@@ -94,6 +94,7 @@ func TestDeploymentInitMerge(t *testing.T) {
 		name, content, want string
 		wantError           bool
 	}{
+		//nolint:dupword // Both duplicate assignments must contain the updated value.
 		{"duplicates", "TOKEN=old\nexport TOKEN=stale\n", "TOKEN=\"new\"\nTOKEN=\"new\"\n", false},
 		{"double quoted multiline", "TOKEN=\"first\nsecond\"\n", "", true},
 		{"single quoted multiline", "TOKEN='first\nsecond'\n", "", true},
