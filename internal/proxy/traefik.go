@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
-
-	"github.com/shopware/shopware-cli/internal/docker"
 )
 
 const (
@@ -152,10 +150,6 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		return nil
 	}
 
-	if busy := busyPorts(ctx, 80, 443, StorefrontAssetsPort); len(busy) > 0 {
-		return portConflictError(busy)
-	}
-
 	if err := EnsureNetwork(ctx); err != nil {
 		return err
 	}
@@ -213,45 +207,34 @@ func removeUnstartedContainer(ctx context.Context) {
 	}
 }
 
+// dockerBusyPort finds the host port in Docker's port-binding failure, such
+// as "Bind for 0.0.0.0:80 failed" or "listen tcp 0.0.0.0:80: bind".
+var dockerBusyPort = regexp.MustCompile(`(?:\d+\.\d+\.\d+\.\d+|\[::\]):(\d+)`)
+
 // readablePortConflict replaces Docker's own port-binding failure, which
-// carries the whole `docker run` line, with the readable conflict message. It
-// catches what busyPorts cannot see from the host, such as a port published by
-// another container on loopback only, or a privileged port on Linux. Other
-// errors pass through unchanged.
+// carries the whole `docker run` line, with a readable message. The proxy has
+// to own exactly these ports for the shop URLs to work, so unlike a project's
+// service ports there is no free port to fall back to. Other errors pass
+// through unchanged.
 func readablePortConflict(err error) error {
 	if err == nil {
 		return nil
 	}
 
 	for _, marker := range []string{"port is already allocated", "address already in use", "ports are not available"} {
-		if strings.Contains(err.Error(), marker) {
-			return portConflictError(nil)
+		if !strings.Contains(err.Error(), marker) {
+			continue
 		}
+
+		port := fmt.Sprintf("80, 443 or %d", StorefrontAssetsPort)
+		if match := dockerBusyPort.FindStringSubmatch(err.Error()); match != nil {
+			port = match[1]
+		}
+
+		return fmt.Errorf("cannot start the shared proxy: host port %s already in use by another application, stop it and run the command again", port)
 	}
 
 	return err
-}
-
-// busyPorts returns those of ports another program already listens on.
-func busyPorts(ctx context.Context, ports ...int) []int {
-	return slices.DeleteFunc(ports, func(port int) bool { return docker.IsPortFree(ctx, port) })
-}
-
-// portConflictError explains that the shared proxy cannot bind its host ports.
-// It has to own exactly these ports for the shop URLs to work, so unlike a
-// project's service ports there is no free port to fall back to. An empty busy
-// list means Docker reported the conflict without the probe pinning the port.
-func portConflictError(busy []int) error {
-	ports := fmt.Sprintf("80, 443 or %d", StorefrontAssetsPort)
-	if len(busy) > 0 {
-		names := make([]string, len(busy))
-		for i, port := range busy {
-			names[i] = strconv.Itoa(port)
-		}
-		ports = strings.Join(names, ", ")
-	}
-
-	return fmt.Errorf("cannot start the shared proxy: host port(s) %s already in use by another application, stop it and run the command again", ports)
 }
 
 // containerIsCurrent reports whether the existing container was created with

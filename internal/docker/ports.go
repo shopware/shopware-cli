@@ -2,10 +2,8 @@ package docker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
-	"syscall"
 	"time"
 )
 
@@ -43,7 +41,7 @@ func (e *Environment) PortConflicts(ctx context.Context) []PortConflict {
 	owned := ownPublishedPorts(ctx, e.root)
 
 	return e.findConflicts(owned, func(port int) bool {
-		return IsPortFree(ctx, port)
+		return isPortFree(ctx, port)
 	})
 }
 
@@ -76,15 +74,13 @@ func (e *Environment) findConflicts(owned map[int]struct{}, isFree func(int) boo
 	return conflicts
 }
 
-// IsPortFree reports whether a wildcard TCP bind on the port finds it unused.
-// Docker publishes on 0.0.0.0 and [::] by default, so a dual-stack wildcard
-// bind mirrors what `docker compose up` will attempt. Only "address in use"
-// counts as busy: a privileged port refused for lack of permission (Linux
-// without root) is no conflict, as Docker's daemon can still bind it.
-func IsPortFree(ctx context.Context, port int) bool {
+// isPortFree reports whether a wildcard TCP bind on the port succeeds. Docker
+// publishes on 0.0.0.0 and [::] by default, so a dual-stack wildcard bind
+// mirrors what `docker compose up` will attempt.
+func isPortFree(ctx context.Context, port int) bool {
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		return !errors.Is(err, syscall.EADDRINUSE)
+		return false
 	}
 
 	_ = listener.Close()

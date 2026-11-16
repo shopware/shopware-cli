@@ -168,10 +168,10 @@ func TestIsPortFree(t *testing.T) {
 		require.NoError(t, err)
 		port := listener.Addr().(*net.TCPAddr).Port
 
-		assert.False(t, IsPortFree(ctx, port), "port held by a listener must report busy")
+		assert.False(t, isPortFree(ctx, port), "port held by a listener must report busy")
 
 		require.NoError(t, listener.Close())
-		if IsPortFree(ctx, port) {
+		if isPortFree(ctx, port) {
 			return
 		}
 	}
