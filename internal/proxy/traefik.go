@@ -189,9 +189,11 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		"--entrypoints.websecure.address=:443",
 		fmt.Sprintf("--entrypoints.sfassets.address=:%d", StorefrontAssetsPort),
 	)
-	if err != nil {
-		// A failed run leaves a "created" container behind; without removing
-		// it the next attempt would take the start path and fail differently.
+	// A failed run leaves a "created" container behind; without removing it
+	// the next attempt would take the start path and fail differently. A name
+	// conflict is the exception: this run created nothing, and the container
+	// under that name belongs to a concurrent start that must keep running.
+	if err != nil && !strings.Contains(err.Error(), "is already in use by container") {
 		_, _ = runDocker(context.WithoutCancel(ctx), "rm", "-f", ContainerName)
 	}
 
@@ -201,7 +203,8 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 // readablePortConflict replaces Docker's own port-binding failure, which
 // carries the whole `docker run` line, with the readable conflict message. It
 // catches what busyPorts cannot see from the host, such as a port published by
-// another container on loopback only, or a privileged port on Linux. Other errors pass through unchanged.
+// another container on loopback only, or a privileged port on Linux. Other
+// errors pass through unchanged.
 func readablePortConflict(err error) error {
 	if err == nil {
 		return nil
@@ -226,23 +229,16 @@ func busyPorts(ctx context.Context, ports ...int) []int {
 // project's service ports there is no free port to fall back to. An empty busy
 // list means Docker reported the conflict without the probe pinning the port.
 func portConflictError(busy []int) error {
-	const advice = "(for example nginx, Apache, Valet or another container) and run the command again"
-
-	if len(busy) == 0 {
-		return fmt.Errorf("cannot start the shared proxy: one of the ports 80, 443 and %d is already in use, stop the program using it %s", StorefrontAssetsPort, advice)
+	ports := fmt.Sprintf("80, 443 or %d", StorefrontAssetsPort)
+	if len(busy) > 0 {
+		names := make([]string, len(busy))
+		for i, port := range busy {
+			names[i] = strconv.Itoa(port)
+		}
+		ports = strings.Join(names, ", ")
 	}
 
-	names := make([]string, len(busy))
-	for i, port := range busy {
-		names[i] = strconv.Itoa(port)
-	}
-
-	subject, verb, object := "port", "is", "it"
-	if len(busy) > 1 {
-		subject, verb, object = "ports", "are", "them"
-	}
-
-	return fmt.Errorf("cannot start the shared proxy: %s %s %s already in use, stop the program using %s %s", subject, strings.Join(names, ", "), verb, object, advice)
+	return fmt.Errorf("cannot start the shared proxy: host port(s) %s already in use by another application, stop it and run the command again", ports)
 }
 
 // containerIsCurrent reports whether the existing container was created with

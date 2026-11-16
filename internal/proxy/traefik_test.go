@@ -63,14 +63,11 @@ func TestBusyPortsReportsOnlyPortsInUse(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = taken.Close() }()
 
-	free, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", ":0")
-	assert.NoError(t, err)
-	freePort := free.Addr().(*net.TCPAddr).Port
-	assert.NoError(t, free.Close())
-
 	takenPort := taken.Addr().(*net.TCPAddr).Port
 
-	assert.Equal(t, []int{takenPort}, busyPorts(t.Context(), freePort, takenPort))
+	// Port 0 lets the OS pick any free port, so it always probes as free
+	// without racing other tests for a just-released port number.
+	assert.Equal(t, []int{takenPort}, busyPorts(t.Context(), 0, takenPort))
 }
 
 func TestPortConflictErrorNamesEveryBusyPort(t *testing.T) {
