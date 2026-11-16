@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"io"
 
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/deployment"
+	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var projectDeploymentPruneCmd = &cobra.Command{
@@ -20,6 +23,8 @@ Keep the most recent distinct deployments according to --keep. Active, failed,
 and incomplete deployments are protected; interrupted cleanup is resumed.
 Related runtime data, metadata, and logs are removed with each deployment.
 Artifact cleanup is skipped when archive references cannot be determined safely.
+Interactive runs preview cleanup and ask for confirmation before deleting.
+In non-interactive mode, confirmation is skipped.
 Use --dry-run to preview cleanup without changing the target.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -51,18 +56,51 @@ func runProjectDeploymentPrune(cmd *cobra.Command, target deployment.Backend, op
 	if !ok {
 		return fmt.Errorf("pruning deployments with backend %q: %w", target.Type(), deployment.ErrNotSupported)
 	}
-	result, err := backend.PruneDeployments(cmd.Context(), options)
+	var confirm func(deployment.DeploymentPruneResult) (bool, error)
+	if system.IsInteractionEnabled(cmd.Context()) {
+		confirm = func(preview deployment.DeploymentPruneResult) (bool, error) {
+			if err := writeProjectDeploymentPruneResult(cmd.ErrOrStderr(), preview, "Would prune", nil); err != nil {
+				return false, err
+			}
+			environment, _ := cmd.Flags().GetString("env")
+			if environment == "" {
+				environment = "local"
+			}
+			confirmed := false
+			err := huh.NewForm(huh.NewGroup(
+				huh.NewSelect[bool]().
+					Title(fmt.Sprintf("Prune deployments and cached artifacts on environment %q?", environment)).
+					Options(huh.NewOption("Yes", true), huh.NewOption("No", false)).
+					Value(&confirmed),
+			)).WithTheme(tui.ShopwareTheme()).WithInput(cmd.InOrStdin()).WithOutput(cmd.ErrOrStderr()).RunWithContext(cmd.Context())
+			if cmd.Context().Err() != nil {
+				return false, cmd.Context().Err()
+			}
+			if errors.Is(err, huh.ErrUserAborted) {
+				return false, nil
+			}
+			return confirmed && err == nil, err
+		}
+	}
+	result, err := deployment.Prune(cmd.Context(), backend, options, confirm)
 	if err != nil {
 		err = fmt.Errorf("cannot prune deployments: %w", err)
+	}
+	if result == nil {
+		return err
 	}
 	verb := "Pruned"
 	if options.DryRun {
 		verb = "Would prune"
 	}
+	return writeProjectDeploymentPruneResult(cmd.OutOrStdout(), *result, verb, err)
+}
+
+func writeProjectDeploymentPruneResult(output io.Writer, result deployment.DeploymentPruneResult, verb string, err error) error {
 	if len(result.Hosts) > 0 {
 		for _, host := range result.Hosts {
 			hostResult := deployment.DeploymentPruneResult{Deployments: host.Deployments, Artifacts: host.Artifacts, ArtifactSkipReasons: host.ArtifactSkipReasons, IncompleteDeployments: host.IncompleteDeployments}
-			if writeErr := writeDeploymentPruneResult(cmd.OutOrStdout(), hostResult, verb, "["+host.Host+"] "); writeErr != nil {
+			if writeErr := writeDeploymentPruneResult(output, hostResult, verb, "["+host.Host+"] "); writeErr != nil {
 				return errors.Join(err, writeErr)
 			}
 		}
@@ -71,7 +109,7 @@ func runProjectDeploymentPrune(cmd *cobra.Command, target deployment.Backend, op
 	if err != nil && len(result.Deployments) == 0 && len(result.Artifacts) == 0 && len(result.ArtifactSkipReasons) == 0 && len(result.IncompleteDeployments) == 0 {
 		return err
 	}
-	return errors.Join(err, writeDeploymentPruneResult(cmd.OutOrStdout(), result, verb, ""))
+	return errors.Join(err, writeDeploymentPruneResult(output, result, verb, ""))
 }
 
 func writeDeploymentPruneResult(output io.Writer, result deployment.DeploymentPruneResult, verb, prefix string) error {
