@@ -15,15 +15,23 @@ import (
 // Composer auto-scripts. Flex forwards COMPOSER_MEMORY_LIMIT to their PHP child.
 // This does not change PHP configuration or reserve physical memory.
 func ValidatePHPCreateMemory(ctx context.Context, phpBinary string) error {
-	args := []string{}
-	if override := os.Getenv("COMPOSER_MEMORY_LIMIT"); override != "" && override != "0" {
-		args = append(args, "-d", "memory_limit="+override)
-	}
-	args = append(args, "-r", `echo json_encode(['limit' => ini_get('memory_limit'), 'ini' => php_ini_loaded_file() ?: '']);`)
-	output, err := exec.CommandContext(ctx, phpBinary, args...).Output()
+	output, err := phpCreateMemoryCommand(ctx, phpBinary, os.Getenv("COMPOSER_MEMORY_LIMIT")).Output()
 	if err != nil {
 		return fmt.Errorf("cannot check PHP memory limit using %q: %w", phpBinary, err)
 	}
+	return validatePHPCreateMemoryOutput(output, phpBinary)
+}
+
+func phpCreateMemoryCommand(ctx context.Context, phpBinary, override string) *exec.Cmd {
+	var args []string
+	if override != "" && override != "0" {
+		args = append(args, "-d", "memory_limit="+override)
+	}
+	args = append(args, "-r", `echo json_encode(['limit' => ini_get('memory_limit'), 'ini' => php_ini_loaded_file() ?: '']);`)
+	return exec.CommandContext(ctx, phpBinary, args...)
+}
+
+func validatePHPCreateMemoryOutput(output []byte, phpBinary string) error {
 	var config struct {
 		Limit string `json:"limit"`
 		INI   string `json:"ini"`
