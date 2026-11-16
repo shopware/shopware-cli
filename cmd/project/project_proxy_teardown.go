@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -39,20 +40,7 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 		var errs []error
 
 		for _, entry := range reg.Projects {
-			var err error
-			if _, statErr := os.Stat(entry.ProjectRoot); errors.Is(statErr, os.ErrNotExist) {
-				// The project directory is gone, so there is nothing to stop
-				// or restore: only drop its registration.
-				if err = proxy.ForgetProject(entry.ProjectRoot); err == nil {
-					fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Deregistered "+entry.Hostname) + tui.DimText.Render("  "+entry.ProjectRoot+" no longer exists"))
-				}
-			} else {
-				var env *proxyEnvironment
-				if env, err = newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, ""); err == nil {
-					err = env.down(ctx, false)
-				}
-			}
-			if err != nil {
+			if err := deregisterProject(ctx, entry); err != nil {
 				fmt.Println(tui.RedText.Render(fmt.Sprintf("  Could not deregister %s: %s", entry.Hostname, err)))
 				errs = append(errs, fmt.Errorf("cannot deregister %s: %w", entry.Hostname, err))
 			}
@@ -74,6 +62,28 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 
 		return nil
 	},
+}
+
+// deregisterProject runs "proxy down" for a registered project. A project
+// whose directory is gone has nothing to stop or restore, so only its
+// registration is dropped.
+func deregisterProject(ctx context.Context, entry proxy.ProjectEntry) error {
+	if _, err := os.Stat(entry.ProjectRoot); errors.Is(err, os.ErrNotExist) {
+		if err := proxy.ForgetProject(entry.ProjectRoot); err != nil {
+			return err
+		}
+
+		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Deregistered "+entry.Hostname) + tui.DimText.Render("  "+entry.ProjectRoot+" no longer exists"))
+
+		return nil
+	}
+
+	env, err := newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, "")
+	if err != nil {
+		return err
+	}
+
+	return env.down(ctx, false)
 }
 
 // confirmTeardown lists what teardown is about to do and asks the user to
