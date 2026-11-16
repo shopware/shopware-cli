@@ -36,14 +36,17 @@ func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) error {
 	}
 
 	ctx := cmd.Context()
+
+	// Pull the shop image, if needed, with its own visible progress — before
+	// the spinner below hides it inside the CA-bundle step. A failed pull is
+	// not a proxy failure: the environment cannot start without the image.
+	if err := executor.EnsureDockerImage(ctx, e.cfg.DockerOptions().PHP.WebImage()); err != nil {
+		return err
+	}
+
 	err := func() error {
 		env, err := newProxyEnvironmentForRoot(ctx, e.projectRoot, projectConfigPath)
 		if err != nil {
-			return err
-		}
-		// Pull the shop image, if needed, with its own visible progress — before
-		// the spinner below hides it inside the CA-bundle step.
-		if err := executor.EnsureDockerImage(ctx, env.cfg.DockerOptions().PHP.WebImage()); err != nil {
 			return err
 		}
 		if err := runStep(ctx, "Preparing shared proxy...", env.bootstrapInfra); err != nil {
