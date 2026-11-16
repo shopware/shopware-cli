@@ -137,6 +137,12 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		return err
 	}
 
+	// Pull the shop image, if needed, with its own visible progress — before
+	// the spinner below hides it inside the CA-bundle step.
+	if err := executor.EnsureDockerImage(ctx, env.WebImage()); err != nil {
+		return err
+	}
+
 	var certInfo proxy.CertInfo
 	err = runStep(ctx, "Starting shared proxy...", func(ctx context.Context) error {
 		var infraErr error

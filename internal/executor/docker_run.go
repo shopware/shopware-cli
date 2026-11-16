@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -46,4 +47,23 @@ func DockerRunCommand(ctx context.Context, args ...string) (*exec.Cmd, func(erro
 		}
 		return errors.Join(err, cleanupErr)
 	}
+}
+
+// EnsureDockerImage makes sure image is present locally, pulling it with
+// Docker's own progress streamed live if it is not. Call it before a step that
+// runs the image with its output captured or behind a spinner: the implicit
+// pull of a multi-hundred-MB image would otherwise look like a hang.
+func EnsureDockerImage(ctx context.Context, image string) error {
+	if exec.CommandContext(ctx, "docker", "image", "inspect", image).Run() == nil {
+		return nil
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", "pull", image)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("cannot pull image %s: %w", image, err)
+	}
+
+	return nil
 }
