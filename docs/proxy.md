@@ -189,7 +189,8 @@ executor's database connection rather than shelling into a container.
   label, so `*.shopware.local` covers `shop1.shopware.local` but **not**
   `mailer.shop1.shopware.local` — every registered project contributes a
   `*.<project>.shopware.local` SAN and the certificate is regenerated when the
-  set changes. Traefik watches the cert files and reloads without restart.
+  set changes. Traefik does not reload a changed certificate file, so the CLI
+  restarts the proxy container after regenerating it.
 - Trust installation (`proxy setup`) uses the `smallstep/truststore` library
   (the maintained port of mkcert's trust-store code, also used by Caddy):
   system keychain / CA directory, plus best-effort NSS for Firefox.
