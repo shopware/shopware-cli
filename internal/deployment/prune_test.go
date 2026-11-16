@@ -57,11 +57,12 @@ func TestPruneConfirmation(t *testing.T) {
 				confirm = nil
 			}
 			result, err := Prune(ctx, backend, DeploymentPruneOptions{Keep: 1, DryRun: tc.dryRun}, confirm)
-			if tc.cancel {
+			switch {
+			case tc.cancel:
 				require.ErrorIs(t, err, context.Canceled)
-			} else if tc.previewErr != nil || tc.confirmErr != nil {
+			case tc.previewErr != nil || tc.confirmErr != nil:
 				require.ErrorIs(t, err, failure)
-			} else {
+			default:
 				require.NoError(t, err)
 			}
 			assert.Len(t, backend.calls, tc.wantCalls)
