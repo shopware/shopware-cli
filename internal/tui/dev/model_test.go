@@ -1156,3 +1156,20 @@ func TestQuitDuringTaskReportsRunningWatchers(t *testing.T) {
 	assert.Contains(t, names, tracking.EventDevSession)
 	assert.Empty(t, m.watchers, "the watchers are stopped")
 }
+
+func TestWatcherProbeStopsWithAReasonAfterTheDeadline(t *testing.T) {
+	m := newTestModel(t)
+	m.watchers[watcherAdmin] = &watcherHandle{}
+	m.overview.adminWatchRunning = true
+
+	updated, cmd := m.updateWatcherMsg(watcherProbeMsg{name: watcherAdmin, url: "http://127.0.0.1:1"})
+	assert.NotNil(t, cmd, "an unanswered probe within the deadline keeps polling")
+	assert.NotContains(t, updated.(Model).overview.renderWatchers(), "not responding")
+
+	updated, cmd = m.updateWatcherMsg(watcherProbeMsg{name: watcherAdmin, url: "http://127.0.0.1:1", failure: "connection refused"})
+	assert.Nil(t, cmd, "polling must stop once the deadline has passed")
+
+	view := updated.(Model).overview.renderWatchers()
+	assert.Contains(t, view, "not responding")
+	assert.Contains(t, view, "connection refused")
+}
