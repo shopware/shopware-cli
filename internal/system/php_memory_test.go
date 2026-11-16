@@ -17,7 +17,6 @@ func TestParsePHPMemoryLimit(t *testing.T) {
 		"524288K":    512 << 20,
 		"536870912":  512 << 20,
 		"0x20000000": 512 << 20,
-		" 512M ":     512 << 20,
 		"-1":         -1,
 		"0":          0,
 	} {
@@ -34,6 +33,12 @@ func TestParsePHPMemoryLimit(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+func TestParsePHPMemoryLimitTrimsWhitespace(t *testing.T) {
+	limit, err := parsePHPMemoryLimit(" 512M ")
+	require.NoError(t, err)
+	assert.Equal(t, int64(512<<20), limit)
 }
 
 func TestValidatePHPCreateMemoryOutput(t *testing.T) {
