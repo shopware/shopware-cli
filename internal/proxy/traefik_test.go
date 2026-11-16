@@ -61,11 +61,16 @@ func TestReadablePortConflictOnlyRewritesPortFailures(t *testing.T) {
 	other := errors.New("docker [run -p 80:80]: exit status 125\nno such image")
 	assert.Same(t, other, readablePortConflict(other))
 
+	// Docker Desktop failing to forward the port is not a busy port.
+	forward := errors.New("docker [run -p 80:80]: exit status 125\nports are not available: exposing port TCP 0.0.0.0:80 -> 127.0.0.1:0: /forwards/expose returned unexpected status: 500")
+	assert.Same(t, forward, readablePortConflict(forward))
+
 	assert.NoError(t, readablePortConflict(nil))
 
 	for name, output := range map[string]string{
 		"engine":  "Bind for 0.0.0.0:443 failed: port is already allocated",
 		"desktop": "ports are not available: exposing port TCP 0.0.0.0:443 -> 127.0.0.1:0: listen tcp 0.0.0.0:443: bind: address already in use",
+		"windows": "Ports are not available: exposing port TCP 0.0.0.0:443 -> 0.0.0.0:0: listen tcp4 0.0.0.0:443: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.",
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := readablePortConflict(errors.New("docker [run -d -p 80:80 -p 443:443]: exit status 125\n" + output))

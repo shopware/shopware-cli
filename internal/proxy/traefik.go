@@ -221,7 +221,10 @@ func readablePortConflict(err error) error {
 		return nil
 	}
 
-	for _, marker := range []string{"port is already allocated", "address already in use", "ports are not available"} {
+	// "ports are not available" alone is no proof: Docker Desktop prefixes
+	// its own forwarding failures with it too. The last marker is the Windows
+	// wording, which reaches WSL through Docker Desktop.
+	for _, marker := range []string{"port is already allocated", "address already in use", "Only one usage of each socket address"} {
 		if !strings.Contains(err.Error(), marker) {
 			continue
 		}
