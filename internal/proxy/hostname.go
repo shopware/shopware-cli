@@ -24,7 +24,9 @@ func ProjectHostname(projectRoot string, cfg *shop.Config, baseDomain string) (s
 			return "", fmt.Errorf("parsing configured url %q: %w", configured, err)
 		}
 
-		if host := parsed.Hostname(); host != "" && host != "localhost" && net.ParseIP(host) == nil {
+		// DNS is case-insensitive, so a mixed-case host is valid; lowercase it
+		// to the form the certificate, registry and Traefik rules all use.
+		if host := strings.ToLower(parsed.Hostname()); host != "" && host != "localhost" && net.ParseIP(host) == nil {
 			if err := ValidateDomain(host); err != nil {
 				return "", fmt.Errorf("the configured url has an invalid hostname: %w", err)
 			}

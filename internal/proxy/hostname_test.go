@@ -65,6 +65,15 @@ func TestProjectHostname(t *testing.T) {
 		assert.Equal(t, "myshop.shopware.local", hostname)
 	})
 
+	t.Run("lowercases a mixed-case configured hostname instead of rejecting it", func(t *testing.T) {
+		t.Parallel()
+
+		root := filepath.Join(t.TempDir(), "my-shop")
+		hostname, err := ProjectHostname(root, &shop.Config{URL: "https://MyShop.shopware.local"}, "shopware.local")
+		assert.NoError(t, err)
+		assert.Equal(t, "myshop.shopware.local", hostname)
+	})
+
 	t.Run("rejects a directory name whose label is longer than 63 characters", func(t *testing.T) {
 		t.Parallel()
 
