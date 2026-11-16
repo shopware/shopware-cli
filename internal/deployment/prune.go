@@ -15,6 +15,7 @@ func Prune(ctx context.Context, backend DeploymentPruner, options DeploymentPrun
 		if err != nil {
 			return nil, err
 		}
+		options.ExpectedPlan = &preview
 		confirmed, err := confirm(preview)
 		if err != nil || !confirmed {
 			return nil, err

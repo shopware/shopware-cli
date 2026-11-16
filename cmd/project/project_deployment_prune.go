@@ -59,27 +59,7 @@ func runProjectDeploymentPrune(cmd *cobra.Command, target deployment.Backend, op
 	var confirm func(deployment.DeploymentPruneResult) (bool, error)
 	if system.IsInteractionEnabled(cmd.Context()) {
 		confirm = func(preview deployment.DeploymentPruneResult) (bool, error) {
-			if err := writeProjectDeploymentPruneResult(cmd.ErrOrStderr(), preview, "Would prune", nil); err != nil {
-				return false, err
-			}
-			environment, _ := cmd.Flags().GetString("env")
-			if environment == "" {
-				environment = "local"
-			}
-			confirmed := false
-			err := huh.NewForm(huh.NewGroup(
-				huh.NewSelect[bool]().
-					Title(fmt.Sprintf("Prune deployments and cached artifacts on environment %q?", environment)).
-					Options(huh.NewOption("Yes", true), huh.NewOption("No", false)).
-					Value(&confirmed),
-			)).WithTheme(tui.ShopwareTheme()).WithInput(cmd.InOrStdin()).WithOutput(cmd.ErrOrStderr()).RunWithContext(cmd.Context())
-			if cmd.Context().Err() != nil {
-				return false, cmd.Context().Err()
-			}
-			if errors.Is(err, huh.ErrUserAborted) {
-				return false, nil
-			}
-			return confirmed && err == nil, err
+			return confirmProjectDeploymentPrune(cmd, preview)
 		}
 	}
 	result, err := deployment.Prune(cmd.Context(), backend, options, confirm)
@@ -94,6 +74,30 @@ func runProjectDeploymentPrune(cmd *cobra.Command, target deployment.Backend, op
 		verb = "Would prune"
 	}
 	return writeProjectDeploymentPruneResult(cmd.OutOrStdout(), *result, verb, err)
+}
+
+func confirmProjectDeploymentPrune(cmd *cobra.Command, preview deployment.DeploymentPruneResult) (bool, error) {
+	if err := writeProjectDeploymentPruneResult(cmd.ErrOrStderr(), preview, "Would prune", nil); err != nil {
+		return false, err
+	}
+	environment, _ := cmd.Flags().GetString("env")
+	if environment == "" {
+		environment = "local"
+	}
+	confirmed := false
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[bool]().
+			Title(fmt.Sprintf("Prune deployments and cached artifacts on environment %q?", environment)).
+			Options(huh.NewOption("Yes", true), huh.NewOption("No", false)).
+			Value(&confirmed),
+	)).WithTheme(tui.ShopwareTheme()).WithInput(cmd.InOrStdin()).WithOutput(cmd.ErrOrStderr()).RunWithContext(cmd.Context())
+	if cmd.Context().Err() != nil {
+		return false, cmd.Context().Err()
+	}
+	if errors.Is(err, huh.ErrUserAborted) {
+		return false, nil
+	}
+	return confirmed && err == nil, err
 }
 
 func writeProjectDeploymentPruneResult(output io.Writer, result deployment.DeploymentPruneResult, verb string, err error) error {

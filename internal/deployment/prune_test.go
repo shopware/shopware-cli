@@ -69,7 +69,11 @@ func TestPruneConfirmation(t *testing.T) {
 			assert.Equal(t, tc.wantResult, result != nil)
 			assert.Equal(t, !tc.nonInteractive && !tc.dryRun && tc.previewErr == nil, prompted)
 			if tc.wantResult {
-				assert.Equal(t, DeploymentPruneOptions{Keep: 1, DryRun: tc.dryRun}, backend.calls[len(backend.calls)-1])
+				expected := DeploymentPruneOptions{Keep: 1, DryRun: tc.dryRun}
+				if tc.confirm && !tc.nonInteractive && !tc.dryRun {
+					expected.ExpectedPlan = &backend.result
+				}
+				assert.Equal(t, expected, backend.calls[len(backend.calls)-1])
 			}
 		})
 	}

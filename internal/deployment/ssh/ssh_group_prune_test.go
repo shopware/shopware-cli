@@ -141,3 +141,30 @@ func TestSSHGroupPrunePreservesFailedHostProgress(t *testing.T) {
 	assert.Equal(t, []string{"unfinished"}, result.Hosts[1].IncompleteDeployments)
 	assert.Equal(t, []string{"unknown metadata"}, result.Hosts[1].ArtifactSkipReasons)
 }
+
+func TestSSHGroupPruneConfirmedPlans(t *testing.T) {
+	g, requests := fakePruneGroup(t, 2)
+	preview := DeploymentPruneResult{}
+	for _, host := range g.hosts {
+		preview.Hosts = append(preview.Hosts, DeploymentPruneHostResult{Host: host.name, Deployments: []Deployment{{Reference: host.name}}})
+	}
+	_, err := g.PruneDeployments(t.Context(), DeploymentPruneOptions{ExpectedPlan: &preview})
+	require.Error(t, err) // The fake m-failed host always fails.
+	for _, host := range g.hosts {
+		data, err := os.ReadFile(filepath.Join(requests, host.name+".request"))
+		require.NoError(t, err)
+		var options DeploymentPruneOptions
+		require.NoError(t, json.Unmarshal(data, &options))
+		require.NotNil(t, options.ExpectedPlan)
+		assert.Equal(t, []Deployment{{Reference: host.name}}, options.ExpectedPlan.Deployments)
+	}
+}
+
+func TestSSHGroupPruneMissingConfirmedHost(t *testing.T) {
+	g, requests := fakePruneGroup(t, 2)
+	_, err := g.PruneDeployments(t.Context(), DeploymentPruneOptions{ExpectedPlan: &DeploymentPruneResult{}})
+	require.Error(t, err)
+	for _, host := range g.hosts {
+		assert.NoFileExists(t, filepath.Join(requests, host.name+".request"))
+	}
+}
