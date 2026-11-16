@@ -502,6 +502,12 @@ func (e *proxyEnvironment) repointSalesChannel(ctx context.Context, fromURLs []s
 	// proxy hostname); none of them matching is a real possibility, not a
 	// driver error, so it is reported rather than silently left unrepointed.
 	if len(tried) > 0 && rowsAffected == 0 {
+		// Already on toURL, e.g. a repeated "proxy up": nothing to repoint.
+		var exists int
+		if err := conn.QueryRowContext(ctx, "SELECT 1 FROM sales_channel_domain WHERE url = ? LIMIT 1", toURL).Scan(&exists); err == nil {
+			return nil
+		}
+
 		return fmt.Errorf("no sales channel domain matched any of %s; set it to %s by hand", strings.Join(tried, ", "), toURL)
 	}
 
