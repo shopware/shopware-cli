@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestPruneConfirmedPlan(t *testing.T) {
