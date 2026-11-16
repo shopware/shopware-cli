@@ -190,7 +190,9 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		"--entrypoints.websecure.address=:443",
 		fmt.Sprintf("--entrypoints.sfassets.address=:%d", StorefrontAssetsPort),
 	)
-	if err != nil {
+	// On a name conflict this run created nothing: the container under that
+	// name is a concurrent start's, possibly still on its way up.
+	if err != nil && !strings.Contains(err.Error(), "is already in use by container") {
 		removeUnstartedContainer(ctx)
 	}
 
