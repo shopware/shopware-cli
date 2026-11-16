@@ -163,7 +163,7 @@ func CompileExtensionAsset(ctx context.Context, options AssetCompileOptions) (*A
 	}
 
 	if options.StaticSourceDir != "" && options.StaticTargetDir != "" {
-		if err := copyStaticFiles(path.Join(options.Path, options.StaticSourceDir), path.Join(options.Path, options.StaticTargetDir)); err != nil {
+		if err := copyStaticFiles(ctx, path.Join(options.Path, options.StaticSourceDir), path.Join(options.Path, options.StaticTargetDir)); err != nil {
 			return nil, err
 		}
 	}

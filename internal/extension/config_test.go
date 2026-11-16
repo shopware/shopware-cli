@@ -600,7 +600,7 @@ func TestConfig_Dump(t *testing.T) {
 			storageLocation:   path,
 		}
 
-		err := config.Dump(dir)
+		err := config.Dump(t.Context(), dir)
 		require.NoError(t, err)
 
 		_, err = os.ReadFile(path)
@@ -614,7 +614,7 @@ func TestConfig_Dump(t *testing.T) {
 			CompatibilityDate: "helloWorld",
 		}
 
-		err := config.Dump(dir)
+		err := config.Dump(t.Context(), dir)
 		require.NoError(t, err)
 
 		path := filepath.Join(dir, ".config/shopware-extension.yml")
