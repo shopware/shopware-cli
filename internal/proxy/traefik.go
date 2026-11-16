@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/shopware/shopware-cli/internal/docker"
 )
@@ -189,15 +190,25 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		"--entrypoints.websecure.address=:443",
 		fmt.Sprintf("--entrypoints.sfassets.address=:%d", StorefrontAssetsPort),
 	)
-	// A failed run leaves a "created" container behind; without removing it
-	// the next attempt would take the start path and fail differently. A name
-	// conflict is the exception: this run created nothing, and the container
-	// under that name belongs to a concurrent start that must keep running.
-	if err != nil && !strings.Contains(err.Error(), "is already in use by container") {
-		_, _ = runDocker(context.WithoutCancel(ctx), "rm", "-f", ContainerName)
+	if err != nil {
+		removeUnstartedContainer(ctx)
 	}
 
 	return readablePortConflict(err)
+}
+
+// removeUnstartedContainer removes the container a failed run left behind in
+// the "created" state; without that the next attempt would take the start
+// path and fail differently. Any other state is left alone: the container then
+// belongs to a concurrent start that must keep running. It runs detached from
+// ctx, which may be the very reason the run failed, under its own deadline.
+func removeUnstartedContainer(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+
+	if status, _ := containerStatus(ctx, ContainerName); status == "created" {
+		_, _ = runDocker(ctx, "rm", ContainerName)
+	}
 }
 
 // readablePortConflict replaces Docker's own port-binding failure, which
