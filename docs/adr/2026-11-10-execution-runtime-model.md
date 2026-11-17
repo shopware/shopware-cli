@@ -38,577 +38,724 @@ until their replacements are ready.
 
 ## Decision
 
-Adopt shared executor and runtime contracts as the boundary for external process
-execution across the CLI. Group the implementations under
-`internal/orchestration`. Introduce the model through local and containerized
-QA, then migrate other consumers in independently reviewable stages.
+Use shared execution and resource contracts under `internal/orchestration`.
+Consumers run commands through an executor with an injected runtime. Runtime
+implementations provide the capabilities they support. Service stacks own their
+configuration and composition through a common lifecycle and service contract.
+Introduce command execution and containerized QA first, then migrate the
+remaining workflows in independently verified stages.
 
-### Architecture
+### Terms and responsibilities
 
-| Component | Responsibility |
+| Term | Meaning |
 | --- | --- |
-| Application wiring | Resolve configuration and tooling, select targets and supply adapters. |
-| `orchestration/executor` | Build generic and ecosystem-specific commands and provide execution and capture conveniences. |
-| `orchestration/runtime` | Define command, process and result contracts, with local, container and later SSH adapters. Own workspace path mapping. |
-| `orchestration/container` | Define disposable execution and persistent resource capabilities, with Docker as the first engine adapter. |
-| `orchestration/stack` | Define lifecycle and service-execution capabilities for providers such as Compose and proxy infrastructure. |
-| Domain services | Own configuration, Admin API, database and log behavior. |
+| Executor | Command builder and runner. Provides PHP, Composer, Node and generic commands, defaults and output capture. |
+| Runtime | Runs commands locally, in containers or over SSH through the `runtime.Runtime` interface. A runtime can also offer container and network management. |
+| Capability | An interface for related operations a runtime supports. For example, a consumer that manages persistent containers requires `runtime.Containers`. |
+| Implementation | Code that implements a shared interface for a specific environment or container engine. |
+| Service stack | A persistent group of named services with its own configuration and composition logic. Implements `runtime.ServiceStack`. |
+| Application wiring | Configuration resolution, implementation selection and dependency construction before calling a consumer. |
+| Workspace | A mapping between source paths on the host and paths in the selected execution environment. |
 
-Application wiring selects and injects the execution target. Consumers use the
-same executor API for each route:
+The `runtime` package defines the shared interfaces and data types.
+Implementations such as `runtime/docker` import this package to use those
+contracts. The `runtime` package does not import the implementations.
+Application wiring creates the selected implementations and passes them to
+consumers through these interfaces.
 
-```mermaid
-flowchart TB
-    C(["CLI components<br/>Tools · builds · deployment · other process consumers"])
-    E["Executor<br/>PHP · Composer · Node · generic commands"]
-    C --> E
+The following table shows the package structure under `internal` and the
+responsibility of each package or domain component.
 
-    E --> L["Direct backend<br/>Local · SSH · Symfony CLI"]
-    E --> R["Container backend<br/>Disposable tooling execution"]
-    E --> S["Service binding<br/>Execute in a named stack service"]
+| Package or component | Responsibility |
+| --- | --- |
+| `orchestration/executor` | Command construction, execution conveniences and capture. |
+| `orchestration/runtime` | Commands, streams, processes, results, workspace mapping, container and image capabilities and the service-stack contracts. |
+| `orchestration/runtime/local`, `orchestration/runtime/docker`, later `orchestration/runtime/ssh` | Implement supported execution and resource capabilities. Local and SSH provide command execution. Docker also provides container and network management. |
+| Shop-domain services | Configuration, logs, Admin API, database connections and target connectivity. |
 
-    R --> ENGINE["Container engine<br/>Docker adapter"]
-    S --> STACK["Stack provider<br/>Compose service execution"]
-
-    classDef consumer fill:#eef2f6,stroke:#a8b4c2,color:#243447
-    classDef execution fill:#e4edff,stroke:#91ace0,color:#203e73
-    classDef runtime fill:#e2f3ec,stroke:#8cbda8,color:#214b3a
-    classDef infrastructure fill:#eee7fa,stroke:#b39bd6,color:#49316b
-    class C consumer
-    class E execution
-    class L,R,S runtime
-    class ENGINE,STACK infrastructure
-```
-
-Stack lifecycle and native client access are separate application concerns.
-The stack provider above also exposes the lifecycle capabilities shown below:
+The same command consumer works with a local, disposable-container, remote or
+service runtime.
 
 ```mermaid
 flowchart TB
-    W["Application wiring<br/>Configuration · target selection · dependencies"]
-    W --> STACK["Stack lifecycle<br/>Start · stop · remove"]
-    W --> DOMAIN["Shop services<br/>Configuration · Admin API · database · logs"]
-    STACK --> PROVIDER["Compose or managed-container provider<br/>Uses injected execution / resource capabilities"]
-    DOMAIN --> CLIENT["Native HTTP / SQL clients<br/>Target connectivity, including SSH forwarding"]
-
-    classDef application fill:#fff2d9,stroke:#d7b675,color:#513c17
-    classDef infrastructure fill:#eee7fa,stroke:#b39bd6,color:#49316b
-    classDef domain fill:#e2f3ec,stroke:#8cbda8,color:#214b3a
-    class W application
-    class STACK,PROVIDER infrastructure
-    class DOMAIN,CLIENT domain
+    W["Application wiring"] --> S["Service stack<br/>Up · Status · Stop · Service"]
+    S -->|Service| B["runtime.Runtime"]
+    C["Command consumer"] --> E["Executor<br/>PHP · Composer · Node · generic"]
+    E --> B
+    B --> L["Local or SSH"]
+    B --> D["Disposable container"]
+    B --> P["Existing service container"]
 ```
 
-The execution infrastructure lives under `internal/orchestration`, while shop
-services remain in their domain packages. Application wiring supplies the
-implementations, allowing consumers to depend on small contracts. The executor
-uses the runtime contract for process execution, with a container backend
-adapting an engine's runner to the same interface. Stack providers build on
-injected execution and resource-management capabilities, keeping process
-creation and engine-specific arguments within the concrete adapters.
+### Command execution
 
-Consumers retain their domain behavior, such as tool arguments, output parsing
-and findings, while application wiring selects the execution target. The shared
-execution boundary also provides a consistent place to instrument telemetry
-for executor and runtime usage, durations and failures without duplicating
-instrumentation across consumers.
+A runtime executes commands in the selected environment and passes their
+arguments without implicit shell parsing. Each implementation handles the
+details of its environment, including container-engine flags, SSH quoting and
+stream forwarding.
 
-### Orchestration API
-
-The API defines the application-wide execution boundary. Its contracts cover
-commands, execution targets and resource lifecycle. The
-examples below show how different consumers use that boundary. Implementing
-all illustrated adapters is not a prerequisite for the first delivery.
-
-#### Shared execution contract
-
-Use one process contract across local execution, containers and SSH. Consumers
-describe workloads in the target environment, while adapters own Docker
-arguments, SSH quoting and Compose service selection:
+The following types belong to `orchestration/runtime` and define the shared
+contract used by the executor and runtime implementations.
 
 ```go
-// orchestration/runtime
+package runtime
+
 type Command struct {
-    Name string            // Executable name or path in the target environment.
-    Args []string          // Arguments passed without shell parsing.
-    Dir  string            // Command's working directory (CWD) in the target.
-    Env  map[string]string // Overrides for the target's inherited environment.
+    Name string            // Executable in the target environment.
+    Args []string          // Arguments without shell parsing.
+    Dir  string            // Working directory in the target.
+    Env  map[string]string // Overrides for the target environment.
 }
 
-type Backend interface {
+type Runtime interface {
+    // Start starts the command and returns its process handle.
     Start(context.Context, Command, Options) (Process, error)
 }
 
-type Process interface {
-    Wait() (Result, error)
-    Stop(context.Context) error
-}
-
 type Options struct {
-    Stdin   io.Reader   // Process input; nil supplies no input.
-    Stdout  io.Writer   // Receives stdout as produced; nil discards it.
-    Stderr  io.Writer   // Receives stderr as produced; nil discards it.
-    Capture CaptureMode // Configures output buffering; defaults to CaptureNone.
-    TTY     bool        // Requests a terminal when supported by the backend.
+    Stdin   io.Reader   // Input to the command. Nil means no input.
+    Stdout  io.Writer   // Streams stdout. Nil discards streamed output.
+    Stderr  io.Writer   // Streams stderr. Nil discards streamed output.
+    Capture CaptureMode // Selects the output retained in Result.Output.
+    TTY     bool        // Requests a terminal when supported.
 }
 
 type CaptureMode uint8
 
 const (
-    CaptureNone CaptureMode = iota // Do not buffer output (default).
-    CaptureSeparate                // Buffer stdout and stderr separately.
-    CaptureCombined                // Buffer both streams in observed write order.
+    CaptureNone CaptureMode = iota // Do not retain output (default).
+    CaptureSeparate                // Retain stdout and stderr separately.
+    CaptureCombined                // Merge streams in observed write order.
 )
-```
 
-`Dir` sets the command's working directory (CWD) in the selected execution
-environment. For containers, application wiring maps the chosen host directory
-to its container path before setting `Dir`, as described under
-[Target wiring and workspace](#target-wiring-and-workspace).
+type Process interface {
+    // Wait observes completion, including output forwarding and cleanup.
+    Wait() (Result, error)
+    // Stop sends a graceful shutdown request.
+    // The context can cancel communication with the runtime.
+    // Use Wait to observe exit and cleanup.
+    Stop(context.Context) error
+    // Kill sends a forceful termination request.
+    // The context can cancel communication with the runtime.
+    // Use Wait to observe exit and cleanup.
+    Kill(context.Context) error
+}
 
-Use `Stdout` and `Stderr` in `Options` to stream output while the command runs.
-Set `Options.Capture` to retain output in `Result.Output` after completion.
-Streaming and capture can be used together. By default, output is not buffered.
-With neither configured, output is discarded. Both streaming and buffered
-output follow the same contract across all backends.
-
-`Command` describes an invocation without implicit shell parsing. `Start`
-begins execution and returns a `Process` handle. The backend owns process
-reaping and cleanup of execution-owned resources, even if nobody calls `Wait`.
-The execution context controls the workload lifetime after startup. Caller-owned
-streams must remain usable until execution completes, and blocked I/O can delay
-finalization.
-
-`Wait` observes completion, including cleanup, and returns the recorded outcome.
-Call it directly to block, or in a goroutine to receive the outcome
-asynchronously. Multiple callers observe the same completion without repeating
-execution or cleanup. Callers should observe the outcome to handle failures.
-
-`Stop` requests forceful termination even if its context is canceled. Its
-context bounds waiting for finalization, while termination and cleanup continue
-independently. A later `Wait` still returns the completed outcome.
-
-`Wait` returns the workload outcome in a shared result type, including available
-output even when execution fails:
-
-```go
 type Result struct {
-    ExitCode int
-    Output   CapturedOutput
-    Usage    *ResourceUsage
+    ExitCode int            // Workload exit code, or -1 when unknown.
+    Output   CapturedOutput // Output retained according to Capture.
+    Usage    *ResourceUsage // Workload resource usage. Nil when unavailable.
+}
+
+type ResourceUsage struct {
+    CPUTime time.Duration // CPU time used by the workload.
 }
 
 type CapturedOutput struct {
-    Mode     CaptureMode
-    Stdout   []byte
-    Stderr   []byte
-    Combined []byte
+    Mode     CaptureMode // Capture mode used for this execution.
+    Stdout   []byte      // Retained stdout in separate mode.
+    Stderr   []byte      // Retained stderr in separate mode.
+    Combined []byte      // Retained stdout and stderr in combined mode.
 }
 ```
 
-`ExitCode` is the workload status, or -1 when unknown. `Usage` contains resource
-measurements when the backend can provide them and is otherwise nil. Capture
-is opt-in. `CaptureMode` selects no capture, separate stdout and stderr, or
-combined output in observed write order. Only the selected representation is
-populated, with captured bytes retained independently of the caller's streams.
+`Start` starts the command and returns a process handle. Its context controls
+execution lifetime, so cancellation requests forceful termination. `Wait`
+returns after the command exits, output forwarding finishes and cleanup
+completes. Repeated or concurrent calls observe the same result. The runtime
+collects the process result and cleans up even if nobody calls `Wait`.
 
-Keep workload exits distinct from startup, transport and cleanup failures.
-Consumers interpret program-specific exits, such as ESLint reporting source
-violations. A matching engine or SSH client exit code does not establish a tool
-finding. Preserve transport ambiguity rather than inventing a workload result.
+`Stop` sends a graceful shutdown request. `Kill` sends a forceful termination
+request. On Unix these use `SIGTERM` and `SIGKILL` for local processes. Other
+runtimes use the corresponding mechanism in their environment. Both methods
+return after sending the termination request without waiting for command exit.
+Their context can cancel communication with a container engine or remote host.
+Local signaling normally returns immediately. An already canceled context
+prevents sending the termination request. Cancellation during communication
+does not guarantee that termination was prevented. If the command ignores
+`Stop`, the caller can use `Kill`. There is no automatic escalation.
 
-#### Executor API
+Closing a Docker or SSH connection does not guarantee that the command stopped.
+Implementations that cannot terminate the command return
+`runtime.ErrUnsupported` from `Stop` and `Kill`. Losing the connection can leave
+the command's status unknown.
 
-The executor provides command construction, defaults and lifecycle conveniences
-above `runtime.Backend`. PHP and Node helpers build ordinary commands, so
-specialized and generic calls share stream, capture and error handling. They do
-not install tools or choose an environment.
+`Stdin` supplies command input and defaults to no input. `Stdout` and `Stderr`
+receive output as it is produced. Output without a writer is discarded unless
+capture is enabled. Capture is disabled by default and can be combined with
+streaming. Separate capture retains stdout and stderr separately. Combined
+capture merges both streams in observed write order. The executor collects
+captured output through the supplied writers, so runtimes only forward streams.
+Caller-owned streams must remain usable until completion. Blocked output writes
+can delay completion. The caller must unblock input readers that remain blocked
+after the command exits.
 
-For example, a consumer receives an executor prepared for the selected target
-and runs Composer through the same API on the host, in a container or in a
-stack service:
+`ExitCode` describes the executed command, with -1 meaning unknown. `Usage`
+contains resource measurements for that command when available, rather than
+measurements for a Docker or SSH client. Results retain captured output even
+when execution fails. Runtimes distinguish a command's non-zero exit from
+failures to start it, communicate with it or clean up. Consumers interpret
+command output and exit codes for their specific tools. Unsupported capabilities
+or settings return explicit errors.
+
+### Executor and target wiring
+
+The executor runs arbitrary commands through the supplied runtime. Helpers for
+PHP, Composer and Node.js simplify common invocations through the same command
+API. Tool installation and environment selection remain with application wiring.
+Changing defaults or command options returns a copy without modifying the
+original executor or command.
 
 ```go
-func installDependencies(ctx context.Context, executor *executor.Executor,
-    streams runtime.Options,
-) error {
-    _, err := executor.PHP().
-        Composer("install", "--no-interaction").
-        Run(ctx, streams)
+// Application code using orchestration/executor.
+streams := runtime.Options{Stdout: os.Stdout, Stderr: os.Stderr}
+runner := executor.New(local.New()).WithDir(workspaceRoot)
+
+_, err := runner.PHP().Composer("install", "--no-interaction").Run(ctx, streams)
+if err != nil {
     return err
 }
+
+process, err := runner.Command("git", "rev-parse", "HEAD").Start(ctx, runtime.Options{
+    Stdout:  os.Stdout,
+    Stderr:  os.Stderr,
+    Capture: runtime.CaptureSeparate,
+})
+if err != nil {
+    return err
+}
+result, err := process.Wait()
+if err != nil {
+    return err
+}
+revision := strings.TrimSpace(string(result.Output.Stdout))
 ```
 
-Node and generic commands use the same shape, as these independent examples
-show:
+`Start` returns a process handle and `Wait` returns the result. `Run` combines
+both steps. Capture is configured through `Options.Capture` in either case and
+read from `Result.Output`. Supplying output writers also streams the output
+while it is captured (see [Command execution](#command-execution)).
+
+A Docker runtime binds the image, mounts and user for disposable commands:
 
 ```go
-_, err := executor.Node().NPM("run", "build").Run(ctx, streams)
-
-result, err := executor.Command("git", "rev-parse", "HEAD").Capture(ctx)
-```
-
-`Run` starts and waits. `Start` returns the process handle for asynchronous
-work. `Capture` and `CombinedOutput` provide the two capture modes. Executor
-defaults and per-command overrides return copies, allowing consumers to vary a
-directory or environment without changing shared settings.
-
-#### Target wiring and workspace
-
-Resolve execution policy in application wiring and inject the selected backend.
-A local executor uses the project or extension directory as its default:
-
-```go
-executor := executor.New(local.New()).WithDir(workspaceRoot)
-```
-
-A disposable container exposes the same backend contract. The container package
-supplies structured image, mount and user settings, while the runtime adapter
-binds those settings to command execution:
-
-```go
-engine := containerdocker.New()
-backend := containerruntime.New(engine, container.RunOptions{
-    Image: workloadImage,
-    Mounts: []container.Mount{
+engine := docker.New(local.New(), docker.Options{
+    Image: toolingImage,
+    Mounts: []runtime.ContainerMount{
         {Source: workspaceRoot, Target: "/workspace"},
     },
     User: containerUser,
 })
-executor := executor.New(backend).WithDir("/workspace")
+runner := executor.New(engine).WithDir("/workspace")
+_, err := runner.Node().NPM("run", "build").Run(ctx, streams)
 ```
 
-Here `containerdocker` and `containerruntime` alias the engine and container
-runtime packages. The engine implements the following capability:
+Here `docker` refers to `orchestration/runtime/docker`. Application wiring
+prepares tools, dependencies and files in the selected environment. The runtime
+owns the disposable container and its cleanup. Persistent service containers
+have a separate lifecycle and survive commands executed inside them.
+
+Define images for disposable containers as shared constants, for example in the
+executor package. Reuse the same images for similar tasks to avoid unnecessary
+image pulls and keep image maintenance effort low.
+
+Use the same workspace mapping to translate file paths between the host and
+the execution environment. Apply it to command working directories, arguments
+that contain file paths and file paths reported by tools. For example,
+`workspaceRoot/src/Example.php` maps to `/workspace/src/Example.php`. Translate
+paths reported by tools back to host paths before including them in findings.
+Arguments and raw output are not automatically searched and rewritten.
+Filesystem preparation remains with its consumer and must account for the
+target filesystem.
+
+### Persistent containers and networks
+
+Container runtimes expose resource operations through shared interfaces and
+settings. The shared options cover common CLI needs without attempting to
+expose every option of each container runtime. `Containers` handles persistent
+container operations. `ContainerNetworks` manages networks and attachments.
+Consumers own composition and can declare smaller interfaces for the operations
+they need. These capability groups describe engine support without requiring
+every consumer to depend on all methods.
 
 ```go
-// orchestration/container
-type Runner interface {
-    Run(context.Context, RunOptions, runtime.Command, runtime.Options) (runtime.Process, error)
+// orchestration/runtime
+type Containers interface {
+    // ListContainers returns summaries, including stopped containers.
+    ListContainers(context.Context, ListContainersOptions) ([]ContainerSummary, error)
+    // InspectContainer returns details. Absence returns ErrNotFound.
+    InspectContainer(context.Context, string) (ContainerState, error)
+    // CreateContainer creates without starting or replacing a container.
+    CreateContainer(context.Context, CreateContainerOptions) (string, error)
+    // StartContainer starts an existing container.
+    StartContainer(context.Context, string) error
+    // StopContainer stops a container while retaining its resources.
+    StopContainer(context.Context, string) error
+    // RestartContainer restarts an existing container.
+    RestartContainer(context.Context, string) error
+    // RemoveContainer removes a container, retaining named volumes.
+    // A running container is terminated. Absence is a no-op.
+    RemoveContainer(context.Context, string) error
+    // Logs forwards output without changing the container's lifecycle.
+    Logs(context.Context, string, ContainerLogOptions) error
+}
+
+type ListContainersOptions struct {
+    IDs []string // Exact IDs to include. Empty selects all, missing IDs are omitted.
+}
+
+type ContainerSummary struct {
+    ID     string          // Engine-assigned container ID.
+    Name   string          // Container name.
+    Image  string          // Image reference reported by the engine.
+    Status ContainerStatus // Normalized lifecycle state.
+    Ports  []ContainerPort // Published ports with resolved host bindings.
+}
+
+type ContainerLogOptions struct {
+    Follow bool      // Continue reading new output until canceled.
+    Tail   int       // Last N lines. Zero selects all available lines.
+    Stdout io.Writer // Receives stdout. Nil discards it.
+    Stderr io.Writer // Receives stderr. Nil discards it.
 }
 ```
 
-The container runtime delegates `Backend.Start` to `Runner.Run`. The Docker
-adapter owns engine arguments and disposable-resource cleanup. Another engine
-can implement `Runner` without changing the executor or tool implementations.
-Selecting a backend does not install tools or copy source files. For example,
-running PHP in a container requires an image containing PHP and a mount that
-makes the source files available inside it. Filesystem operations, dependency
-handling and preparation remain the consumer’s responsibility and must account
-for the selected target’s filesystem. The executor and related APIs provide a
-consistent way to run commands needed for preparation, but do not cover every
-requirement beyond process orchestration.
-
-Selection is per use case. One CLI invocation may use containerized QA and a
-host executor for certificate setup. A command requiring the running Shopware
-can receive a service-bound executor instead. To move a consumer from local to
-container execution, application wiring supplies a different backend and sets
-up its tools and files. The consumer's command construction and result handling
-remain the same, provided it uses the supplied executor throughout.
-
-Use one workspace mapping to relate host paths to paths inside the target. In
-the example above, `workspaceRoot/src/Example.php` becomes
-`/workspace/src/Example.php`. Use this mapping when setting working directories
-and passing file paths to tools. After parsing tool output, convert paths in
-findings back to the user's source paths before reporting them. Command
-arguments and raw output are not automatically searched and rewritten.
-
-#### Stack lifecycle and service execution
-
-A stack manages resources beyond one command. Give lifecycle and service
-execution separate capabilities rather than expanding the process backend.
-Compose is the first development-stack provider. Other providers can manage
-containers directly through engine capabilities. Providers expose the
-capabilities they support:
+Creation uses shared options for the container configuration:
 
 ```go
-package stack
-
-type Lifecycle interface {
-    Start(context.Context, runtime.Options) (runtime.Result, error)
-    Stop(context.Context, runtime.Options) (runtime.Result, error)
+type CreateContainerOptions struct {
+    Name          string             // Container name across invocations.
+    Image         string             // Image to use.
+    Entrypoint    string             // Replaces the image entrypoint when set.
+    Args          []string           // Arguments to the selected entrypoint.
+    Dir           string             // Working directory inside the container.
+    User          string             // Empty uses the image default.
+    Env           map[string]string  // Overrides image environment values.
+    Mounts        []ContainerMount   // Host bind mounts or named volumes.
+    Labels        map[string]string  // Ownership and configuration metadata.
+    Ports         []ContainerPort    // Published service endpoints.
+    Networks      []ContainerNetwork // Attachments to existing networks.
+    RestartPolicy string             // no, always, unless-stopped or on-failure.
 }
 
-type ServiceExecutor interface {
-    Exec(context.Context, string, runtime.Command, runtime.Options) (runtime.Process, error)
+type MountType string
+
+const (
+    MountBind   MountType = "bind"   // Mount a host path. Also the default.
+    MountVolume MountType = "volume" // Mount a named engine-managed volume.
+)
+
+type ContainerMount struct {
+    Type     MountType // Empty means MountBind.
+    Source   string    // Absolute host path or volume name.
+    Target   string    // Absolute path inside the container.
+    ReadOnly bool      // Prevents writes to the mounted path.
 }
 
-type Remover interface {
-    Remove(context.Context, RemoveOptions, runtime.Options) (runtime.Result, error)
+type ContainerPort struct {
+    HostIP        string // Empty uses the engine default.
+    HostPort      uint16 // Zero requests an available host port.
+    ContainerPort uint16 // Port inside the container.
+    Protocol      string // tcp or udp. Empty means tcp.
+}
+
+type ContainerNetwork struct {
+    Name    string   // Existing network name.
+    Aliases []string // Additional names for the container on this network.
 }
 ```
 
-For example, a Compose provider uses an injected backend to run its management
-commands. Application wiring explicitly starts the stack and binds an executor
-to its web service, where PHP, Node and generic commands use the same API as
-local execution:
+An empty restart policy means no automatic restart. Inspection returns the
+container's current configuration and normalized state:
 
 ```go
-provider, err := compose.New(local.New(), compose.Options{
-    Directory:   projectRoot,
-    ProjectName: projectName,
+type ContainerStatus string
+
+const (
+    ContainerUnknown    ContainerStatus = "" // Unrecognized engine state.
+    ContainerCreated    ContainerStatus = "created"
+    ContainerRunning    ContainerStatus = "running"
+    ContainerStopped    ContainerStatus = "stopped"
+    ContainerPaused     ContainerStatus = "paused"
+    ContainerRestarting ContainerStatus = "restarting"
+    ContainerFailed     ContainerStatus = "failed"
+)
+
+type ContainerState struct {
+    ID           string             // Engine-assigned container ID.
+    Name         string             // Configured container name.
+    Image        string             // Image reference reported by the engine.
+    Ports        []ContainerPort    // Published ports with resolved host bindings.
+    Status       ContainerStatus    // Normalized lifecycle state.
+    Running      bool               // Whether the container is running.
+    RestartCount int                // Number of engine-managed restarts.
+    Labels       map[string]string  // Current resource metadata.
+    Networks     []ContainerNetwork // Current attachments and aliases.
+}
+```
+
+Networks have a separate capability and inspection result:
+
+```go
+type ContainerNetworks interface {
+    // EnsureNetwork creates a missing network or reuses an existing one.
+    EnsureNetwork(context.Context, string) error
+    // InspectNetwork returns network details. Absence returns ErrNotFound.
+    InspectNetwork(context.Context, string) (ContainerNetworkState, error)
+    // RemoveNetwork removes an unused network. Absence is a no-op.
+    RemoveNetwork(context.Context, string) error
+    // SetNetworkAliases sets aliases, attaching the container if necessary.
+    // Updates may briefly disconnect it and can leave partial changes on failure.
+    SetNetworkAliases(ctx context.Context, network, container string, aliases []string) error
+}
+
+type ContainerNetworkState struct {
+    ID         string   // Engine-assigned network ID.
+    Name       string   // Configured network name.
+    Containers []string // Names of attached containers.
+}
+```
+
+`ListContainers` returns the summaries needed for a `ps` view. Its `IDs` option
+selects exact container IDs, with missing IDs omitted. An empty filter lists all
+containers. `InspectContainer` returns details such as labels, network
+attachments and restart count. Both expose image references and resolved
+published ports, so callers do not need a separate port lookup method.
+
+`Logs` forwards output to `Stdout` and `Stderr` in `ContainerLogOptions`. Its
+`Tail` option limits the number of lines, with zero selecting all available
+lines. `Follow` keeps
+reading until the stream ends or its context is canceled. Cancellation stops
+reading without stopping the container. A nil writer discards that stream.
+Containers started with a terminal may already have merged their output.
+
+`CreateContainer` creates without starting or replacing. `StartContainer` starts
+an existing container. `StopContainer` retains it. `RemoveContainer` removes it
+and retains named volumes. Removing an absent container or network is a no-op.
+Inspection and existing-container lifecycle operations report
+`runtime.ErrNotFound` for verified absence, preserving independent failures.
+
+Management contexts bound the operation, not the resource lifetime. Creation
+can return an ID with an error if observation or a later attachment fails.
+Consumers decide whether to retry or remove the resource. Alias updates hide
+engine-specific attachment mechanics and attempt bounded recovery on failure.
+The consumer chooses the alias set and handles partial failure.
+
+`Container` returns a runtime bound to a container name or ID. Binding does not
+contact the engine or check whether the container exists. The engine reports
+missing containers when commands run. Commands use the normal executor API,
+with working directories and environment variables applied inside the container.
+Running a command does not start or remove the container:
+
+```go
+containerRuntime, err := engine.Container(containerID)
+if err != nil {
+    return err
+}
+runner := executor.New(containerRuntime).WithDir("/var/www/html")
+_, err = runner.PHP().Console("cache:clear").Run(ctx, streams)
+```
+
+Consumers that need container binding declare the `Container` method in their
+own interface alongside the resource capabilities they use. Local and SSH
+runtimes need only the command execution capability.
+
+### Container images
+
+`ContainerImages` manages the selected engine's image store independently of
+containers and service stacks:
+
+```go
+// orchestration/runtime
+type ContainerImages interface {
+    // InspectImage returns local metadata without pulling.
+    // Verified absence returns ErrNotFound.
+    InspectImage(context.Context, string) (ContainerImageState, error)
+    // PullImage downloads an image and forwards stdout and stderr.
+    PullImage(context.Context, string, PullImageOptions) error
+    // BuildImage builds an image and returns its engine-assigned ID.
+    // Normal build output is forwarded. Tags are optional.
+    BuildImage(context.Context, BuildImageOptions) (string, error)
+}
+
+type ContainerImageState struct {
+    ID         string   // Engine-assigned ID, not necessarily a registry digest.
+    References []string // Known name:tag and name@digest references.
+}
+
+type PullImageOptions struct {
+    Stdout io.Writer // Receives stdout. Nil discards it.
+    Stderr io.Writer // Receives stderr. Nil discards it.
+}
+
+type BuildImageOptions struct {
+    ContextDir string    // Build context directory on the CLI host.
+    Dockerfile string    // Relative to ContextDir. Empty means Dockerfile.
+    Tags       []string  // Optional name:tag references for the result.
+    Stdout     io.Writer // Receives stdout. Nil discards it.
+    Stderr     io.Writer // Receives stderr. Nil discards it.
+}
+```
+
+`InspectImage` returns the engine's image ID and known tag or digest references.
+Verified absence returns `ErrNotFound`, while engine and connection failures
+remain separate errors. Engine image IDs are not assumed to be registry manifest
+digests. `BuildImage` accepts a local context directory, a relative Dockerfile
+path and optional `Tags`. It returns this build's image ID independently of
+those mutable tag references. Normal build output streams to the supplied
+stdout and stderr writers.
+
+For example, build with a tag while streaming output and returning the image
+ID:
+
+```go
+imageID, err := engine.BuildImage(ctx, runtime.BuildImageOptions{
+    ContextDir: projectRoot,
+    Tags:       []string{developmentImage},
+    Stdout:     os.Stdout,
+    Stderr:     os.Stderr,
 })
 if err != nil {
     return err
 }
-if _, err := provider.Start(ctx, streams); err != nil {
-    return err
-}
-
-executor := executor.New(stack.Service(provider, "web")).WithDir("/var/www/html")
-_, err = executor.PHP().Console("cache:clear").Run(ctx, streams)
 ```
 
-`stack.Service` implements `runtime.Backend` by calling the provider's `Exec`.
-The command follows executor → service binding → provider, with the provider
-using the shared execution machinery for its Compose invocation. Compose flags
-and service selection stay in the provider. The executor imports no concrete
-stack implementation, and executing a command never implicitly starts a stack.
+Pulling and building are individual management operations. `PullImageOptions`
+and `BuildImageOptions` configure output through `Stdout` and `Stderr`, as with
+command execution. A nil writer discards its stream. Assigning the same writer
+to both fields combines output. Cancellation interrupts the operation without
+promising rollback of downloaded layers or build artifacts. Stack composition
+decides which images to prepare and when.
 
-`Stop` retains stack resources. `Remove` tears down the provider's resources,
-with volume removal requested explicitly through `RemoveOptions`. Existing CLI
-commands retain their established behavior during migration, even where their
-user-facing names differ from these internal operations.
+### Service stacks
 
-#### Persistent infrastructure and engine capabilities
-
-Persistent services use engine capabilities separate from the disposable
-`Runner`. Stack providers use `container.Lifecycle` to manage individual
-containers and `container.Networks` to manage shared networks:
+A service stack is a concrete type with its own options and injected runtime
+capabilities. It defines service configuration, composition order, reuse,
+replacement and resource ownership. Implementations share this contract.
 
 ```go
-package container
-
-type Lifecycle interface {
-    Inspect(context.Context, string) (State, error)
-    Create(context.Context, CreateOptions) (string, error)
-    Start(context.Context, string) error
-    Stop(context.Context, string) error
-    Restart(context.Context, string) error
-    Remove(context.Context, string) error
-}
-
-type Networks interface {
-    EnsureNetwork(context.Context, string) error
-    RemoveNetwork(context.Context, string) error
+// orchestration/runtime
+type ServiceStack interface {
+    Up(context.Context) error
+    Status(context.Context) (ServiceStackStatus, error)
+    Stop(context.Context) error
+    Service(string) (Runtime, error)
 }
 ```
 
-`CreateOptions` describes the container's name, image, arguments, mounts, ports,
-network and restart policy. `State` reports its identity, running state and
-labels. Engine adapters implement the operations, while stack providers decide
-which resources to create, reuse or replace.
+`Up` starts or reconciles persistent services and returns without
+foreground attachment. Success does not guarantee application readiness.
+`Stop` stops services and retains resources. `Service` validates a logical
+service name and returns a runtime without starting or probing the service.
+Commands through that runtime use the normal executor API and always run inside
+existing service containers using `exec` behavior. The service must already be
+running. Passing a container engine runtime directly to the executor runs
+commands in disposable containers by default.
 
-For example, an `InfrastructureStack` provider could manage the shared proxy and
-DNS containers without Compose. It holds the engine capabilities and the
-configuration needed to manage those services:
+`Status` reports the running state of the stack's required services without
+changing resources or checking application readiness:
 
-```go
-// Application provider in the proxy package.
-type InfrastructureStack struct {
-    containers container.Lifecycle
-    networks   container.Networks
-    options    InfrastructureOptions
-}
-
-type InfrastructureOptions struct {
-    Directory  string
-    BaseDomain string
-}
-
-func (s *InfrastructureStack) Start(ctx context.Context, _ runtime.Options) (runtime.Result, error) {
-    if err := s.startTraefik(ctx); err != nil {
-        return runtime.Result{ExitCode: -1}, err
-    }
-    if err := s.startDNS(ctx); err != nil {
-        return runtime.Result{ExitCode: -1}, err
-    }
-    return runtime.Result{ExitCode: 0}, nil
-}
-```
-
-In this sketch, `startTraefik` and `startDNS` prepare configuration and use the
-injected engine capabilities to ensure the network and containers are ready.
-
-Application wiring supplies an engine implementing both capabilities:
-
-```go
-engine := containerdocker.New()
-provider, err := proxy.NewInfrastructureStack(engine, engine,
-    proxy.InfrastructureOptions{
-        Directory:  stateDirectory,
-        BaseDomain: baseDomain,
-    })
-if err != nil {
-    return err
-}
-_, err = provider.Start(ctx, runtime.Options{})
-```
-
-The same engine supplies both container capabilities. The provider would expose
-`stack.Lifecycle` and `stack.Remover` to its consumers. Consumers use the same
-stack API as Compose, without needing service execution or engine-specific
-calls. `Stop` retains resources, while `Remove` applies the provider's retention
-policy. The services outlive each management call.
-
-These contracts also allow a reusable managed-stack provider later. Supporting
-another engine requires implementations of the container and network
-capabilities used by the provider. Proxy discovery and socket configuration may
-also need engine-specific adjustments. The initial proxy migration can use a
-custom stack provider following the example above.
-
-#### Shop services and SSH
-
-Move configuration loading, log access, Admin API integration and database
-connection management out of the old executor into the components responsible
-for those domains. API clients own request and response handling, while database
-services own connection configuration and sessions. Application wiring supplies
-the credentials, endpoints and connectivity for the selected environment. The
-exact package layout remains open, while the executor focuses on external
-processes.
-
-| Use case | Execution boundary |
+| Status | Meaning |
 | --- | --- |
-| Run a console command or Composer | Supplied executor and runtime backend. |
-| Read shop configuration or locate logs | Shop-domain service, using process execution only when needed to access the target. |
-| Call the Admin API | Native HTTP client with resolved credentials and endpoint. |
-| Dump a database through the SQL driver | Database service with a direct or forwarded connection. |
-| Execute deployment PHP or an external transfer client | Executor with the SSH backend, plus deployment or transfer policy in the consumer. |
+| `ServiceStackRunning` | All required services are running. |
+| `ServiceStackStopped` | No required services are running, including when their containers are absent. |
+| `ServiceStackPartial` | Some required services are running, while others are missing or stopped. |
+| `ServiceStackUnknown` | The state could not be determined. Returned with an error. |
 
-SSH illustrates how these responsibilities work together. Deployment uses the
-executor for remote processes, while database access uses a separate connection.
-For the process side, deployment can run a prepared PHP script and supply its
-JSON input through the same command and stream API:
+A stopped service may have exited normally or failed. The shared status does
+not distinguish these causes. Compose considers services enabled by the current
+project configuration. The proxy stack considers its Traefik and DNS containers.
 
-```go
-executor := executor.New(ssh.New(local.New(), ssh.Options{
-    Host: host,
-    User: user,
-})).WithDir(remoteDirectory)
-
-result, err := executor.PHP().Run("-r", phpCode).
-    Run(ctx, runtime.Options{
-        Stdin:   bytes.NewReader(payload),
-        Capture: runtime.CaptureSeparate,
-    })
-```
-
-Here `phpCode` is PHP code without an opening tag. The SSH adapter owns remote
-quoting and stream forwarding. Deployment owns script preparation, filesystem
-layout and Composer policy. Initialization before the remote directory exists
-can override the command directory with `WithDir("")`.
-
-Database forwarding is a connectivity capability, separate from starting a
-process. The database layer can define the capability it needs:
+Stacks can expose their containers through an additional capability:
 
 ```go
-type Dialer interface {
-    DialContext(context.Context, string, string) (net.Conn, error)
+// orchestration/runtime
+type ServiceStackContainers interface {
+    // Containers identifies existing service containers, including stopped ones.
+    Containers(context.Context) ([]ServiceContainer, error)
+}
+
+type ServiceContainer struct {
+    Service string // Logical service name, such as web.
+    ID      string // Container ID understood by the stack's engine.
 }
 ```
 
-An optional SSH helper can expose a dialer from the same transport used for
-remote commands. Database setup then receives that dialer. An illustrative API
-could look as follows:
+`Containers` returns the IDs of existing containers and their logical service
+names. A service with multiple containers has one entry per container. Services
+without a container have no entries.
+
+Callers use these IDs with the same engine's resource API. Pass the IDs to
+`ListContainers` for a stack's container summaries, or use an individual ID with
+`InspectContainer` or `Logs`. Stacks therefore do not need their own listing,
+inspection or log methods. `Status` reports whether all, some or none of the
+stack's required services are running. CLI commands format the returned
+information for display.
+
+Partial startup may leave services running. Cancellation interrupts the current
+management operation without implying rollback. Detailed status, readiness,
+removal and resource-retention options belong to the concrete stack. Existing
+CLI behavior must be mapped explicitly when migrating operations whose names
+differ from these internal semantics.
+
+#### Docker Compose
+
+`executor.DockerCompose` implements `runtime.ServiceStack` using the selected
+Docker runtime. It builds Compose commands and uses the shared executor for
+I/O, capture and process handling.
+Availability checking is explicit and construction runs no external commands.
 
 ```go
-dialer, err := executor.SSH().Dialer()
+engine := docker.New(local.New(), docker.Options{})
+stack, err := executor.NewDockerCompose(engine, executor.DockerComposeOptions{
+    Directory:   projectRoot,
+    ProjectName: projectName,
+    Stdout:      streams.Stdout,
+    Stderr:      streams.Stderr,
+})
 if err != nil {
     return err
 }
-connection, cleanup, err := databaseConfig.Open(ctx, dialer)
+if err := stack.CheckAvailable(ctx); err != nil {
+    return err
+}
+if err := stack.Up(ctx); err != nil {
+    return err
+}
+serviceRuntime, err := stack.Service("web")
 if err != nil {
     return err
 }
-defer cleanup()
+runner := executor.New(serviceRuntime).WithDir("/var/www/html")
+_, err = runner.PHP().Console("cache:clear").Run(ctx, streams)
 ```
 
-Application wiring owns the shared SSH transport. The database integration
-closes its forwarded connection, while the transport manages forwarding and
-connection reuse. Canceling a dial attempt must not end an established
-connection. The helper API remains open and does not enlarge `runtime.Backend`.
+Lifecycle output uses the constructor's writers. Service commands receive their
+own streams. Failures retain diagnostics and underlying causes. Concrete
+`Remove` options explicitly control volume deletion.
 
-### Testability
+#### Proxy service stack
 
-The runtime boundary provides a small substitution point for consumer tests.
-A test backend receives the command and streams, supplies fixture output and
-returns a controllable process result. Tests retain the real executor,
-capture and consumer logic without requiring installed runtimes or fake
-executables on `PATH`.
+`proxy.ProxyServiceStack` implements the same contract through container
+lifecycle, container-bound runtimes and network capabilities. It defines Traefik
+and DNS containers and coordinates them without Compose. Application wiring
+supplies engine-specific connectivity, such as the container socket path.
 
-Consumer tests can verify command construction, output interpretation and
-partial failures independently of the execution target. Concurrent consumers
-need concurrency-safe test doubles. Filesystem preparation and downloads still
-require isolated fixtures or their own dependency boundaries.
+```go
+engine := docker.New(local.New(), docker.Options{})
+stack, err := proxy.NewProxyServiceStack(engine, proxy.ProxyServiceStackOptions{
+    Directory:        stateDirectory,
+    BaseDomain:       baseDomain,
+    EngineSocketPath: engineSocketPath,
+})
+if err != nil {
+    return err
+}
+var services runtime.ServiceStack = stack
+if err := services.Up(ctx); err != nil {
+    return err
+}
+serviceRuntime, err := services.Service("traefik")
+if err != nil {
+    return err
+}
+runner := executor.New(serviceRuntime)
+_, err = runner.Command("traefik", "version").Run(ctx, streams)
+```
 
-| Test scope | Responsibility |
-| --- | --- |
-| Consumer with an injected backend | Arguments, output interpretation, findings and error handling. |
-| Runtime and adapter contracts | Streams, process lifetime, cancellation, results and cleanup. |
-| Native integration | Real tool behavior, container or remote execution, and persisted effects. |
+The stack writes service configuration, ensures its network, then inspects and
+starts, reuses or replaces its containers. Service names map to persistent
+container identities. Stopping retains containers and the shared network.
+Concrete removal preserves resources shared with other projects.
 
-Backend substitution makes consumer tests more focused. Native integration
-tests remain necessary to verify the behavior each adapter promises.
+Certificates, host trust, resolver setup and project registration remain in the
+proxy workflow. They are not generic container lifecycle operations. A future
+Podman implementation can supply the same resource capabilities, while a
+self-composed development stack can implement `ServiceStack` directly.
+Factories live in application wiring and return the interfaces their callers
+need, rather than exposing engine-specific types throughout the CLI.
 
-### Staged migration
+### Shop services and SSH
 
-Introduce the shared API first, then use it for containerized QA. Migrate the
-remaining parts of the CLI in small, separately reviewed PRs. Existing commands
-keep their current implementation until the replacement is ready.
+Shop configuration, logs, Admin API integration and database connections belong
+to their domain services. Native HTTP and SQL clients receive resolved
+endpoints, credentials and connectivity. They do not pass through the process
+executor. Log access may use a runtime when reading a target requires command
+execution.
+
+SSH implements command execution for deployment and remote shop operations.
+It owns remote quoting and stream forwarding. Deployment owns scripts, file
+transfers, directory layout and Composer policy. Database forwarding is a
+separate connectivity capability, such as a context-aware connection dialer.
+Application wiring can share an SSH transport between command execution and
+forwarded connections, with explicit cleanup and connection ownership.
+
+### Verification and migration
+
+Consumer tests inject runtimes while retaining real command construction,
+capture and parsing. Resource and stack tests inject the capabilities they use.
+Concurrent consumers need concurrency-safe test doubles. Native tests verify
+actual tool behavior, persisted changes, cancellation, terminal handling,
+resource retention and failures after partial progress.
 
 | Stage | Changes | Ready when |
 | --- | --- | --- |
-| 1. Foundation | Add executor and runtime contracts, local execution and disposable Docker execution. | The core works and is tested independently of stack, proxy and SSH support. |
-| 2. QA | Adopt [containerized QA execution](2026-11-11-containerized-qa.md). | Findings, reports, exit codes and file changes match the existing workflow. |
-| 3. Domain separation | Move configuration, Admin API, database and logs out of the old executor. | Existing environment selection and connections still work. |
-| 4. Stack | Move Compose start, stop and removal, then commands inside services, to the shared API. | Stack names, retained resources and service commands behave as before. |
-| 5. Proxy | Move proxy and DNS container management to a stack provider. Keep host configuration separate. | Startup, reuse, replacement, discovery and teardown work as expected. |
-| 6. SSH | Migrate remote commands, deployment, file transfers and forwarded connections. | Required tooling, connection cleanup, cancellation and interactive commands are verified. |
-| 7. Cleanup | Migrate remaining callers and remove the old executor and temporary migration code. | All callers use the new API. |
+| 1. Execution foundation | Add executor and process contracts, local execution and disposable Docker commands. | Streams, capture, results, cancellation and cleanup work independently of stack and SSH migration. |
+| 2. QA | Adopt [containerized QA execution](2026-11-11-containerized-qa.md). | Findings, reports, exit codes and persisted changes match the existing workflow. |
+| 3. Domain separation | Move configuration, API, database and logs out of the old executor. | Environment selection and connectivity remain compatible. |
+| 4. Container capabilities | Add persistent-container execution and resource management. | Native tests verify standardized operations, status, errors and partial failures. |
+| 5. Service stacks | Migrate development and proxy workflows through DockerCompose and ProxyServiceStack. | Names, configuration, status, retention, service execution and teardown behave as expected. |
+| 6. SSH | Migrate remote commands, deployment, transfers and forwarded connections. | Connection ownership, termination, cleanup and interactive commands are verified. |
+| 7. Cleanup | Migrate remaining consumers and remove the old executor and temporary code. | All required workflows use the shared contracts. |
 
-Each stage can span several PRs. QA can ship before stack, proxy or SSH support.
-Add and test a backend before switching commands to it, then remove the old
-implementation when it is no longer used.
+Each stage can span several PRs. Migrate stacks independently and keep existing
+commands until their replacements are verified. A failed operation must not
+silently run again through the old path, since it may already have changed
+files or resources.
 
-Test each migrated workflow with real tools and isolated projects. Check
-cancellation, cleanup, file changes and failures after only part of an operation
-has completed. Interactive commands also need terminal and signal checks. A
-failed command must not automatically run again through the old implementation,
-since it may already have changed files or resources.
+### Scope of container APIs
+
+The container and image APIs provide the operations and options needed by the
+CLI. They do not cover every operation or setting available in container
+engines. Implementations report unsupported capabilities or settings explicitly.
 
 ### Out of scope
 
-- **Remote QA execution.** QA uses locally available source files, directly or
-  mounted into a container. SSH support targets deployment, remote shop commands
-  and database access.
-- **A general remote filesystem abstraction.** Filesystem operations and
-  file-transfer policy remain with their consumers.
-- **Automatic path rewriting in arguments or raw output.** Consumers explicitly
-  map path arguments and paths in parsed findings through the workspace mapping.
+- Remote QA and a general remote filesystem abstraction. QA uses local source
+  files directly or through mounts. Transfer policy stays with its consumer.
+- Automatic rewriting of arguments or raw output paths.
+- Foreground stack execution and a general stack-definition language.
+
+## Alternatives considered
+
+- **Prebuilt images for individual tools**. We chose the Shopware CLI and
+  `docker-dev` images because we already maintain and control them, the CLI
+  image is based on `docker-dev` and the development stack already uses it.
+  They provide the tools we expect locally in a compatible environment without
+  adding custom images or relying on a mix of images from different maintainers.
+- **A separate container abstraction**. We considered a generic
+  `runtime/container` package backed by a separate container-engine package.
+  We dropped this additional layer because concrete engine implementations can
+  implement the shared runtime contracts directly with less complexity.
+- **A full service-stack API**. We considered a generic API that also defines
+  stack composition, but dropped it because it adds too much complexity for
+  the CLI's requirements. Shared runtime capabilities and a lightweight
+  `ServiceStack` contract keep common operations consistent while letting each
+  stack define its own composition.
 
 ## Consequences
 
-The CLI gains a common execution API for tools, builds, stack services and
-remote commands. As consumers migrate, process construction and lifecycle
-handling move out of individual workflows into reusable adapters. Improvements
-to streams, cancellation, cleanup and error handling can then benefit every
-consumer using the shared implementation. The same boundary supports consistent
-telemetry for execution targets, durations and failures.
+Consumers gain a stable command API across execution environments. Shared
+implementations centralize process handling, output capture and telemetry for
+execution targets, durations and failures. Typed resource operations hide
+engine-specific commands while keeping composition in the owning domain.
 
-The small runtime contract improves testability. Consumer tests can supply
-output and failures through an injected backend while exercising real command
-construction and result handling. Adapter and integration tests verify process
-and engine behavior separately, reducing the need to reproduce the execution
-environment in every consumer test.
+Capability interfaces support focused tests and replacement implementations
+without requiring every runtime to manage containers or stacks. The explicit
+service-stack contract checks method signatures. The documented semantics and
+behavioral tests establish lifecycle compatibility.
 
-Separating process execution, stack management and domain services gives each
-a clear responsibility. Additional container engines or execution targets can
-extend the relevant capabilities, while consumers retain their command API.
-Database and HTTP clients keep their native interfaces and can use target
-connectivity independently of process execution.
-
-These benefits can be delivered incrementally. QA does not have to wait for the
-stack, proxy or SSH migration. The investment is shared adapter and wiring code,
-plus temporary maintenance of old and new paths. Each backend still needs clear,
-verified guarantees for termination, cleanup and status reporting. Removing old
-implementations as migration progresses keeps that added complexity temporary.
+The cost remains in correct process and service-state handling, implementation
+verification and temporary migration paths. Each target needs native evidence
+for its guarantees. Delivery starts with the execution boundary and QA, while
+resource, stack and SSH migrations proceed independently.

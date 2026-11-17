@@ -76,10 +76,11 @@ is an explicit flag, extension configuration, then local execution.
 
 ### Dispatch through the orchestration API
 
-The QA command uses the orchestration API to launch the containerized CLI.
-The verifier retains tool execution and QA reporting, while application wiring
-selects the image and workspace. With a container-backed executor supplied by
-that wiring, a wrapped project validation command can look as follows:
+The QA command uses the orchestration API to launch the containerized CLI. The
+verifier retains tool execution and QA reporting, while application wiring
+selects the image and workspace. The Docker runtime implements the shared
+command execution contract directly. With an executor supplied by that wiring, a
+wrapped project validation command can look as follows:
 
 ```go
 args := append([]string{"project", "validate", "/workspace"}, qaFlags...)
@@ -107,7 +108,7 @@ Establish image publication, CLI/tool compatibility and supported workspace
 layouts before making container dispatch the default for Docker-managed
 projects.
 
-Dispatch tests can supply `executor.New(testBackend)` to inspect the wrapped
+Dispatch tests can supply `executor.New(testRuntime)` to inspect the wrapped
 command, simulate output and failures, and verify that dispatch is not repeated
 inside the image.
 Verifier tests continue to cover parsing, findings and reporting. Native checks
