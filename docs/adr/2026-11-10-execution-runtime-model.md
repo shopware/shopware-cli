@@ -723,6 +723,59 @@ separate connectivity capability, such as a context-aware connection dialer.
 Application wiring can share an SSH transport between command execution and
 forwarded connections, with explicit cleanup and connection ownership.
 
+For example, deployment can run a prepared PHP script through an injected
+remote runtime and supply JSON input through stdin:
+
+```go
+runner := executor.New(remoteRuntime).WithDir(remoteDirectory)
+result, err := runner.PHP().Run("-r", phpCode).Run(ctx, runtime.Options{
+    Stdin:   bytes.NewReader(payload),
+    Stderr:  os.Stderr,
+    Capture: runtime.CaptureSeparate,
+})
+if err != nil {
+    return err
+}
+```
+
+`phpCode` contains PHP code without an opening tag and reads the JSON payload
+from `STDIN`. The code is passed as an argument without local shell parsing.
+The SSH implementation handles remote quoting and forwards stdin and output.
+
+The database service can define the connectivity contract it needs separately:
+
+```go
+// Dialer opens connections directly or through a tunnel.
+type Dialer interface {
+    DialContext(context.Context, string, string) (net.Conn, error)
+}
+```
+
+Application wiring supplies a direct dialer for local access or a tunnel dialer
+for SSH access. Given a prepared MySQL configuration, the database service can
+use that dialer with the native MySQL driver:
+
+```go
+// The address is resolved and reached from the dialer's environment.
+mysqlConfig.DialFunc = dialer.DialContext
+connector, err := mysql.NewConnector(mysqlConfig)
+if err != nil {
+    return err
+}
+db := sql.OpenDB(connector)
+defer db.Close()
+
+if err := db.PingContext(ctx); err != nil {
+    return err
+}
+// Use db for queries through the selected connection path.
+```
+
+The database service closes its connection pool before application wiring
+closes the shared SSH transport. The dial context controls connection setup.
+Canceling it after a successful dial must not close the established connection.
+Database forwarding does not add methods to `runtime.Runtime`.
+
 ### Verification and migration
 
 Consumer tests inject runtimes while retaining real command construction,
