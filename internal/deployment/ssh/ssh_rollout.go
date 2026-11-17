@@ -240,7 +240,7 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 		return Rollout{}, err
 	}
 	reader := bufio.NewReader(stdout)
-	result, protocolErr := exchangeSSHDeployment(ctx, stdin, reader, archive, input, ci.New(output))
+	result, protocolErr := exchangeSSHDeployment(ctx, stdin, reader, archive, input, output)
 	if protocolErr == nil && input.Action == sshDeploymentActivate {
 		protocolErr = json.NewDecoder(reader).Decode(&result)
 	}
@@ -248,6 +248,9 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 	closeErr := stdin.Close()
 	waitErr := cmd.Wait()
 	if err := errors.Join(ctx.Err(), protocolErr, closeErr, waitErr); err != nil {
+		if errors.Is(err, errSSHPreparationCanceled) {
+			return Rollout{}, fmt.Errorf("cannot complete SSH rollout %s: %w", input.Reference, err)
+		}
 		current := input.Current
 		if current == "" {
 			current = "current"
@@ -257,7 +260,8 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 	return result, nil
 }
 
-func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.Reader, archive io.Reader, input sshRolloutInput, sections ci.Helper) (Rollout, error) {
+func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.Reader, archive io.Reader, input sshRolloutInput, output io.Writer) (Rollout, error) {
+	sections := ci.New(output)
 	action, err := readRolloutAction(stdout, input.Reference)
 	if err != nil {
 		return Rollout{}, fmt.Errorf("negotiate deployment: %w", err)
@@ -284,7 +288,7 @@ func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.R
 		err = readRolloutMessage(stdout, sshRolloutReady+" "+input.Reference)
 		section.End()
 	} else {
-		err = prepareSSHRelease(ctx, stdin, stdout, archive, input, sections, action == sshRolloutUpload)
+		err = prepareSSHRelease(ctx, stdin, stdout, archive, input, sections, output, action == sshRolloutUpload)
 	}
 	if err != nil {
 		return Rollout{}, err
@@ -303,7 +307,7 @@ func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.R
 	return Rollout{Reference: input.Reference, Deployment: Deployment{Reference: input.Deployment}, Active: true}, nil
 }
 
-func prepareSSHRelease(ctx context.Context, stdin io.Writer, stdout *bufio.Reader, archive io.Reader, input sshRolloutInput, sections ci.Helper, upload bool) error {
+func prepareSSHRelease(ctx context.Context, stdin io.Writer, stdout *bufio.Reader, archive io.Reader, input sshRolloutInput, sections ci.Helper, output io.Writer, upload bool) error {
 	artifactSectionName := "Using cached deployment artifact"
 	if upload {
 		artifactSectionName = "Uploading deployment artifact"
@@ -321,12 +325,15 @@ func prepareSSHRelease(ctx context.Context, stdin io.Writer, stdout *bufio.Reade
 	if err := readRolloutMessage(stdout, sshRolloutPrepare+" "+input.Reference); err != nil {
 		return fmt.Errorf("start release preparation: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	prepareSection := sections.Section("Preparing release")
 	if _, err := fmt.Fprintln(stdin, sshRolloutContinue+" "+input.Reference); err != nil {
 		prepareSection.End()
 		return err
 	}
-	err = readRolloutMessage(stdout, sshRolloutReady+" "+input.Reference)
+	err = waitForSSHPreparation(ctx, stdout, input.Reference, output)
 	prepareSection.End()
 	if err != nil {
 		return fmt.Errorf("prepare release: %w", err)

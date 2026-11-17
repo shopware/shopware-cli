@@ -14,15 +14,18 @@ import (
 	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/update"
+	"github.com/shopware/shopware-cli/internal/userconfig"
 )
 
 // isolateUpdateEnvironment points caches at a temp dir, hides brew from PATH
-// so the binary never counts as Homebrew-managed, and clears CI markers.
+// so the binary never counts as Homebrew-managed, points the user config at a
+// missing file, and clears CI markers.
 func isolateUpdateEnvironment(t *testing.T) string {
 	t.Helper()
 
 	cacheDir := t.TempDir()
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", cacheDir)
+	t.Setenv(userconfig.PathEnv, filepath.Join(t.TempDir(), "config.yaml"))
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("SHOPWARE_CLI_NO_UPDATE_NOTIFICATION", "")
 	t.Setenv("CI", "")

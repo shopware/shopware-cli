@@ -65,6 +65,10 @@ type OverviewModel struct {
 	sfWatchRunning     bool
 	sfWatchStarting    bool
 	sfWatchReady       bool
+	// adminWatchFailure and sfWatchFailure hold why a running watcher never
+	// answered its readiness probe; empty while it is still expected to.
+	adminWatchFailure string
+	sfWatchFailure    string
 	// proxyHost is the project's proxy hostname (empty for a non-proxy
 	// project), resolved once at construction. Cached because the proxy-ness of
 	// a project is fixed for the session and View runs on every frame — calling
@@ -201,15 +205,23 @@ type watcherRunningMsg struct {
 // once the watcher's URL actually answers. The webpack storefront watcher only
 // binds its port after its first compile (a few seconds), during which the
 // proxy returns 502 — so the URL is held back until a probe succeeds.
+// Once the deadline passes without an answer, failure carries the reason of the
+// last attempt and probing stops.
 type watcherProbeMsg struct {
-	name  string
-	url   string
-	ready bool
+	name    string
+	url     string
+	since   time.Time
+	ready   bool
+	failure string
 }
 
 // watcherProbeInterval is how often a starting watcher's URL is polled until
 // it serves.
 const watcherProbeInterval = 750 * time.Millisecond
+
+// watcherProbeDeadline bounds the polling: generous enough for a slow first
+// storefront compile, yet a permanent misroute stops being "starting...".
+const watcherProbeDeadline = 3 * time.Minute
 
 // watcherProbeClient probes a watcher's own URL. TLS verification is skipped
 // because the proxy serves a locally generated certificate the Go client does
@@ -222,17 +234,29 @@ var watcherProbeClient = &http.Client{
 }
 
 // probeWatcher polls url once after a short delay and reports whether the
-// watcher is serving yet, so the UI can hold back its URL until then.
-func probeWatcher(ctx context.Context, name, url string) tea.Cmd {
+// watcher is serving yet, so the UI can hold back its URL until then. since is
+// when probing began, which the deadline is measured from.
+func probeWatcher(ctx context.Context, name, url string, since time.Time) tea.Cmd {
 	return tea.Tick(watcherProbeInterval, func(time.Time) tea.Msg {
-		ready := false
+		msg := watcherProbeMsg{name: name, url: url, since: since}
+
+		reason := "invalid URL"
 		if req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil); err == nil {
-			if resp, err := watcherProbeClient.Do(req); err == nil {
+			resp, err := watcherProbeClient.Do(req)
+			if err != nil {
+				reason = err.Error()
+			} else {
 				_ = resp.Body.Close()
-				ready = resp.StatusCode < 500
+				msg.ready = resp.StatusCode < 500
+				reason = url + " answers with " + resp.Status
 			}
 		}
-		return watcherProbeMsg{name: name, url: url, ready: ready}
+
+		if !msg.ready && time.Since(since) > watcherProbeDeadline {
+			msg.failure = reason
+		}
+
+		return msg
 	})
 }
 
@@ -970,8 +994,8 @@ func (m OverviewModel) renderWatchers() string {
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, m.adminWatchURL, m.cursor == 0))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, m.sfWatchURL, m.cursor == 1))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, m.adminWatchFailure, m.adminWatchURL, m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, m.sfWatchFailure, m.sfWatchURL, m.cursor == 1))
 	return s.String()
 }
 
@@ -1155,15 +1179,20 @@ func startWatcher(name string, parent context.Context, proxied bool, prepare fun
 	return tea.Batch(startedCmd, runningCmd)
 }
 
-func (m OverviewModel) renderWatcherStatus(label string, running, starting, ready bool, url string, focused bool) string {
+func (m OverviewModel) renderWatcherStatus(label string, running, starting, ready bool, failure, url string, focused bool) string {
 	// A watcher that has started but is not yet answering (e.g. the webpack
 	// storefront watcher during its first compile) stays in the "starting"
 	// state, so its URL is not shown until clicking it actually works.
 	serving := running && ready
 	warming := starting || (running && !ready)
+	failed := running && !ready && failure != ""
 
 	var checkbox, status string
 	switch {
+	case failed:
+		errorStyle := lipgloss.NewStyle().Foreground(tui.ErrorColor)
+		checkbox = errorStyle.Render("[!]")
+		status = errorStyle.Render("not responding") + "\n      " + tui.DimStyle.Render(failure)
 	case serving:
 		if focused {
 			checkbox = lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Render("[x]")

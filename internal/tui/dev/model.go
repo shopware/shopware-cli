@@ -505,14 +505,16 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			if msg.err == nil && exists {
 				m.overview.adminWatchRunning = true
 				m.overview.adminWatchReady = false
-				return m, probeWatcher(m.commandContext(), watcherAdmin, m.overview.adminWatchURL)
+				m.overview.adminWatchFailure = ""
+				return m, probeWatcher(m.commandContext(), watcherAdmin, m.overview.adminWatchURL, time.Now())
 			}
 		case watcherStorefront:
 			m.overview.sfWatchStarting = false
 			if msg.err == nil && exists {
 				m.overview.sfWatchRunning = true
 				m.overview.sfWatchReady = false
-				return m, probeWatcher(m.commandContext(), watcherStorefront, m.overview.sfWatchProbeURL)
+				m.overview.sfWatchFailure = ""
+				return m, probeWatcher(m.commandContext(), watcherStorefront, m.overview.sfWatchProbeURL, time.Now())
 			}
 		}
 		return m, nil
@@ -525,15 +527,21 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 		switch msg.name {
 		case watcherAdmin:
 			m.overview.adminWatchReady = msg.ready
+			m.overview.adminWatchFailure = msg.failure
 		case watcherStorefront:
 			m.overview.sfWatchReady = msg.ready
+			m.overview.sfWatchFailure = msg.failure
 		}
 		if msg.ready {
 			m.telemetry.watcherReady(msg.name)
 			return m, nil
 		}
+		// Past the deadline: stop polling and leave the reason on the Overview.
+		if msg.failure != "" {
+			return m, nil
+		}
 		// Not serving yet — keep polling until it is.
-		return m, probeWatcher(m.commandContext(), msg.name, msg.url)
+		return m, probeWatcher(m.commandContext(), msg.name, msg.url, msg.since)
 
 	case stopWatcherRequestMsg:
 		return m, m.stopWatcher(msg.name)

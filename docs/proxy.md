@@ -189,7 +189,8 @@ executor's database connection rather than shelling into a container.
   label, so `*.shopware.local` covers `shop1.shopware.local` but **not**
   `mailer.shop1.shopware.local` — every registered project contributes a
   `*.<project>.shopware.local` SAN and the certificate is regenerated when the
-  set changes. Traefik watches the cert files and reloads without restart.
+  set changes. Traefik does not reload a changed certificate file, so the CLI
+  restarts the proxy container after regenerating it.
 - Trust installation (`proxy setup`) uses the `smallstep/truststore` library
   (the maintained port of mkcert's trust-store code, also used by Caddy):
   system keychain / CA directory, plus best-effort NSS for Firefox.
@@ -311,9 +312,9 @@ a fallback it is only consulted for names the gateway cannot resolve:
 
 ```bash
 sudo apt-get install -y libnss-resolve
-# Append `resolve` as the LAST source on the existing hosts line, preserving
-# whatever sources (files, dns, mymachines, …) are already configured.
-sudo sed -i -E '/^hosts:/{/\bresolve\b/!s/[[:space:]]*$/ resolve/}' /etc/nsswitch.conf
+# Make `resolve` the LAST source on the existing hosts line (the package puts
+# it before `dns`), preserving the other sources (files, dns, myhostname, …).
+sudo sed -i -E '/^hosts:/{s/[[:space:]]+resolve([[:space:]]*\[[^]]*\])?//;s/[[:space:]]*$/ resolve/}' /etc/nsswitch.conf
 ```
 
 Verify: `getent hosts test.shopware.local` returns `127.0.0.1`, and
