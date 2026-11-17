@@ -152,12 +152,6 @@ linters:
         - name: "(*go.uber.org/zap.SugaredLogger).Logln"
           msg-pos: 1
           args-pos: -1
-        - name: "log.Printf"
-          msg-pos: 0
-          args-pos: -1
-        - name: "log.Println"
-          msg-pos: 0
-          args-pos: -1
   exclusions:
     rules:
       - path: cmd\/*
