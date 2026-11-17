@@ -8,7 +8,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/shyim/go-composer"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
@@ -257,7 +259,7 @@ func TestEnsureDeploymentHelper_NoOpWhenAlreadyInRequire(t *testing.T) {
 	assert.Contains(t, string(out), `"shopware/deployment-helper": "^1.0"`)
 }
 
-func TestEnsureDeploymentHelper_NoOpWhenInRequireDev(t *testing.T) {
+func TestEnsureDeploymentHelper_MovesRequireDevToRequire(t *testing.T) {
 	dir := t.TempDir()
 	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
 		Name:       "shopware/production",
@@ -267,7 +269,11 @@ func TestEnsureDeploymentHelper_NoOpWhenInRequireDev(t *testing.T) {
 
 	changed, err := ensureDeploymentHelper(dir)
 	assert.NoError(t, err)
-	assert.False(t, changed)
+	assert.True(t, changed)
+	c, err := composer.ReadJson(filepath.Join(dir, "composer.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "^1.0", c.Require["shopware/deployment-helper"])
+	assert.NotContains(t, c.RequireDev, "shopware/deployment-helper")
 }
 
 func TestEnsureDeploymentHelper_MissingComposerJson(t *testing.T) {

@@ -1,0 +1,20 @@
+# Reject Short text with 80+ characters, e.g. 80 repeated "a" characters.
+id: cobra-short-length
+language: Go
+severity: error
+message: Command Short must contain fewer than 80 characters
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  pattern:
+    context: 'cobra.Command{Short: $TEXT}'
+    selector: keyed_element
+  inside:
+    kind: literal_value
+    inside:
+      pattern: cobra.Command{$$$FIELDS}
+
+# Count characters in plain quoted strings, not Go source escapes or expressions.
+constraints:
+  TEXT:
+    regex: '^"[^"\\]{80,}"$'

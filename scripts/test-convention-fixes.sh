@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Exercise all autofix rules together, including punctuation removal via expandEnd.
+# Exercise all autofix rules together, including overlapping string fixes
+# and punctuation removal via expandEnd.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture_dir="$repo_root/ast-grep/tests/fixes"
 test_dir="$(mktemp -d)"

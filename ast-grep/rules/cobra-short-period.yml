@@ -1,3 +1,4 @@
+# Reject trailing Short periods, e.g. "Build assets."; fix to "Build assets".
 id: cobra-short-period
 language: Go
 severity: error
@@ -26,5 +27,8 @@ transform:
       source: $TEXT
       replace: '\."$'
       by: '"'
+  BODY: substring($FIXED, startChar=1, endChar=-1)
+  CAPITALIZED: convert($BODY, toCase=capitalize)
 
-fix: $FIXED
+# Capitalise too, regardless of which overlapping help fix is applied first.
+fix: '"$CAPITALIZED"'

@@ -1,0 +1,28 @@
+id: flag-usage-period
+valid:
+  - 'func init() { cmd.Flags().String("name.", "default.", "Select name") }'
+  - 'func init() { cmd.Flags().String("name", "", "Waiting...") }'
+  - 'func init() { other.String("name", "", "Select name.") }'
+  - 'func init() { cmd.Flags().GetString("name.") }'
+  - 'func init() { cmd.Flags().Set("name", "value.") }'
+  - 'func init() { cmd.Flags().String("name", "", helpText) }'
+  - 'func init() { cmd.Flags().String("name", "", "Select " + "name.") }'
+  - 'func init() { cmd.Flags().String("name", "", "Select \"name\".") }'
+  - 'func init() { cmd.Flags().String("name", "", `Select name.`) }'
+  - 'func init() { flags := cmd.Flags(); other.String("name", "", "Select name.") }'
+invalid:
+  - 'func init() { cmd.Flags().String("name", "", "Select name.") }'
+  - 'func init() { cmd.PersistentFlags().BoolP("force", "f", false, "Overwrite files.") }'
+  - 'func init() { cmd.Flags().UintVarP(&count, "count", "c", 0, "Select count.") }'
+  - 'func init() { cmd.Flags().StringSlice("names", nil, "Select names.") }'
+  - 'func init() { cmd.Flags().Var(value, "name", "Select name.") }'
+  - 'func init() { cmd.Flags().CountVar(&verbosity, "verbose", "Increase verbosity.") }'
+  - 'func init() { flags := cmd.Flags(); flags.String("name", "", "Select name.") }'
+  - 'func init() { local := cmd.PersistentFlags(); local.String("name", "", "Select name.") }'
+  - |
+    func init() {
+      cmd.Flags().String(
+        "name", "",
+        "Select name.", // Keep this comment
+      )
+    }

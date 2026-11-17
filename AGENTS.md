@@ -55,7 +55,9 @@ build, validation, and packaging rules.
 
 ### Configuration Files
 
-- **`.shopware-cli.yaml`** - Global CLI configuration
+- **`<user config dir>/shopware-cli/config.yaml`** - Optional user preferences
+  (`telemetry`, `no_update_hint`), loaded by `internal/userconfig`; path can be
+  overridden with `SHOPWARE_CLI_CONFIG`. Never written by the CLI
 - **`.config/shopware-extension.yml` / `.shopware-extension.yml` /
   `.shopware-extension.yaml`** - Extension-specific settings (schema:
   `internal/extension/config_schema.json`, embedded and exposed via

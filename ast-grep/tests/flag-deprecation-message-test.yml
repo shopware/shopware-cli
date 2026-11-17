@@ -1,0 +1,22 @@
+id: flag-deprecation-message
+valid:
+  - 'func init() { cmd.Flags().MarkDeprecated("old", deprecation.Message("2027-02-10", "--new")) }'
+  - 'func init() { cmd.Flags().MarkDeprecated("old", message) }'
+  - 'func init() { cmd.Flags().MarkDeprecated("old", "Use " + replacement) }'
+  - 'func init() { other.MarkDeprecated("old", "Use --new") }'
+  - 'func init() { cmd.Flags().MarkHidden("old") }'
+  - 'func init() { flags := cmd.Flags(); other.MarkDeprecated("old", "Use --new") }'
+  - 'func init() { flags := cmd.Flags(); { flags := other; flags.MarkDeprecated("old", "Use --new") } }'
+invalid:
+  - 'func init() { cmd.Flags().MarkDeprecated("old", "Use --new") }'
+  - 'func init() { cmd.PersistentFlags().MarkDeprecated("old", `Use --new`) }'
+  - 'func init() { cmd.Flags().MarkDeprecated("old", "") }'
+  - 'func init() { flags := cmd.Flags(); flags.MarkDeprecated("old", "Use --new") }'
+  - 'func init() { local := cmd.PersistentFlags(); local.MarkDeprecated("old", "Use --new") }'
+  - |
+    func init() {
+      cmd.Flags().MarkDeprecated(
+        "old", // Flag name
+        "Use --new", // Deprecation message
+      )
+    }
