@@ -1,9 +1,16 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 )
+
+// ErrUnsupported reports a runtime feature that the implementation cannot provide.
+var ErrUnsupported = errors.New("unsupported runtime feature")
+
+// ErrNotFound reports an absent resource, not an unavailable engine.
+var ErrNotFound = errors.New("resource not found")
 
 // ExitError reports a workload that finished with a non-zero exit code.
 type ExitError struct {

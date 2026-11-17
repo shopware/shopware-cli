@@ -15,18 +15,18 @@ import (
 	"github.com/shopware/shopware-cli/internal/orchestration/runtime"
 )
 
-// Backend executes commands on the host.
-type Backend struct{}
+// Runtime executes commands on the host.
+type Runtime struct{}
 
-// New returns a host process backend.
-func New() *Backend {
-	return &Backend{}
+// New returns a host process runtime.
+func New() *Runtime {
+	return &Runtime{}
 }
 
 // Start starts a command directly, without a shell.
 // Bare executable names use the CLI's PATH for lookup. Env overlays affect the
 // child environment; use an absolute name to select a tool outside that PATH.
-func (*Backend) Start(ctx context.Context, command runtime.Command, options runtime.Options) (runtime.Process, error) {
+func (*Runtime) Start(ctx context.Context, command runtime.Command, options runtime.Options) (runtime.Process, error) {
 	if options.TTY {
 		return nil, &runtime.ExecutionError{Stage: runtime.StageStart, Err: runtime.ErrUnsupported}
 	}
@@ -37,7 +37,7 @@ func (*Backend) Start(ctx context.Context, command runtime.Command, options runt
 		return nil, &runtime.ExecutionError{Stage: runtime.StageStart, Err: err}
 	}
 
-	cmd := exec.Command(command.Name, command.Args...) //nolint:noctx // Context cancellation calls Stop to terminate the process group.
+	cmd := exec.Command(command.Name, command.Args...) //nolint:noctx // Context cancellation calls Kill to terminate the process group.
 	cmd.Dir = command.Dir
 	cmd.Env = overlayEnv(os.Environ(), command.Env)
 
@@ -88,7 +88,7 @@ func (*Backend) Start(ctx context.Context, command runtime.Command, options runt
 		case <-ctx.Done():
 			stopCtx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			_ = proc.Stop(stopCtx)
+			_ = proc.Kill(stopCtx)
 		case <-proc.done:
 		}
 	}()

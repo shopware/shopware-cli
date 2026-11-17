@@ -1,4 +1,4 @@
-// Package executor provides a small command API over runtime backends.
+// Package executor builds and runs commands through an injected runtime.
 package executor
 
 import (
@@ -7,16 +7,16 @@ import (
 	"github.com/shopware/shopware-cli/internal/orchestration/runtime"
 )
 
-// Executor builds commands for a runtime backend.
+// Executor builds commands for the selected runtime.
 type Executor struct {
-	backend runtime.Backend
+	runtime runtime.Runtime
 	dir     string
 	env     map[string]string
 }
 
-// New creates an executor backed by backend.
-func New(backend runtime.Backend) *Executor {
-	return &Executor{backend: backend}
+// New creates an executor using the selected runtime.
+func New(target runtime.Runtime) *Executor {
+	return &Executor{runtime: target}
 }
 
 // WithDir returns an executor with the default working directory replaced.

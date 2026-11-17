@@ -9,10 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/orchestration/container"
 	"github.com/shopware/shopware-cli/internal/orchestration/executor"
 	"github.com/shopware/shopware-cli/internal/orchestration/runtime"
-	containerruntime "github.com/shopware/shopware-cli/internal/orchestration/runtime/container"
+	"github.com/shopware/shopware-cli/internal/orchestration/runtime/docker"
 )
 
 var qaCLIVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
@@ -37,9 +36,9 @@ type ContainerQARequest struct {
 	User string
 }
 
-// RunContainerQA runs a complete QA command using the supplied container runner.
+// RunContainerQA runs a complete QA command using hostRuntime to start Docker CLI processes.
 // The caller selects container execution and resolves path-valued flags first.
-func RunContainerQA(ctx context.Context, runner container.Runner, request ContainerQARequest, streams runtime.Options) (runtime.Result, error) {
+func RunContainerQA(ctx context.Context, hostRuntime runtime.Runtime, request ContainerQARequest, streams runtime.Options) (runtime.Result, error) {
 	fail := func(err error) (runtime.Result, error) {
 		return runtime.Result{ExitCode: -1}, &runtime.ExecutionError{Stage: runtime.StageStart, Err: err}
 	}
@@ -67,13 +66,13 @@ func RunContainerQA(ctx context.Context, runner container.Runner, request Contai
 	if err != nil {
 		return fail(err)
 	}
-	backend := containerruntime.New(runner, container.RunOptions{
+	target := docker.New(hostRuntime, docker.Options{
 		Image:  "ghcr.io/shopware/shopware-cli:" + version + "-php-" + request.PHPVersion,
-		Mounts: []container.Mount{{Source: workspace.SourceRoot(), Target: workspace.TargetRoot()}},
+		Mounts: []runtime.ContainerMount{{Source: workspace.SourceRoot(), Target: workspace.TargetRoot()}},
 		User:   request.User,
 	})
 	args := append([]string{request.Group, request.Operation, workspace.TargetRoot()}, request.Flags...)
-	return executor.New(backend).WithDir(workspace.TargetRoot()).
+	return executor.New(target).WithDir(workspace.TargetRoot()).
 		Command("shopware-cli", args...).
 		WithEnv(map[string]string{"SHOPWARE_CLI_TOOLING_CONTEXT": "1"}).
 		Run(ctx, streams)

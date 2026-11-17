@@ -72,3 +72,7 @@ func (p *capturedProcess) Wait() (runtime.Result, error) {
 func (p *capturedProcess) Stop(ctx context.Context) error {
 	return p.process.Stop(ctx)
 }
+
+func (p *capturedProcess) Kill(ctx context.Context) error {
+	return p.process.Kill(ctx)
+}

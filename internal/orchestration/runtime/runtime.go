@@ -1,14 +1,10 @@
-// Package runtime defines the process execution boundary used by executors.
+// Package runtime defines command execution, container resources and service stacks.
 package runtime
 
 import (
 	"context"
-	"errors"
 	"io"
 )
-
-// ErrUnsupported reports a requested runtime feature that a backend cannot provide.
-var ErrUnsupported = errors.New("unsupported runtime feature")
 
 // Command describes a program invocation without invoking a shell.
 type Command struct {
@@ -19,7 +15,7 @@ type Command struct {
 	Args []string
 
 	// Dir is the working directory in the target environment.
-	// An empty value uses the backend's default directory.
+	// An empty value uses the runtime's default directory.
 	Dir string
 
 	// Env overlays values on the target environment's inherited values.
@@ -42,18 +38,18 @@ type Options struct {
 	Stderr io.Writer
 
 	// Capture selects unbounded output retention, defaulting to CaptureNone.
-	// The executor consumes it before dispatch, so backends receive CaptureNone.
+	// The executor consumes it before dispatch, so runtimes receive CaptureNone.
 	Capture CaptureMode
 
 	// TTY requests terminal allocation.
 	TTY bool
 }
 
-// Backend starts processes using a specific execution environment.
+// Runtime starts processes using a specific execution environment.
 // The context governs the execution lifetime, including after Start returns.
-// Cancellation requests termination; blocked caller-owned I/O can delay completion.
-// The backend reaps the process and cleans up execution-owned resources without Wait.
-type Backend interface {
+// Cancellation requests forceful termination. Blocked caller-owned I/O can delay completion.
+// The runtime reaps the process and cleans up execution-owned resources without Wait.
+type Runtime interface {
 	// Start begins a command and returns a handle for waiting or stopping it.
 	Start(context.Context, Command, Options) (Process, error)
 }
@@ -66,8 +62,13 @@ type Process interface {
 	// A workload failure can be reported as an ExitError.
 	Wait() (Result, error)
 
-	// Stop requests forceful termination, even if ctx is already canceled.
-	// The context bounds waiting; required cleanup continues independently.
-	// A later Stop or Wait can observe the eventual outcome.
+	// Stop sends a graceful shutdown request.
+	// The context can cancel communication with the runtime.
+	// Use Wait to observe exit and cleanup.
 	Stop(context.Context) error
+
+	// Kill sends a forceful termination request.
+	// The context can cancel communication with the runtime.
+	// Use Wait to observe exit and cleanup.
+	Kill(context.Context) error
 }

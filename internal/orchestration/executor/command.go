@@ -59,7 +59,7 @@ func (c *Command) Run(ctx context.Context, options runtime.Options) (runtime.Res
 func (c *Command) Start(ctx context.Context, options runtime.Options) (runtime.Process, error) {
 	switch options.Capture {
 	case runtime.CaptureNone:
-		return c.executor.backend.Start(ctx, c.clone().spec, options)
+		return c.executor.runtime.Start(ctx, c.clone().spec, options)
 	case runtime.CaptureSeparate, runtime.CaptureCombined:
 	default:
 		return nil, &runtime.ExecutionError{
@@ -80,7 +80,7 @@ func (c *Command) Start(ctx context.Context, options runtime.Options) (runtime.P
 		stderr:  true,
 	}
 
-	process, err := c.executor.backend.Start(ctx, c.clone().spec, options)
+	process, err := c.executor.runtime.Start(ctx, c.clone().spec, options)
 	if err != nil {
 		return nil, err
 	}
@@ -89,14 +89,4 @@ func (c *Command) Start(ctx context.Context, options runtime.Options) (runtime.P
 		process: process,
 		capture: capture,
 	}, nil
-}
-
-// Capture runs the command and retains stdout and stderr separately.
-func (c *Command) Capture(ctx context.Context) (runtime.Result, error) {
-	return c.Run(ctx, runtime.Options{Capture: runtime.CaptureSeparate})
-}
-
-// CombinedOutput runs the command and retains both output streams in observed write order.
-func (c *Command) CombinedOutput(ctx context.Context) (runtime.Result, error) {
-	return c.Run(ctx, runtime.Options{Capture: runtime.CaptureCombined})
 }

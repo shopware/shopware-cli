@@ -18,7 +18,7 @@ type process struct {
 	inputErr <-chan error
 	outputs  *outputWrites
 
-	// mu coordinates completion publication with Stop's signal decision.
+	// mu coordinates completion publication with termination requests.
 	mu     sync.Mutex
 	result runtime.Result
 	err    error
@@ -98,26 +98,29 @@ func (p *process) reap(ctx context.Context) {
 	}
 }
 
-// Stop requests termination and uses ctx to bound the wait for completion.
+// Stop requests a graceful shutdown without waiting for completion.
 func (p *process) Stop(ctx context.Context) error {
+	return p.signal(ctx, stopProcess)
+}
+
+// Kill requests forceful termination without waiting for completion.
+func (p *process) Kill(ctx context.Context) error {
+	return p.signal(ctx, killProcess)
+}
+
+func (p *process) signal(ctx context.Context, send func(*exec.Cmd) error) error {
 	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return &runtime.ExecutionError{Stage: runtime.StageStop, Err: err}
+	}
 	select {
 	case <-p.done:
-		p.mu.Unlock()
 		return nil
 	default:
 	}
-	err := killProcess(p.cmd)
-	p.mu.Unlock()
-
-	if err != nil && !errors.Is(err, os.ErrProcessDone) {
+	if err := send(p.cmd); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return &runtime.ExecutionError{Stage: runtime.StageStop, Err: err}
 	}
-
-	select {
-	case <-p.done:
-		return nil
-	case <-ctx.Done():
-		return &runtime.ExecutionError{Stage: runtime.StageStop, Err: ctx.Err()}
-	}
+	return nil
 }

@@ -14,10 +14,10 @@ type Result struct {
 	Usage *ResourceUsage
 }
 
-// ResourceUsage reports resource consumption measured by a backend.
+// ResourceUsage reports resource consumption measured by a runtime.
 type ResourceUsage struct {
 	// CPUTime is total user and system CPU time. Child process coverage depends
-	// on the backend and operating system.
+	// on the runtime and operating system.
 	CPUTime time.Duration
 }
 

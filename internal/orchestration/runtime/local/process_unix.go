@@ -13,6 +13,10 @@ func configureProcess(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
+func stopProcess(cmd *exec.Cmd) error {
+	return processSignal(cmd, syscall.SIGTERM)
+}
+
 func killProcess(cmd *exec.Cmd) error {
 	return processSignal(cmd, syscall.SIGKILL)
 }
