@@ -82,7 +82,6 @@ run = "ast-grep scan cmd/"
 description = "Test project lint rules and fixes"
 run = [
     "ast-grep test --skip-snapshot-tests",
-    "ast-grep test --filter cobra-short-period",
     "bash scripts/test-convention-fixes.sh",
 ]
 

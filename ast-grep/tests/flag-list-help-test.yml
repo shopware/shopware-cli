@@ -1,0 +1,14 @@
+id: flag-list-help
+valid:
+  - 'func init() { cmd.Flags().String("only", "", "Run tools (comma-separated, e.g. phpstan,eslint)") }'
+  - 'func init() { cmd.Flags().String("exclude", "", "Skip tools (comma-separated, e.g. php-cs-fixer,prettier). More details") }'
+  - 'func init() { cmd.Flags().String("language", "", "Languages (comma-separated, e.g. de-DE,en-GB)") }'
+  - 'func init() { other.String("only", "", "Run tools") }'
+  - 'func init() { cmd.Flags().String("only", "", helpText) }'
+  - 'func init() { cmd.Flags().String("only", "", "Run " + "tools") }'
+invalid:
+  - 'func init() { cmd.Flags().String("only", "", "Run tools") }'
+  - 'func init() { cmd.Flags().String("only", "", "Run tools (comma-separated)") }'
+  - 'func init() { cmd.Flags().String("only", "", "Run tools (comma-separated, e.g. PHPStan,eslint)") }'
+  - 'func init() { cmd.PersistentFlags().StringP("exclude", "x", "", "Skip tools (comma-separated, e.g. phpstan, eslint)") }'
+  - 'func init() { flags := cmd.Flags(); flags.String("only", "", "Run tools") }'

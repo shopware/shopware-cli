@@ -38,7 +38,7 @@ func startUpdateCheck(ctx context.Context, args []string) (*update.CheckHandle, 
 			releaseInfo, err = update.CheckForUpdate(updateCtx, cliversion.Version, &http.Client{Timeout: 5 * time.Second})
 		}
 		if err != nil && !errors.Is(err, update.ErrNoUpdateAvailable) {
-			logging.FromContext(ctx).Debugf("checking for shopware cli update failed: %v", err)
+			logging.FromContext(ctx).Debugf("Checking for shopware cli update failed: %v", err)
 		}
 		handle.Complete(update.CheckResult{Release: releaseInfo, Err: err})
 	}()
@@ -55,7 +55,7 @@ func printUpdateHint(ctx context.Context, w io.Writer, release *update.ReleaseIn
 
 	binaryPath, err := os.Executable()
 	if err != nil {
-		logging.FromContext(ctx).Debugf("could not determine binary path: %v", err)
+		logging.FromContext(ctx).Debugf("Could not determine binary path: %v", err)
 	}
 	if !update.ShouldNotify(release, binaryPath) || !update.ShouldPrintUpdateHint() {
 		return
@@ -63,6 +63,6 @@ func printUpdateHint(ctx context.Context, w io.Writer, release *update.ReleaseIn
 
 	_, _ = fmt.Fprintln(w, update.RenderUpdateNotification(release.Version, cliversion.Version))
 	if err := update.MarkUpdateNotificationPrinted(); err != nil {
-		logging.FromContext(ctx).Debugf("could not save update notification timestamp: %v", err)
+		logging.FromContext(ctx).Debugf("Could not save update notification timestamp: %v", err)
 	}
 }

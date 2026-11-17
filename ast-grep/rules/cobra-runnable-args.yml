@@ -1,0 +1,26 @@
+# Require explicit Args on runnable commands, e.g. Args: cobra.NoArgs.
+id: cobra-runnable-args
+language: Go
+severity: error
+message: Declare an Args validator on runnable commands
+note: See docs/COMMAND_CONVENTIONS.md
+# Test command trees can deliberately simulate incomplete declarations.
+ignores: ['**/*_test.go']
+
+rule:
+  pattern: cobra.Command{$$$FIELDS}
+  has:
+    kind: literal_value
+    all:
+      - has:
+          any:
+            - pattern: {context: 'cobra.Command{RunE: $FN}', selector: keyed_element}
+              not: {pattern: {context: 'cobra.Command{RunE: nil}', selector: keyed_element}}
+            - pattern: {context: 'cobra.Command{Run: $FN}', selector: keyed_element}
+              not: {pattern: {context: 'cobra.Command{Run: nil}', selector: keyed_element}}
+      - any:
+          - not:
+              has:
+                pattern: {context: 'cobra.Command{Args: $ARGS}', selector: keyed_element}
+          - has:
+              pattern: {context: 'cobra.Command{Args: nil}', selector: keyed_element}
