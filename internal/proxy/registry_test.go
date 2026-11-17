@@ -104,3 +104,18 @@ func TestRegistryRoundTripKeepsPreviousConfig(t *testing.T) {
 	assert.True(t, entry.PreviousConfig.HasRoot)
 	assert.False(t, entry.PreviousConfig.HasEnv)
 }
+
+func TestForgetProjectRemovesOnlyThatEntry(t *testing.T) {
+	withTempStateDir(t)
+
+	var reg Registry
+	reg.Upsert(ProjectEntry{ProjectRoot: "/shops/deleted", Hostname: "deleted.shopware.local"})
+	reg.Upsert(ProjectEntry{ProjectRoot: "/shops/kept", Hostname: "kept.shopware.local"})
+	assert.NoError(t, reg.Save())
+
+	assert.NoError(t, ForgetProject("/shops/deleted"))
+
+	loaded, err := LoadRegistry()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"kept.shopware.local"}, loaded.Hostnames())
+}
