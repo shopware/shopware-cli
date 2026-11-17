@@ -1,0 +1,23 @@
+# Reject literal command deprecations, e.g. Deprecated: "Use build instead".
+id: cobra-deprecation-message
+language: Go
+severity: error
+message: Use deprecation.Message for command deprecations
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  any:
+    - kind: interpreted_string_literal
+    - kind: raw_string_literal
+  # An empty Deprecated field does not deprecate the command.
+  regex: '(?s)^(".+"|`.+`)$'
+  inside:
+    kind: literal_element
+    inside:
+      pattern:
+        context: 'cobra.Command{Deprecated: $TEXT}'
+        selector: keyed_element
+      inside:
+        kind: literal_value
+        inside:
+          pattern: cobra.Command{$$$FIELDS}
