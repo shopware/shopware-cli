@@ -150,7 +150,7 @@ var extensionPackageCmd = &cobra.Command{
 
 		if cmd.Flags().Changed("overwrite-app-backend-secret") {
 			extCfg.Validation.Ignore = append(extCfg.Validation.Ignore, validation.ToolConfigIgnore{Identifier: "metadata.setup"})
-			if err := extCfg.Dump(extDir); err != nil {
+			if err := extCfg.Dump(cmd.Context(), extDir); err != nil {
 				return fmt.Errorf("dump extension config: %w", err)
 			}
 		}

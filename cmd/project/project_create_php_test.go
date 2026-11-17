@@ -103,13 +103,13 @@ func TestResolveLocalPHPRejectsUnusablePHPBinaryEnv(t *testing.T) {
 	// Stub what the real helper returns, wrapping included.
 	original := unusablePHPBinaryEnv
 	unusablePHPBinaryEnv = func(context.Context) error {
-		return fmt.Errorf("PHP_BINARY is set but unusable: %w", &system.PHPBinaryError{Path: "php8.2", Reason: "is not an executable file"})
+		return fmt.Errorf("cannot use configured PHP_BINARY: %w", &system.PHPBinaryError{Path: "php8.2", Reason: "is not an executable file"})
 	}
 	t.Cleanup(func() { unusablePHPBinaryEnv = original })
 
 	opts := createOptions{}
 	err := resolveLocalPHP(t.Context(), &opts, shop.NewPHPConstraint(">=8.2"))
-	assert.ErrorContains(t, err, "PHP_BINARY is set but unusable")
+	assert.ErrorContains(t, err, "cannot use configured PHP_BINARY")
 	assert.ErrorContains(t, err, "php8.2")
 	assert.Empty(t, opts.phpBinary)
 }

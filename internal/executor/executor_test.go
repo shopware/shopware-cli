@@ -180,8 +180,8 @@ func TestLocalExecutorRejectsUnusablePHPBinaryEnv(t *testing.T) {
 	exec := &LocalExecutor{projectRoot: "/project", shopCfg: &shop.Config{}}
 
 	p := exec.PHPCommand(t.Context(), "-v")
-	assert.ErrorContains(t, p.Cmd.Err, "PHP_BINARY is set but unusable")
-	assert.ErrorContains(t, p.Run(), "PHP_BINARY is set but unusable")
+	assert.ErrorContains(t, p.Cmd.Err, "cannot use configured PHP_BINARY")
+	assert.ErrorContains(t, p.Run(), "cannot use configured PHP_BINARY")
 }
 
 func TestLocalExecutorComposerRunsThroughSelectedPHP(t *testing.T) {

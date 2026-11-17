@@ -156,7 +156,7 @@ func PullExtensionStoreInfo(ctx context.Context, producer ProducerAPI, zipExt ex
 		newCfg.Store.ImageDirectory = &imageDir
 	}
 
-	err = newCfg.Dump(zipExt.GetPath())
+	err = newCfg.Dump(ctx, zipExt.GetPath())
 	if err != nil {
 		return fmt.Errorf("cannot dump config: %w", err)
 	}

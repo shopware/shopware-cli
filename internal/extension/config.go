@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -446,7 +445,7 @@ func validateRelativePath(p string) error {
 	return nil
 }
 
-func (c *Config) Dump(dir string) error {
+func (c *Config) Dump(ctx context.Context, dir string) error {
 	filePath := c.storageLocation
 	if filePath == "" {
 		filePath = filepath.Join(dir, ConfigLocations[0])
@@ -462,14 +461,14 @@ func (c *Config) Dump(dir string) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close file: %v", err)
+			logging.FromContext(ctx).Errorf("Failed to close file: %v", err)
 		}
 	}()
 
 	encoder := yaml.NewEncoder(file)
 	defer func() {
 		if err := encoder.Close(); err != nil {
-			log.Printf("Failed to close encoder: %v", err)
+			logging.FromContext(ctx).Errorf("Failed to close encoder: %v", err)
 		}
 	}()
 

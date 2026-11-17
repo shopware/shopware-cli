@@ -42,6 +42,16 @@ linters:
     - nilnil
     - perfsprint
   settings:
+    forbidigo:
+      analyze-types: true
+      exclude-godoc-examples: false
+      forbid:
+        # Preserve the existing restrictions on direct printing.
+        - pattern: '^(fmt\.Print(f|ln)?|print|println)$'
+          msg: Use the configured logger outside command output
+        - pattern: '^log\.(Logger\.)?Print(f|ln)?$'
+          pkg: '^log$'
+          msg: Use logging.FromContext(ctx) instead of standard logging
     sloglint:
       msg-style: capitalized
       # Check messages only: formatting and field arguments are not slog arguments.
@@ -142,27 +152,26 @@ linters:
         - name: "(*go.uber.org/zap.SugaredLogger).Logln"
           msg-pos: 1
           args-pos: -1
-        - name: "log.Printf"
-          msg-pos: 0
-          args-pos: -1
-        - name: "log.Println"
-          msg-pos: 0
-          args-pos: -1
   exclusions:
     rules:
       - path: cmd\/*
+        text: Use the configured logger outside command output
         linters:
           - forbidigo
       - path: internal\/ci\/*
+        text: Use the configured logger outside command output
         linters:
           - forbidigo
       - path: internal\/validation\/*
+        text: Use the configured logger outside command output
         linters:
           - forbidigo
       - path: internal\/tui\/*
+        text: Use the configured logger outside command output
         linters:
           - forbidigo
       - path: internal\/account-api\/*
+        text: Use the configured logger outside command output
         linters:
           - forbidigo
 

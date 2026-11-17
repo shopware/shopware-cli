@@ -1,15 +1,17 @@
 package esbuild
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
-func copyStaticFiles(currentPath string, targetPath string) error {
+func copyStaticFiles(ctx context.Context, currentPath string, targetPath string) error {
 	// When the currentPath folder does not exist, return
 	if _, err := os.Stat(currentPath); os.IsNotExist(err) {
 		return nil
@@ -47,11 +49,11 @@ func copyStaticFiles(currentPath string, targetPath string) error {
 		}
 
 		// Copy the file
-		return copyFile(path, targetFilePath)
+		return copyFile(ctx, path, targetFilePath)
 	})
 }
 
-func copyFile(src, dst string) error {
+func copyFile(ctx context.Context, src, dst string) error {
 	// Open source file
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -59,7 +61,7 @@ func copyFile(src, dst string) error {
 	}
 	defer func() {
 		if err := sourceFile.Close(); err != nil {
-			log.Printf("Cannot close source file: %v", err)
+			logging.FromContext(ctx).Errorf("Cannot close source file: %v", err)
 		}
 	}()
 
@@ -70,7 +72,7 @@ func copyFile(src, dst string) error {
 	}
 	defer func() {
 		if err := targetFile.Close(); err != nil {
-			log.Printf("Cannot close target file: %v", err)
+			logging.FromContext(ctx).Errorf("Cannot close target file: %v", err)
 		}
 	}()
 

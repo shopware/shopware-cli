@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -55,7 +54,7 @@ func PrepareFolderForZipping(ctx context.Context, path string, ext Extension, ex
 	}
 
 	// Add replacements
-	composer, err = addComposerReplacements(composer, minVersion)
+	composer, err = addComposerReplacements(ctx, composer, minVersion)
 	if err != nil {
 		return fmt.Errorf("add composer replacements: %w", err)
 	}
@@ -128,7 +127,7 @@ func filterRequires(composer map[string]interface{}, extCfg *Config) map[string]
 	return composer
 }
 
-func addComposerReplacements(composer map[string]interface{}, minVersion string) (map[string]interface{}, error) {
+func addComposerReplacements(ctx context.Context, composer map[string]interface{}, minVersion string) (map[string]interface{}, error) {
 	if _, ok := composer["replace"]; !ok {
 		composer["replace"] = make(map[string]interface{})
 	}
@@ -158,7 +157,7 @@ func addComposerReplacements(composer map[string]interface{}, minVersion string)
 
 			defer func() {
 				if err := composerFile.Close(); err != nil {
-					log.Printf("Failed to close composer file: %v", err)
+					logging.FromContext(ctx).Errorf("Failed to close composer file: %v", err)
 				}
 			}()
 
