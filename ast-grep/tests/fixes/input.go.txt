@@ -14,3 +14,22 @@ var comments = &cobra.Command{
 	Short: "Build assets.", // Keep this comment too
 }
 var nested = &cobra.Command{Long: "", Other: Other{Long: "", Short: "Keep this."}}
+var lowercase = &cobra.Command{Short: "build Admin API assets."}
+var unicode = &cobra.Command{Short: "überprüfe Admin API"}
+var ellipsis = &cobra.Command{Short: "waiting..."}
+
+func registerFlags() {
+	cmd.Flags().String("name", "default.", "select Admin API name.")
+	cmd.PersistentFlags().BoolP("force", "f", false, "overwrite files")
+	cmd.Flags().Count("verbose", "Increase verbosity.")
+	flags := cmd.Flags()
+	flags.VarP(value, "name", "n", "überprüfe Admin API.")
+	local := cmd.PersistentFlags()
+	local.StringSlice("names", nil, "Select names.")
+	cmd.Flags().String(
+		"name", "",
+		"select name.", // Keep this comment
+	)
+	cmd.Flags().String("wait", "", "waiting...")
+	other.String("name", "", "leave this.")
+}

@@ -1,0 +1,30 @@
+id: flag-usage-capitalization
+valid:
+  - 'func init() { cmd.Flags().String("name", "lowercase default", "Select name") }'
+  - 'func init() { cmd.Flags().String("name", "", "Überprüfe Admin API") }'
+  - 'func init() { other.String("name", "", "select name") }'
+  - 'func init() { cmd.Flags().GetString("name") }'
+  - 'func init() { cmd.Flags().Set("name", "value") }'
+  - 'func init() { cmd.Flags().String("name", "", helpText) }'
+  - 'func init() { cmd.Flags().String("name", "", "select " + "name") }'
+  - 'func init() { cmd.Flags().String("name", "", "select \"name\"") }'
+  - 'func init() { cmd.Flags().String("name", "", `select name`) }'
+  - 'func init() { flags := cmd.Flags(); other.String("name", "", "select name") }'
+  - 'func init() { flags := cmd.Flags(); { flags := other; flags.String("name", "", "select name") } }'
+invalid:
+  - 'func init() { cmd.Flags().String("name", "", "select name") }'
+  - 'func init() { cmd.PersistentFlags().BoolP("force", "f", false, "overwrite files") }'
+  - 'func init() { cmd.Flags().IntVar(&count, "count", 0, "select count") }'
+  - 'func init() { cmd.Flags().StringVarP(&name, "name", "n", "", "select name") }'
+  - 'func init() { cmd.Flags().VarP(value, "name", "n", "select name") }'
+  - 'func init() { cmd.Flags().Count("verbose", "increase verbosity") }'
+  - 'func init() { cmd.Flags().String("name", "", "überprüfe Admin API") }'
+  - 'func init() { flags := cmd.Flags(); flags.String("name", "", "select name") }'
+  - 'func init() { local := cmd.PersistentFlags(); local.String("name", "", "select name") }'
+  - |
+    func init() {
+      cmd.Flags().String(
+        "name", "",
+        "select name", // Keep this comment
+      )
+    }
