@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Snapshot tests do not account for expandEnd when producing fixed output.
-# Exercise all autofix rules together, including overlapping string fixes.
+# Exercise all autofix rules together, including overlapping string fixes
+# and punctuation removal via expandEnd.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture_dir="$repo_root/ast-grep/tests/fixes"
 test_dir="$(mktemp -d)"

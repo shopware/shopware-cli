@@ -1,0 +1,60 @@
+# Check enum help lists, e.g. "(table or JSON)" should be "(table, json)".
+id: flag-enum-help
+language: Go
+severity: error
+message: Write enum lists as lowercase comma-separated values
+note: See docs/COMMAND_CONVENTIONS.md
+ignores: ['**/*_test.go']
+
+rule:
+  # Scope to known enum names in String/StringP registrations.
+  matches: flag-help
+  inside:
+    kind: argument_list
+    has:
+      kind: interpreted_string_literal
+      nthChild:
+        position: 1
+        ofRule: {not: {kind: comment}}
+      regex: '^"(format|reporter|type|check-against|deploy|ci)"$'
+  # Only inspect recognisable option lists, not arbitrary parenthetical prose.
+  regex: '\([a-zA-Z0-9_-]+((, *| +or +|\||/)[a-zA-Z0-9_-]+)+(;[^()]*)?\)'
+  # Allow an explanatory suffix such as "; auto-detected if unset".
+  not:
+    regex: '\([a-z0-9_-]+(, *[a-z0-9_-]+)+(;[^()]*)?\)'
+
+# Local helper keeps this batch independent of shared-utility configuration.
+utils:
+  flag-help:
+    kind: interpreted_string_literal
+    regex: '^"[^"\\]*"$'
+    nthChild:
+      position: 1
+      reverse: true
+      ofRule: {not: {kind: comment}}
+    inside:
+      kind: argument_list
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          kind: selector_expression
+          all:
+            - has:
+                field: field
+                regex: '^StringP?$'
+            - has:
+                field: operand
+                any:
+                  - pattern: $CMD.Flags()
+                  - pattern: $CMD.PersistentFlags()
+                  - all:
+                      - kind: identifier
+                      - pattern: $FLAGS
+                      - inside:
+                          kind: statement_list
+                          stopBy: {kind: block}
+                          has:
+                            any:
+                              - pattern: $FLAGS := $CMD.Flags()
+                              - pattern: $FLAGS := $CMD.PersistentFlags()

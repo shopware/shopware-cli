@@ -263,7 +263,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 
 			// Inject our custom extension JS
 			if req.URL.Path == targetShopUrl.Path+"/api/_info/config" {
-				logging.FromContext(cmd.Context()).Debugf("intercept plugins call")
+				logging.FromContext(cmd.Context()).Debugf("Intercept plugins call")
 
 				proxyReq, _ := http.NewRequest("GET", targetShopUrl.Scheme+schemeHostSeparator+targetShopUrl.Host+req.URL.Path, nil)
 
@@ -328,7 +328,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 				for _, ext := range esbuildInstances {
 					entrypoints, err := esbuild.RebuildEntrypoints(ext.context)
 					if err != nil {
-						logging.FromContext(cmd.Context()).Errorf("cannot rebuild administration bundle for %s: %s", ext.assetName, err)
+						logging.FromContext(cmd.Context()).Errorf("Cannot rebuild administration bundle for %s: %s", ext.assetName, err)
 						http.Error(w, "cannot rebuild administration bundle", http.StatusServiceUnavailable)
 						return
 					}

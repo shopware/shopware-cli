@@ -11,6 +11,7 @@ linters:
     - nakedret
     - noctx
     - staticcheck
+    - sloglint
     - unconvert
     - unparam
     - unused
@@ -51,6 +52,112 @@ linters:
         - pattern: '^log\.(Logger\.)?Print(f|ln)?$'
           pkg: '^log$'
           msg: Use logging.FromContext(ctx) instead of standard logging
+    sloglint:
+      msg-style: capitalized
+      # Check messages only: formatting and field arguments are not slog arguments.
+      custom-funcs:
+        - name: "(*go.uber.org/zap.SugaredLogger).Debug"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Debugf"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Debugw"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Info"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Infof"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Infow"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Warn"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Warnf"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Warnw"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Error"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Errorf"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Errorw"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).DPanic"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).DPanicf"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).DPanicw"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Panic"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Panicf"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Panicw"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Fatal"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Fatalf"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Fatalw"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Debugln"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Infoln"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Warnln"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Errorln"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).DPanicln"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Panicln"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Fatalln"
+          msg-pos: 0
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Log"
+          msg-pos: 1
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Logf"
+          msg-pos: 1
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Logw"
+          msg-pos: 1
+          args-pos: -1
+        - name: "(*go.uber.org/zap.SugaredLogger).Logln"
+          msg-pos: 1
+          args-pos: -1
+        - name: "log.Printf"
+          msg-pos: 0
+          args-pos: -1
+        - name: "log.Println"
+          msg-pos: 0
+          args-pos: -1
   exclusions:
     rules:
       - path: cmd\/*
