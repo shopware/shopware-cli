@@ -87,6 +87,39 @@ flowchart TB
     B --> P["Existing service container"]
 ```
 
+### Execution environments
+
+Consumers describe ordinary commands such as `php bin/console cache:clear`.
+They use the same executor API whether PHP runs on the host, on a remote host
+or inside a container. The selected runtime determines where the command runs:
+
+```mermaid
+flowchart LR
+    C["Executor command<br/>php bin/console cache:clear"] --> L["Local runtime"]
+    C --> S["SSH runtime"]
+    C --> D["Docker or another<br/>container engine runtime"]
+    C --> R["Service runtime<br/>stack.Service(web)"]
+    L --> LP["Host process<br/>php bin/console cache:clear"]
+    S --> SP["Remote process over SSH<br/>php bin/console cache:clear"]
+    D --> DP["Disposable container<br/>from the configured image<br/>php bin/console cache:clear"]
+    R --> RP["Existing running service container<br/>php bin/console cache:clear"]
+```
+
+Each command runs as a normal process within its selected environment. Working
+directories, environment variables and paths refer to that environment.
+Disposable execution creates a container for the command and removes it after
+completion. Service execution runs the command inside an existing container
+and leaves that container running. Application wiring prepares the tools and
+files needed in the selected environment.
+
+A disposable command can also run a complete CLI workflow. For example, the
+host CLI starts `shopware-cli project validate` in a tooling container, where
+the inner CLI runs QA tools through its local executor. Running individual QA
+tools directly in disposable containers is also possible. The choice belongs
+to each workflow and can evolve without changing the execution contract.
+[Containerized QA execution](2026-11-11-containerized-qa.md) initially wraps the
+complete CLI command.
+
 ### Command execution
 
 A runtime executes commands in the selected environment and passes their
