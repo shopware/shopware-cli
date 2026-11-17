@@ -21,7 +21,7 @@ func TestXMLPlanningStopsBeforeScanningMissingImports(t *testing.T) {
 		config, err := ParseServicesXML(content)
 		cancel()
 		return config, err
-	}, map[string][]byte{}, map[string]string{})
+	}, map[string]struct{}{}, map[string][]byte{}, map[string]string{})
 
 	require.ErrorIs(t, err, context.Canceled)
 }
@@ -32,7 +32,7 @@ func TestCanceledXMLConversionPreservesSources(t *testing.T) {
 	require.NoError(t, os.WriteFile(source, []byte("<container/>"), 0o600))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := ConvertServicesXMLFile(ctx, source)
+	_, err := ConvertServicesXMLFiles(ctx, source)
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.FileExists(t, source)
 	assert.NoFileExists(t, filepath.Join(root, "source.yaml"))
@@ -41,15 +41,15 @@ func TestCanceledXMLConversionPreservesSources(t *testing.T) {
 func TestPlanXMLConversionMatchesAppliedFiles(t *testing.T) {
 	for _, scenario := range []struct {
 		name, source, child string
-		plan, convert       func(context.Context, string) (map[string]string, error)
+		plan, convert       func(context.Context, ...string) (map[string]string, error)
 	}{
 		{
 			name: "services", source: `<container><imports><import resource="child.xml"/></imports></container>`,
-			child: `<container/>`, plan: PlanServicesXMLFile, convert: ConvertServicesXMLFile,
+			child: `<container/>`, plan: PlanServicesXMLFiles, convert: ConvertServicesXMLFiles,
 		},
 		{
 			name: "routes", source: `<routes><import resource="child.xml"/></routes>`,
-			child: `<routes/>`, plan: PlanRoutesXMLFile, convert: ConvertRoutesXMLFile,
+			child: `<routes/>`, plan: PlanRoutesXMLFiles, convert: ConvertRoutesXMLFiles,
 		},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
@@ -95,7 +95,7 @@ func TestPlanXMLConversionRetainsConflictingTarget(t *testing.T) {
 	require.NoError(t, os.WriteFile(source, []byte(`<container/>`), 0o600))
 	require.NoError(t, os.WriteFile(target, []byte("existing content"), 0o600))
 
-	planned, err := PlanServicesXMLFile(t.Context(), source)
+	planned, err := PlanServicesXMLFiles(t.Context(), source)
 	var conversionErr *XMLConversionError
 	require.ErrorAs(t, err, &conversionErr)
 	assert.Equal(t, XMLConversionTargetExists, conversionErr.Kind)

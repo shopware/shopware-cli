@@ -374,6 +374,19 @@ function prunePlan(array $input, array &$progress): array
             }
         }
         sort($result['artifacts'], SORT_STRING);
+        // Compare under the deployment lock, before any cleanup or marker writes.
+        if (isset($input['expected_plan'])) {
+            $expected = $input['expected_plan'];
+            $expectedReleases = array_column($expected['deployments'] ?? [], 'reference');
+            $actualReleases = array_column($result['deployments'], 'reference');
+            $expectedArtifacts = $expected['artifacts'] ?? [];
+            sort($expectedReleases, SORT_STRING);
+            sort($actualReleases, SORT_STRING);
+            sort($expectedArtifacts, SORT_STRING);
+            if ($expectedReleases !== $actualReleases || $expectedArtifacts !== $result['artifacts']) {
+                throw new RuntimeException('cannot prune deployments: cleanup plan changed, run prune again to review it');
+            }
+        }
         // The entire plan, including logs and cached archives, is validated first.
         if (!$input['dry_run']) {
             foreach ($temporary as $path) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -14,9 +15,10 @@ import (
 )
 
 var projectDoctor = &cobra.Command{
-	Use:   "doctor [path]",
-	Short: "Inspect project config, Shopware version, and extensions",
-	Args:  cobra.MaximumNArgs(1),
+	Use:        "doctor [path]",
+	Short:      "Inspect project config, Shopware version, and extensions",
+	Args:       cobra.MaximumNArgs(1),
+	Deprecated: deprecation.Message("2027-02-16", ""),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		var projectDir string

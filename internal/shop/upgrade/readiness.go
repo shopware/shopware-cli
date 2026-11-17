@@ -11,12 +11,13 @@ import (
 	"github.com/shyim/go-composer"
 	"github.com/shyim/go-version"
 
+	"github.com/shopware/shopware-cli/internal/deploymenthelper"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-const deploymentHelperPackage = "shopware/deployment-helper"
+const deploymentHelperPackage = deploymenthelper.Package
 
 // composerNamePattern is the package-name rule from Composer's JSON schema:
 // lowercase vendor and package separated by a slash, digits, and the
@@ -173,18 +174,15 @@ func checkDeploymentHelper(projectRoot string) ReadinessCheck {
 		Label: "Deployment Helper workflow ready",
 	}
 
-	composerJSON, err := composer.ReadJson(filepath.Join(projectRoot, "composer.json"))
+	err := deploymenthelper.CheckRequired(projectRoot)
 	if err != nil {
 		check.State = StateWarn
 		check.Value = "unknown"
-		check.Detail = "could not read composer.json: " + err.Error()
-		return check
-	}
-
-	if !composerJSON.HasPackage(deploymentHelperPackage) && !composerJSON.HasPackageDev(deploymentHelperPackage) {
-		check.State = StateWarn
-		check.Value = "no"
-		check.Detail = "shopware/deployment-helper is not required; the wizard adds it during the upgrade."
+		check.Detail = err.Error()
+		if errors.Is(err, deploymenthelper.ErrNotRequired) {
+			check.Value = "no"
+			check.Detail = "shopware/deployment-helper is not required for production; the wizard adds it during the upgrade."
+		}
 		return check
 	}
 
