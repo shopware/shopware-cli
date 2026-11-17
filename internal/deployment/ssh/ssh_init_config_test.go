@@ -8,6 +8,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func scriptedInitializationConfig() *deployment.InitializationConfig {
@@ -94,6 +95,7 @@ func TestSSHInitializationWithoutInteractionRequiresConfig(t *testing.T) {
 func TestSSHScriptedInitializationRepeatDoesNotWrite(t *testing.T) {
 	store := &memoryInitializationStore{}
 	store.states[0].Initialized = true
-	require.NoError(t, (&SSH{initStore: store}).InitializeDeployment(t.Context(), deployment.InitializationOptions{Config: scriptedInitializationConfig()}))
+	ctx := logging.DisableLogger(t.Context())
+	require.NoError(t, (&SSH{initStore: store}).InitializeDeployment(ctx, deployment.InitializationOptions{Config: scriptedInitializationConfig()}))
 	assert.Empty(t, store.writes)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func TestSSHCreateBuildsLocallyAndRetainsArchive(t *testing.T) {
@@ -38,14 +39,15 @@ disable_composer_install: true
 build:
   disable_checksums: true
 `)
-	cfg, err := shop.ReadConfig(t.Context(), configPath, true)
+	ctx := logging.DisableLogger(t.Context())
+	cfg, err := shop.ReadConfig(ctx, configPath, true)
 	require.NoError(t, err)
 	env := &shop.EnvironmentConfig{Type: "ssh", SSH: &shop.EnvironmentSSHConfig{Host: "example.invalid", Directory: "/var/www/shop/current"}}
 	backend, err := New(root, configPath, cfg, env)
 	require.NoError(t, err)
-	first, err := backend.CreateDeployment(t.Context(), deployment.CreateOptions{})
+	first, err := backend.CreateDeployment(ctx, deployment.CreateOptions{})
 	require.NoError(t, err)
-	second, err := backend.CreateDeployment(t.Context(), deployment.CreateOptions{})
+	second, err := backend.CreateDeployment(ctx, deployment.CreateOptions{})
 	require.NoError(t, err)
 	assert.NotEqual(t, first.Reference, second.Reference)
 	assert.Regexp(t, `^[a-z]+-[a-z]+-[a-z]+$`, first.Reference)
@@ -54,21 +56,21 @@ build:
 	assert.FileExists(t, filepath.Join(root, ".shopware-cli", "deployments", second.Reference+".tar.gz"))
 	assert.NoFileExists(t, sshArgsLog, "creation must not open SSH")
 	customPath := filepath.Join(t.TempDir(), "custom.tar.gz")
-	customDeployment, err := backend.CreateDeployment(t.Context(), deployment.CreateOptions{OutputPath: customPath})
+	customDeployment, err := backend.CreateDeployment(ctx, deployment.CreateOptions{OutputPath: customPath})
 	require.NoError(t, err)
 	assert.Equal(t, customPath, customDeployment.Reference)
 	assert.FileExists(t, customPath)
 	before, err := os.ReadFile(customPath)
 	require.NoError(t, err)
-	_, err = backend.CreateDeployment(t.Context(), deployment.CreateOptions{OutputPath: customPath})
+	_, err = backend.CreateDeployment(ctx, deployment.CreateOptions{OutputPath: customPath})
 	require.Error(t, err)
 	after, err := os.ReadFile(customPath)
 	require.NoError(t, err)
 	assert.Equal(t, before, after, "existing deployments must not be overwritten")
-	ctx, cancel := context.WithCancel(t.Context())
+	canceledCtx, cancel := context.WithCancel(ctx)
 	cancel()
 	canceledPath := filepath.Join(t.TempDir(), "canceled.tar.gz")
-	artifact, err := backend.CreateDeployment(ctx, deployment.CreateOptions{OutputPath: canceledPath})
+	artifact, err := backend.CreateDeployment(canceledCtx, deployment.CreateOptions{OutputPath: canceledPath})
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Empty(t, artifact.Reference)
 	assert.NoFileExists(t, canceledPath)
@@ -117,7 +119,7 @@ func TestSSHInitializationRepeatDoesNotPromptOrWrite(t *testing.T) {
 	store := &memoryInitializationStore{}
 	store.states[0].Initialized = true
 	backend := &SSH{initStore: store}
-	err := backend.initializeDeployment(t.Context(), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
+	err := backend.initializeDeployment(logging.DisableLogger(t.Context()), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
 		t.Fatal("completed initialization must not prompt")
 		return sshDeploymentInitConfig{}, false, nil
 	})
