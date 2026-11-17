@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 func newTestServer(t *testing.T) *httptest.Server {
@@ -192,6 +194,7 @@ func Test_NewShopClient_NoURL(t *testing.T) {
 }
 
 func Test_NewShopClient_CredentialsError(t *testing.T) {
+	isolateBrowserSessions(t)
 	server := newTestServer(t)
 	defer server.Close()
 
@@ -204,7 +207,7 @@ func Test_NewShopClient_CredentialsError(t *testing.T) {
 
 	// Config without credentials
 	cfg := &Config{}
-	_, err := NewShopClient(t.Context(), cfg)
+	_, err := NewShopClient(system.WithInteraction(t.Context(), false), cfg)
 	assert.Error(t, err)
 }
 
