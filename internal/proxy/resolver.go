@@ -3,6 +3,8 @@ package proxy
 import (
 	"errors"
 	"strings"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 // ResolverStatus describes whether the OS is configured to resolve the proxy
@@ -61,20 +63,47 @@ func indentBlock(s, prefix string) string {
 // cannot work without systemd-resolved, how to enable it, and the manual
 // /etc/hosts entry as the last resort.
 func NoSystemdResolvedGuidance(baseDomain string) string {
-	return strings.Join([]string{
+	return noSystemdResolvedGuidance(baseDomain, system.IsWSL())
+}
+
+func noSystemdResolvedGuidance(baseDomain string, wsl bool) string {
+	lines := []string{
 		"Automatic DNS is not possible on this system.",
 		"Why: shopware-cli needs systemd-resolved to send *." + baseDomain + " lookups to its",
 		"local DNS server, and this Linux system does not run it.",
 		"",
-		"To fix it, enable systemd-resolved (note: this changes how your whole system resolves DNS):",
-		"  1. sudo apt install systemd-resolved     (Debian/Ubuntu; most other distros ship it already)",
-		"  2. sudo systemctl enable --now systemd-resolved",
-		"  3. sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf",
-		"  4. run \"shopware-cli project proxy setup\" again",
+	}
+
+	if wsl {
+		// No resolv.conf symlink here: on WSL systemd-resolved has no internet
+		// upstream, so pointing resolv.conf at it would break all other DNS.
+		lines = append(lines,
+			"To fix it, enable systemd and systemd-resolved in this WSL distro:",
+			"  1. add these two lines to /etc/wsl.conf, then run \"wsl --shutdown\" in Windows:",
+			"       [boot]",
+			"       systemd=true",
+			"  2. sudo apt install systemd-resolved     (Debian/Ubuntu; most other distros ship it already)",
+			"  3. sudo systemctl enable --now systemd-resolved",
+			"  4. run \"shopware-cli project proxy setup\" again",
+			"Leave /etc/resolv.conf as WSL generates it.",
+		)
+	} else {
+		lines = append(lines,
+			"To fix it, enable systemd-resolved (note: this changes how your whole system resolves DNS):",
+			"  1. sudo apt install systemd-resolved     (Debian/Ubuntu; most other distros ship it already)",
+			"  2. sudo systemctl enable --now systemd-resolved",
+			"  3. sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf",
+			"  4. run \"shopware-cli project proxy setup\" again",
+		)
+	}
+
+	lines = append(lines,
 		"",
 		"If you prefer not to change your system — or it has no systemd at all —",
 		"add one line per shop to /etc/hosts instead (needs sudo):",
-		"  127.0.0.1 <shop-name>." + baseDomain,
+		"  127.0.0.1 <shop-name>."+baseDomain,
 		"Shops added this way work normally.",
-	}, "\n")
+	)
+
+	return strings.Join(lines, "\n")
 }

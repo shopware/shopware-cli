@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Snapshot tests do not account for expandEnd when producing fixed output.
-# Exercise the actual fixer instead, including both rules in the same pass.
+# Exercise all autofix rules together, including overlapping string fixes.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture_dir="$repo_root/ast-grep/tests/fixes"
 test_dir="$(mktemp -d)"

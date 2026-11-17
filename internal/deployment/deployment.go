@@ -59,6 +59,8 @@ type DeploymentLogs interface {
 type DeploymentPruneOptions struct {
 	Keep   int  `json:"keep"`
 	DryRun bool `json:"dry_run"`
+	// ExpectedPlan binds cleanup to a confirmed preview; nil skips confirmation validation.
+	ExpectedPlan *DeploymentPruneResult `json:"expected_plan,omitempty"`
 }
 
 // DeploymentPruneResult lists removals, or planned removals for a dry run.

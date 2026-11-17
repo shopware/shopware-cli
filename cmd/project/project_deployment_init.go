@@ -11,6 +11,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 	deploymentbackend "github.com/shopware/shopware-cli/internal/deployment/backend"
+	"github.com/shopware/shopware-cli/internal/deploymenthelper"
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
@@ -39,6 +40,9 @@ stdin. After initialization, the command prints any remaining setup steps.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := resolveDeploymentProjectRoot(args)
 		if err != nil {
+			return err
+		}
+		if err := deploymenthelper.CheckRequired(root); err != nil {
 			return err
 		}
 		target, err := deploymentbackend.ResolveBackend(cmd.Context(), root, projectConfigPath, environmentName)

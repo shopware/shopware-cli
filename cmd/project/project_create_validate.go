@@ -53,6 +53,12 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 		return "", nil, tracking.FailedAt(createStepPreflightDependencies, err)
 	}
 
+	if !opts.useDocker {
+		if err := system.ValidatePHPCreateMemory(ctx, opts.phpBinary); err != nil {
+			return "", nil, tracking.FailedAt(createStepPreflightDependencies, err)
+		}
+	}
+
 	if err := checkSecurityAdvisories(ctx, opts, chosenVersion); err != nil {
 		return "", nil, tracking.FailedAt(createStepPreflightSecurityAdvisories, err)
 	}

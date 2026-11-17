@@ -401,3 +401,47 @@ func TestSymfonyXMLConverterDryRunCleanAndFilesystemFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestSymfonyXMLConverterConvertsOtherConfigFiles(t *testing.T) {
+	root := copySymfonyXMLFixture(t, "plugin")
+	directory := filepath.Join(root, "src", "Resources", "config")
+	// Files imported from a services.php or loaded by Shopware are only
+	// recognized by their namespace.
+	files := map[string]string{
+		"services/gateway.xml": `<container xmlns="http://symfony.com/schema/dic/services"><imports><import resource="shared.xml"/></imports></container>`,
+		"services/shared.xml":  `<container><services><service id="Shop\Shared" class="Shop\Shared"/></services></container>`,
+		"routes/admin.xml":     `<routes xmlns="http://symfony.com/schema/routing"><route id="admin" path="/admin"/></routes>`,
+		"other.xml":            `<container/>`,
+		"config.xml":           `<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>`,
+	}
+	for name, content := range files {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(directory, name)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(directory, name), []byte(content), 0o644))
+	}
+	ext, err := extension.GetExtensionByFolder(t.Context(), root)
+	require.NoError(t, err)
+	config := ToolConfig{RootDir: root, Extensions: []extension.Extension{ext}}
+
+	dryRun := runFixToolWithDryRun(t, SymfonyXMLConverter{}, config, true)
+	assert.Empty(t, dryRun.Errors)
+	assert.Len(t, dryRun.Findings, 5)
+
+	result := runFixTool(t, SymfonyXMLConverter{}, config)
+	assert.Empty(t, result.Errors)
+	assert.Empty(t, result.Findings)
+	assert.Equal(t, []string{
+		"src/Resources/config/routes.xml",
+		"src/Resources/config/routes/admin.xml",
+		"src/Resources/config/services.xml",
+		"src/Resources/config/services/gateway.xml",
+		"src/Resources/config/services/shared.xml",
+	}, result.ChangedFiles)
+
+	gateway, err := os.ReadFile(filepath.Join(directory, "services", "gateway.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(gateway), "resource: shared.yaml")
+	assert.FileExists(t, filepath.Join(directory, "services", "shared.yaml"))
+	assert.FileExists(t, filepath.Join(directory, "routes", "admin.yaml"))
+	assert.FileExists(t, filepath.Join(directory, "other.xml"))
+	assert.FileExists(t, filepath.Join(directory, "config.xml"))
+}

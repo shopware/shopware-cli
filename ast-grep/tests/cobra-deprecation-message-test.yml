@@ -1,0 +1,18 @@
+id: cobra-deprecation-message
+valid:
+  - 'var cmd = &cobra.Command{Use: "build"}'
+  - 'var cmd = &cobra.Command{Deprecated: ""}'
+  - 'var cmd = &cobra.Command{Deprecated: ``}'
+  - 'var cmd = &cobra.Command{Deprecated: deprecation.Message("2027-02-10", "build")}'
+  - 'var cmd = &cobra.Command{Deprecated: message}'
+  - 'var other = Other{Deprecated: "Use build instead"}'
+  - 'var cmd = &cobra.Command{Other: Other{Deprecated: "Use build instead"}}'
+  - 'var cmd = &cobra.Command{Deprecated: "Use " + replacement}'
+invalid:
+  - 'var cmd = &cobra.Command{Deprecated: "Use build instead"}'
+  - 'var cmd = cobra.Command{Deprecated: `Use build instead`}'
+  - |
+    var cmd = &cobra.Command{
+      Use: "old",
+      Deprecated: "Use build instead", // Keep this comment
+    }
