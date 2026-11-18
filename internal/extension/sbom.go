@@ -488,6 +488,8 @@ type npmLockPackage struct {
 	Link                 bool              `json:"link"`
 	Dependencies         map[string]string `json:"dependencies"`
 	OptionalDependencies map[string]string `json:"optionalDependencies"`
+	// PeerDependencies are installed by npm 7 and newer.
+	PeerDependencies map[string]string `json:"peerDependencies"`
 }
 
 // bundledNpmComponents lists the production npm dependencies of the
@@ -609,7 +611,7 @@ func collectNpmEdges(packages map[string]npmLockPackage, purlByKey map[string]st
 			continue
 		}
 
-		for _, dependencies := range []map[string]string{pkg.Dependencies, pkg.OptionalDependencies} {
+		for _, dependencies := range []map[string]string{pkg.Dependencies, pkg.OptionalDependencies, pkg.PeerDependencies} {
 			for name := range dependencies {
 				target, ok := resolveNpmDependency(key, name, purlByKey)
 				if !ok || target == from {

@@ -87,7 +87,8 @@ const sbomTestPackageLock = `{
     },
     "node_modules/@acme/ui/node_modules/lodash": {"version": "4.17.21", "license": "MIT"},
     "node_modules/@acme/ui/node_modules/tiny-helper": {"version": "1.0.0", "license": "MIT"},
-    "node_modules/tiny-helper": {"version": "2.0.0", "license": "MIT"},
+    "node_modules/tiny-helper": {"version": "2.0.0", "license": "MIT", "peerDependencies": {"tiny-peer": "^1.0.0"}},
+    "node_modules/tiny-peer": {"version": "1.0.0", "peer": true, "license": "MIT"},
     "node_modules/eslint": {"version": "9.0.0", "dev": true, "license": "MIT"},
     "node_modules/ui-compat": {"name": "lodash", "version": "4.17.21", "license": "MIT"},
     "node_modules/fsevents": {"version": "2.3.3", "devOptional": true, "license": "MIT"}
@@ -207,6 +208,7 @@ func TestGenerateSBOMForPlugin(t *testing.T) {
 		"pkg:npm/fsevents@2.3.3",
 		"pkg:npm/tiny-helper@1.0.0",
 		"pkg:npm/tiny-helper@2.0.0",
+		"pkg:npm/tiny-peer@1.0.0",
 	}, refs)
 
 	// The root depends on its direct requirements only, including installed dev
@@ -237,6 +239,8 @@ func TestGenerateSBOMForPlugin(t *testing.T) {
 		"pkg:npm/tiny-helper@1.0.0",
 	}, edges["pkg:npm/%40acme/ui@1.0.0"])
 	assert.Contains(t, edges, "pkg:npm/tiny-helper@1.0.0")
+	// Installed peer dependencies are linked like regular ones.
+	assert.Equal(t, []string{"pkg:npm/tiny-peer@1.0.0"}, edges["pkg:npm/tiny-helper@2.0.0"])
 }
 
 func TestGenerateSBOMWithoutBundledDependencies(t *testing.T) {
