@@ -90,7 +90,7 @@ function deploymentReleaseCreatedAt(string $root, string $name, array $state): ?
 function deploymentVerifyRuntimeUser(array $state, string $name, ?string $httpUID): void
 {
     if (($state['http_uid'] ?? null) !== $httpUID) {
-        throw new RuntimeException("Cannot reuse release $name with a different PHP runtime user; deploy a new release name");
+        throw new RuntimeException(sprintf('Cannot reuse release %s with a different PHP runtime user; deploy a new release name', $name));
     }
 }
 

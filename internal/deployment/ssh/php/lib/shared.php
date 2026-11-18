@@ -43,7 +43,7 @@ function deploymentShare(string $root, string $release, string $relative, bool $
         if ($directory) {
             deploymentWritableACL($shared, $acl['http'], $acl['deploy'], $fresh);
         } else {
-            deploymentRun(['setfacl', '-m', "u:{$acl['http']}:r", '--', $shared], $root);
+            deploymentRun(['setfacl', '-m', sprintf('u:%s:r', $acl['http']), '--', $shared], $root);
         }
     }
 
