@@ -294,6 +294,10 @@ func TestSBOMLicense(t *testing.T) {
 		"BSD":               {name: "BSD"},
 		"MIT OR Apache-2.0": {name: "MIT OR Apache-2.0"},
 		"LicenseRef-acme":   {name: "LicenseRef-acme"},
+		"mit":               {id: "MIT"},
+		"apache-2.0":        {id: "Apache-2.0"},
+		"NONE":              {name: "NONE"},
+		"NOASSERTION":       {name: "NOASSERTION"},
 	}
 
 	for license, expected := range cases {

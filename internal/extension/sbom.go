@@ -551,35 +551,25 @@ var (
 	spdxLicenses     *spdx.SpdxLicenses
 )
 
-// sbomLicense uses the CycloneDX license id only for a single SPDX identifier.
-// Expressions (MIT OR Apache-2.0), LicenseRef-* and values such as
-// proprietary or UNLICENSED go into the name, because license.id is an
-// enumeration of SPDX identifiers.
+// sbomLicense uses the CycloneDX license id only for an SPDX license list
+// entry and writes it in its canonical spelling (mit becomes MIT), because
+// license.id is an enumeration of SPDX identifiers. Expressions
+// (MIT OR Apache-2.0), LicenseRef-*, NONE, NOASSERTION and values such as
+// proprietary or UNLICENSED go into the name.
 func sbomLicense(license string) sbom.LicenseChoice {
-	if isSPDXLicenseIdentifier(license) {
-		return sbom.LicenseChoice{License: sbom.License{ID: license}}
-	}
-
-	return sbom.LicenseChoice{License: sbom.License{Name: license}}
-}
-
-func isSPDXLicenseIdentifier(license string) bool {
-	if license == "" || strings.ContainsAny(license, " ()") || strings.HasPrefix(license, "LicenseRef-") || strings.HasPrefix(license, "DocumentRef-") {
-		return false
-	}
-
 	spdxLicensesOnce.Do(func() {
 		if licenses, err := spdx.NewSpdxLicenses(); err == nil {
 			spdxLicenses = licenses
 		}
 	})
-	if spdxLicenses == nil {
-		return false
+
+	if spdxLicenses != nil {
+		if entry, ok := spdxLicenses.GetLicenseByIdentifier(license); ok {
+			return sbom.LicenseChoice{License: sbom.License{ID: entry.Identifier}}
+		}
 	}
 
-	valid, _ := spdxLicenses.Validate(license)
-
-	return valid
+	return sbom.LicenseChoice{License: sbom.License{Name: license}}
 }
 
 func splitComposerPackageName(name string) (string, string) {
