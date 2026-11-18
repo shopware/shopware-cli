@@ -480,6 +480,19 @@ func TestSSHExecutorDatabaseConnectionLocalhostSocket(t *testing.T) {
 	assert.Contains(t, string(recorded), "default_socket", "the remote PHP socket configuration is queried")
 }
 
+func TestSSHExecutorDatabaseConnectionExplicitSocket(t *testing.T) {
+	e := testSSHExecutor()
+	e.env = map[string]string{"DATABASE_URL": "mysql://app:secret@localhost/shop?unix_socket=/run/custom.sock"}
+	// No remote PHP or SSH command is needed until the connection is opened.
+	conn, err := e.DatabaseConnection(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "/run/custom.sock", conn.Addr())
+	cfg, err := conn.MySQLConfig()
+	require.NoError(t, err)
+	assert.NotEqual(t, "unix", cfg.Net)
+	assert.NotEqual(t, "tcp", cfg.Net)
+}
+
 func TestDialViaSSHUnixSocket(t *testing.T) {
 	tmp := t.TempDir()
 	argsFile := filepath.Join(tmp, "args.txt")

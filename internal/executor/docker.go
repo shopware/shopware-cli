@@ -3,6 +3,7 @@ package executor
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -180,6 +181,11 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 		if err := applyDatabaseURL(conn, databaseURL); err != nil {
 			return nil, err
 		}
+	}
+
+	// A path inside the container must never be dialed as a host socket.
+	if conn.UnixSocket != "" {
+		return nil, errors.New("cannot connect to a container MySQL unix socket from the host; use a TCP database URL")
 	}
 
 	// Certificate paths refer to the web container, so read them there.

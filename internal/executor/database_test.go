@@ -1,15 +1,127 @@
 package executor
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
+
+func TestDatabaseConnectionUnixSocket(t *testing.T) {
+	conn := defaultDatabaseConnection()
+	require.NoError(t, applyDatabaseURL(conn, "mysql://app:secret@localhost:3307/shop?unix_socket=%2Ftmp%2Fmysql%20test.sock"))
+	assert.Equal(t, "/tmp/mysql test.sock", conn.Addr())
+	cfg, err := conn.MySQLConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "unix", cfg.Net)
+	assert.Equal(t, conn.Addr(), cfg.Addr)
+	assert.Equal(t, "app", cfg.User)
+	assert.Equal(t, "secret", cfg.Passwd)
+	assert.Equal(t, "shop", cfg.DBName)
+	conn.tunneledNet = "ssh-test"
+	cfg, err = conn.MySQLConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "ssh-test", cfg.Net, "remote sockets must still use the SSH tunnel")
+}
+
+func TestLocalExecutorDatabaseSocketSelection(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PHP socket discovery and fake PHP require Unix")
+	}
+	for _, tc := range []struct {
+		name, url, output      string
+		fail, wantError, probe bool
+		wantNet, wantAddr      string
+	}{
+		{"localhost", "mysql://app:secret@localhost:3307/shop", "/run/mysqld/mysqld.sock\n", false, false, true, "unix", "/run/mysqld/mysqld.sock"},
+		{"explicit socket", "mysql://app:secret@localhost/shop?unix_socket=/tmp/explicit.sock", "", true, false, false, "unix", "/tmp/explicit.sock"},
+		{"tcp", "mysql://app:secret@127.0.0.1:3307/shop", "", true, false, false, "tcp", "127.0.0.1:3307"},
+		{"empty configuration", "mysql://app:secret@localhost/shop", "", false, true, true, "", ""},
+		{"PHP failure", "mysql://app:secret@localhost/shop", "", true, true, true, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			php := filepath.Join(root, "php")
+			marker := filepath.Join(root, "called")
+			sh, err := exec.LookPath("sh")
+			require.NoError(t, err)
+			script := fmt.Sprintf("#!%s\nprintf '%%s' \"$PWD:$SOCKET_TEST\" > %q\nprintf '%%b' %q\n", sh, marker, tc.output)
+			if tc.fail {
+				script += "exit 1\n"
+			}
+			require.NoError(t, os.WriteFile(php, []byte(script), 0o755))
+			t.Setenv("PHP_BINARY", "")
+			stubPinnedPHP(t, php, nil)
+			l := &LocalExecutor{projectRoot: root, shopCfg: &shop.Config{PHPVersion: "8.5"}, env: map[string]string{"DATABASE_URL": tc.url, "SOCKET_TEST": "inherited"}}
+			conn, err := l.DatabaseConnection(t.Context())
+			if tc.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				cfg, err := conn.MySQLConfig()
+				require.NoError(t, err)
+				assert.Equal(t, tc.wantNet, cfg.Net)
+				assert.Equal(t, tc.wantAddr, cfg.Addr)
+			}
+			if tc.probe {
+				out, err := os.ReadFile(marker)
+				require.NoError(t, err)
+				assert.Equal(t, root+":inherited", string(out))
+			} else {
+				assert.NoFileExists(t, marker)
+			}
+		})
+	}
+}
+
+func TestDatabaseConnectionOpenUsesUnixSocket(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires a Unix socket")
+	}
+	// Accept a real local socket connection, then close before the MySQL
+	// handshake. This proves transport selection without a database or credentials.
+	dir, err := os.MkdirTemp("", "mysql-socket-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "mysql.sock")
+	listener, err := net.Listen("unix", socket)
+	if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES) {
+		t.Skipf("sandbox does not permit Unix sockets: %v", err)
+	}
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	accepted := make(chan struct{})
+	go func() {
+		c, err := listener.Accept()
+		if err == nil {
+			_ = c.Close()
+			close(accepted)
+		}
+	}()
+	conn := &DatabaseConnection{Host: "localhost", UnixSocket: socket, Database: "shop"}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	_, _, err = conn.Open(ctx)
+	require.Error(t, err, "fake server does not speak MySQL")
+	select {
+	case <-accepted:
+	case <-ctx.Done():
+		t.Fatal("driver did not connect to the Unix socket")
+	}
+}
 
 func TestDatabaseConnectionDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")

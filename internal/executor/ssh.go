@@ -334,7 +334,7 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 
 	dialTarget := conn.Addr()
 
-	if conn.Host == "localhost" {
+	if conn.UnixSocket == "" && conn.Host == "localhost" {
 		socket, err := s.remoteMySQLSocket(ctx)
 		if err != nil {
 			return nil, err

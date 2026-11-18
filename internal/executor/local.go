@@ -2,11 +2,14 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -158,8 +161,26 @@ func (l *LocalExecutor) ShopConfig() *shop.Config {
 	return l.shopCfg
 }
 
-func (l *LocalExecutor) DatabaseConnection(_ context.Context) (*DatabaseConnection, error) {
-	return databaseConnectionFromEnv(l.projectRoot, l.env)
+func (l *LocalExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
+	conn, err := databaseConnectionFromEnv(l.projectRoot, l.env)
+	if err != nil {
+		return nil, err
+	}
+
+	// PDO uses a Unix socket for localhost on Unix, even with an explicit
+	// port. An explicit unix_socket takes precedence and needs no PHP probe.
+	if conn.UnixSocket == "" && conn.Host == "localhost" && runtime.GOOS != "windows" {
+		out, err := l.PHPCommand(ctx, "-r", `echo ini_get("pdo_mysql.default_socket") ?: ini_get("mysqli.default_socket");`).Output()
+		if err != nil {
+			return nil, fmt.Errorf("cannot resolve the local MySQL unix socket: %w", err)
+		}
+		conn.UnixSocket = strings.TrimSpace(string(out))
+		if conn.UnixSocket == "" {
+			return nil, errors.New("cannot connect using DATABASE_URL with localhost: no MySQL unix socket is configured for PHP; set 'unix_socket' in DATABASE_URL or use '127.0.0.1' for TCP")
+		}
+	}
+
+	return conn, nil
 }
 
 func (l *LocalExecutor) StartEnvironment(_ context.Context) error {
