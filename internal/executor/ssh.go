@@ -295,7 +295,7 @@ func (s *SSHExecutor) EnvironmentStatus(_ context.Context) (bool, error) {
 // database host is "localhost", PHP would connect through a unix socket, so
 // the configured socket path is resolved on the remote host and forwarded
 // instead of a TCP port.
-func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
+func (s *SSHExecutor) DatabaseConnection(ctx context.Context, endpoints ...DatabaseEndpoint) (*DatabaseConnection, error) {
 	conn := defaultDatabaseConnection()
 
 	// An explicit DATABASE_URL override skips the remote lookup entirely, the
@@ -323,6 +323,8 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 			return nil, err
 		}
 	}
+
+	applyDatabaseEndpoints(conn, endpoints)
 
 	// Certificate paths refer to the remote host, so read them over SSH.
 	readFile := func(path string) ([]byte, error) {
@@ -435,6 +437,10 @@ func (s *SSHExecutor) registerSSHDialer(dialTarget string) string {
 func dialViaSSH(_ context.Context, sshArgs []string, target, addr string) (net.Conn, error) {
 	args := make([]string, 0, len(sshArgs)+3)
 	args = append(args, sshArgs...)
+	// OpenSSH parses colons and backslashes even in Unix socket addresses.
+	if strings.HasPrefix(addr, "/") {
+		addr = strings.NewReplacer(`\`, `\\`, ":", `\:`).Replace(addr)
+	}
 	args = append(args, "-W", addr, target)
 
 	//nolint:noctx // the process must outlive the dial: database/sql cancels the dial context once the connection is established, which would kill a healthy tunnel; the ssh process dies with the connection's Close instead

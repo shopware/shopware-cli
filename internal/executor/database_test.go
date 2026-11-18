@@ -93,8 +93,12 @@ func TestMySQLSocketDial(t *testing.T) {
 	}
 	// Accept a real local socket connection, then close before the MySQL
 	// handshake. This proves transport selection without a database or credentials.
-	// Keep the test name short so t.TempDir paths fit Unix socket limits.
-	socket := filepath.Join(t.TempDir(), "mysql.sock")
+	// Do not inherit a potentially deep test temporary root.
+	//nolint:usetesting // a short private path is required even with a deep GOTMPDIR
+	dir, err := os.MkdirTemp("/tmp", "sw-mysql-")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, os.RemoveAll(dir)) })
+	socket := filepath.Join(dir, "mysql.sock")
 	var config net.ListenConfig
 	listener, err := config.Listen(t.Context(), "unix", socket)
 	if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES) {
@@ -302,4 +306,28 @@ func TestLocalExecutorDatabaseConnection(t *testing.T) {
 	assert.Equal(t, "127.0.0.1:13306", conn.Addr())
 	assert.Equal(t, "shopware", conn.Username)
 	assert.Equal(t, "dev", conn.Database)
+}
+
+func TestDatabaseURLMalformedSocket(t *testing.T) {
+	for _, query := range []string{"unix_socket=/tmp/mysql%ZZ.sock", "unix_socket=%", "unix_socket=/valid.sock&unix_socket=%ZZ"} {
+		t.Run(query, func(t *testing.T) {
+			conn := defaultDatabaseConnection()
+			require.Error(t, applyDatabaseURL(conn, "mysql://app:secret@127.0.0.1/shop?"+query))
+		})
+	}
+	for _, query := range []string{"", "tls=%ZZ", "other=%ZZ&unix_socket=%2Ftmp%2Fmysql.sock"} {
+		conn := defaultDatabaseConnection()
+		require.NoError(t, applyDatabaseURL(conn, "mysql://app:secret@127.0.0.1/shop?"+query))
+	}
+}
+
+func TestLocalDatabaseEndpointOverridesSocket(t *testing.T) {
+	l := &LocalExecutor{projectRoot: t.TempDir(), env: map[string]string{"DATABASE_URL": "mysql://app:secret@localhost/shop?unix_socket=/tmp/explicit.sock"}}
+	conn, err := l.DatabaseConnection(t.Context(), DatabaseEndpoint{Host: "127.0.0.1", Port: "3307"})
+	require.NoError(t, err)
+	cfg, err := conn.MySQLConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "tcp", cfg.Net)
+	assert.Equal(t, "127.0.0.1:3307", cfg.Addr)
+	assert.Equal(t, "app", cfg.User)
 }

@@ -76,7 +76,7 @@ func (f *fakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error)
 	return nil, executor.ErrNotSupported
 }
 func (f *fakeExecutor) ShopConfig() *shop.Config { return nil }
-func (f *fakeExecutor) DatabaseConnection(context.Context) (*executor.DatabaseConnection, error) {
+func (f *fakeExecutor) DatabaseConnection(context.Context, ...executor.DatabaseEndpoint) (*executor.DatabaseConnection, error) {
 	return nil, executor.ErrNotSupported
 }
 

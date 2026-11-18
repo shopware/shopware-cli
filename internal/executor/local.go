@@ -161,11 +161,13 @@ func (l *LocalExecutor) ShopConfig() *shop.Config {
 	return l.shopCfg
 }
 
-func (l *LocalExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
+func (l *LocalExecutor) DatabaseConnection(ctx context.Context, endpoints ...DatabaseEndpoint) (*DatabaseConnection, error) {
 	conn, err := databaseConnectionFromEnv(l.projectRoot, l.env)
 	if err != nil {
 		return nil, err
 	}
+
+	applyDatabaseEndpoints(conn, endpoints)
 
 	// PDO uses a Unix socket for localhost on Unix, even with an explicit
 	// port. An explicit unix_socket takes precedence and needs no PHP probe.

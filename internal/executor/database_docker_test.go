@@ -15,7 +15,7 @@ import (
 func TestDockerDatabaseConnectionRejectsContainerSocket(t *testing.T) {
 	d := &DockerExecutor{env: map[string]string{"DATABASE_URL": "mysql://app:secret@localhost/shop?unix_socket=/run/mysql.sock"}}
 	_, err := d.DatabaseConnection(t.Context())
-	require.Error(t, err, "must not connect to an unrelated socket on the host")
+	require.ErrorContains(t, err, "cannot connect to a container MySQL unix socket")
 }
 
 // writeFakeDocker puts a docker stub on PATH that answers

@@ -156,7 +156,7 @@ func (d *DockerExecutor) ShopConfig() *shop.Config {
 // DatabaseConnection resolves the database credentials as seen inside the
 // compose network and translates the service host to the port published on
 // the host machine.
-func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
+func (d *DockerExecutor) DatabaseConnection(ctx context.Context, endpoints ...DatabaseEndpoint) (*DatabaseConnection, error) {
 	conn := defaultDatabaseConnection()
 	conn.Host = "database"
 
@@ -182,6 +182,8 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 			return nil, err
 		}
 	}
+
+	applyDatabaseEndpoints(conn, endpoints)
 
 	// A path inside the container must never be dialed as a host socket.
 	if conn.UnixSocket != "" {

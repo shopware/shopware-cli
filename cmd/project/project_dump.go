@@ -98,24 +98,16 @@ Limits require CREATE and DROP privileges for staging tables.`,
 }
 
 func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
-	dbConn, err := resolveDumpDatabaseConnection(cmd)
+	host, _ := cmd.Flags().GetString("host")
+	port, _ := cmd.Flags().GetString("port")
+	dbConn, err := resolveDumpDatabaseConnection(cmd, executor.DatabaseEndpoint{Host: host, Port: port})
 	if err != nil {
 		return nil, err
 	}
 
-	host, _ := cmd.Flags().GetString("host")
-	port, _ := cmd.Flags().GetString("port")
 	username, _ := cmd.Flags().GetString("username")
 	password, _ := cmd.Flags().GetString("password")
 	db, _ := cmd.Flags().GetString("database")
-
-	if host != "" {
-		dbConn.Host = host
-	}
-
-	if port != "" {
-		dbConn.Port = port
-	}
 
 	if db != "" {
 		dbConn.Database = db
@@ -230,12 +222,12 @@ func anonymizationFromInstalledExtensions(ctx context.Context) (map[string]map[s
 // resolveDumpDatabaseConnection resolves credentials like the other database
 // commands, but keeps dump usable outside a Shopware project: there the
 // process environment and the connection flags are all that is needed.
-func resolveDumpDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnection, error) {
+func resolveDumpDatabaseConnection(cmd *cobra.Command, endpoints ...executor.DatabaseEndpoint) (*executor.DatabaseConnection, error) {
 	if _, err := shop.FindClosestShopwareProject(false); err != nil {
-		return executor.NewLocal("").DatabaseConnection(cmd.Context())
+		return executor.NewLocal("").DatabaseConnection(cmd.Context(), endpoints...)
 	}
 
-	return resolveProjectDatabaseConnection(cmd)
+	return resolveProjectDatabaseConnection(cmd, endpoints...)
 }
 
 func init() {

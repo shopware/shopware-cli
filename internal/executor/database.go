@@ -16,6 +16,25 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
+// DatabaseEndpoint overrides the configured endpoint before transport discovery.
+// A non-empty Host replaces any configured Unix socket; Port alone keeps it.
+type DatabaseEndpoint struct {
+	Host string
+	Port string
+}
+
+func applyDatabaseEndpoints(conn *DatabaseConnection, endpoints []DatabaseEndpoint) {
+	for _, endpoint := range endpoints {
+		if endpoint.Host != "" {
+			conn.Host = endpoint.Host
+			conn.UnixSocket = ""
+		}
+		if endpoint.Port != "" {
+			conn.Port = endpoint.Port
+		}
+	}
+}
+
 // DatabaseConnection describes how to reach the project database from the
 // host machine.
 type DatabaseConnection struct {
@@ -160,6 +179,17 @@ func applyDatabaseURL(conn *DatabaseConnection, databaseURL string) error {
 		conn.Database = dbName
 	}
 
+	// URL.Query silently discards malformed escapes. Never silently fall back
+	// to a different transport when the requested socket cannot be decoded.
+	for _, pair := range strings.Split(parsed.RawQuery, "&") {
+		key, value, _ := strings.Cut(pair, "=")
+		key, _ = url.QueryUnescape(key)
+		if key == "unix_socket" {
+			if _, err := url.QueryUnescape(value); err != nil {
+				return fmt.Errorf("cannot parse DATABASE_URL unix_socket: %w", err)
+			}
+		}
+	}
 	conn.UnixSocket = parsed.Query().Get("unix_socket")
 
 	if parsed.Query().Has("tls") {

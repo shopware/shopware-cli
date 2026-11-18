@@ -610,3 +610,28 @@ func TestShellQuoteArg(t *testing.T) {
 	assert.Equal(t, "'semi;colon'", shellQuoteArg("semi;colon"))
 	assert.Equal(t, "'dollar$var'", shellQuoteArg("dollar$var"))
 }
+
+func TestSSHSocketDelimiterEscaping(t *testing.T) {
+	for _, tc := range []struct{ addr, want string }{
+		{"/run/mysql:blue.sock", `/run/mysql\:blue.sock`},
+		{`/run/mysql\blue:one.sock`, `/run/mysql\\blue\:one.sock`},
+		{"db.example.com:3306", "db.example.com:3306"},
+		{"[::1]:3306", "[::1]:3306"},
+	} {
+		t.Run(tc.addr, func(t *testing.T) {
+			tmp := t.TempDir()
+			args := filepath.Join(tmp, "args")
+			out := filepath.Join(tmp, "out")
+			require.NoError(t, os.WriteFile(out, nil, 0644))
+			writeRecordingSSH(t, args, out, "", "")
+			c, err := dialViaSSH(t.Context(), nil, "example.invalid", tc.addr)
+			require.NoError(t, err)
+			_, err = io.ReadAll(c)
+			require.NoError(t, err)
+			require.NoError(t, c.Close())
+			recorded, err := os.ReadFile(args)
+			require.NoError(t, err)
+			assert.Contains(t, string(recorded), "-W\n"+tc.want+"\n")
+		})
+	}
+}

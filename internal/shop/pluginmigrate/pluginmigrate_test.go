@@ -62,7 +62,7 @@ func (f *fakeExecutor) Type() string                                { return exe
 func (f *fakeExecutor) WithEnv(map[string]string) executor.Executor { return f }
 func (f *fakeExecutor) WithRelDir(string) executor.Executor         { return f }
 func (f *fakeExecutor) StartEnvironment(context.Context) error      { return nil }
-func (f *fakeExecutor) DatabaseConnection(context.Context) (*executor.DatabaseConnection, error) {
+func (f *fakeExecutor) DatabaseConnection(context.Context, ...executor.DatabaseEndpoint) (*executor.DatabaseConnection, error) {
 	return nil, executor.ErrNotSupported
 }
 func (f *fakeExecutor) StopEnvironment(context.Context, executor.StopOptions) error { return nil }

@@ -201,3 +201,23 @@ func TestAssembleConnectionURIDisabledModeIgnoresUnreadableEnvCA(t *testing.T) {
 	_, err = assembleConnectionURI(newDumpFlagCommand(t, nil))
 	assert.ErrorContains(t, err, "DATABASE_SSL_CA", "without an override the environment CA is still required")
 }
+
+func TestDumpTCPOverrideBeforeSocketDiscovery(t *testing.T) {
+	chdirOutsideProject(t)
+	t.Setenv("DATABASE_URL", "mysql://app:secret@localhost/shop")
+	php := filepath.Join(t.TempDir(), "php")
+	require.NoError(t, os.WriteFile(php, []byte("#!/bin/sh\ncase \"$*\" in *default_socket*) printf /tmp/discovered.sock ;; *) echo \"PHP 8.5.12\" ;; esac\n"), 0o755))
+	t.Setenv("PHP_BINARY", php)
+	cfg, err := assembleConnectionURI(newDumpFlagCommand(t, map[string]string{"host": "127.0.0.1", "port": "3307"}))
+	require.NoError(t, err)
+	assert.Equal(t, "tcp", cfg.Net)
+	assert.Equal(t, "127.0.0.1:3307", cfg.Addr)
+}
+
+func TestDumpTCPOverrideWithoutPHP(t *testing.T) {
+	chdirOutsideProject(t)
+	t.Setenv("DATABASE_URL", "mysql://app:secret@localhost/shop")
+	t.Setenv("PHP_BINARY", "/nonexistent/php")
+	_, err := assembleConnectionURI(newDumpFlagCommand(t, map[string]string{"host": "127.0.0.1", "port": "3307"}))
+	require.NoError(t, err)
+}
