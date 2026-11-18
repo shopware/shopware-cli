@@ -965,6 +965,14 @@
           "type": "string",
           "description": "SSH user. Defaults to the user configured in ~/.ssh/config or the current user"
         },
+        "become": {
+          "type": "string",
+          "description": "Account that runs remote deployment commands via non-interactive sudo. Defaults to the SSH login account."
+        },
+        "http_user": {
+          "type": "string",
+          "description": "PHP-FPM or web server account that needs access to SSH deployment runtime files. Uses POSIX ACLs on the target."
+        },
         "port": {
           "type": "integer",
           "description": "SSH port. Defaults to 22"
@@ -1053,6 +1061,12 @@
           "type": "string"
         },
         "user": {
+          "type": "string"
+        },
+        "become": {
+          "type": "string"
+        },
+        "http_user": {
           "type": "string"
         },
         "port": {

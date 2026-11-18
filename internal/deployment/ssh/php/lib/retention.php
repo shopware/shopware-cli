@@ -158,10 +158,14 @@ function pruneValidateTree(string $path): void
     }
 }
 
-function pruneMarkRelease(string $file, string $name, string $checksum): void
+function pruneMarkRelease(string $file, string $name, string $checksum, ?string $httpUID): void
 {
     deploymentDirectory(dirname($file), 0700);
     $marker = ['release' => $name, 'sha256' => $checksum, 'ready' => false, 'pruning' => true];
+    if ($httpUID !== null) {
+        $marker['http_uid'] = $httpUID;
+    }
+
     deploymentWriteAtomic($file, json_encode($marker, JSON_THROW_ON_ERROR), "pending cleanup for release $name", null, 'prune-tmp');
 }
 
@@ -412,12 +416,23 @@ function prunePlan(array $input, array &$progress): array
                 // Persist intent first; ready=false also blocks rollout reuse after
                 // an interruption. Keep the marker until every related file is gone.
                 $marker = path_join($state, 'releases', "$name.json");
-                pruneMarkRelease($marker, (string) $name, $removeHashes[$name]);
+                $httpUID = $records[$name]['http_uid'] ?? null;
+                pruneMarkRelease($marker, (string) $name, $removeHashes[$name], $httpUID);
                 $progress['incomplete_deployments'] = [(string) $name];
 
-                foreach (["$root/releases/$name", "$root/runtime/$name"] as $path) {
-                    if (deploymentRealDirectory($path)) {
-                        pruneRemoveTree($path);
+                $release = path_join($root, 'releases', $name);
+                if (deploymentRealDirectory($release)) {
+                    pruneRemoveTree($release);
+                }
+
+                $runtime = path_join($root, 'runtime', $name);
+                if (deploymentRealDirectory($runtime)) {
+                    if ($httpUID === null) {
+                        pruneRemoveTree($runtime);
+                    } else {
+                        // PHP owns some cache entries. Delete using the inherited
+                        // ACLs without changing permissions on mutable paths.
+                        deploymentRun(['find', '-P', $runtime, '-depth', '-delete'], $root);
                     }
                 }
 

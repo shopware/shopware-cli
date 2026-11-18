@@ -82,15 +82,17 @@ try {
     }
 
     $previous = deploymentActiveRelease($root, $current);
+    $acl = deploymentRuntimeAccounts($input['http_user'] ?? '', $root);
+    $httpUID = $acl['http'] ?? null;
 
     if ($action === 'candidates') {
-        deploymentSend(json_encode(deploymentCandidates($root, $previous), JSON_THROW_ON_ERROR));
+        deploymentSend(json_encode(deploymentCandidates($root, $previous, $httpUID), JSON_THROW_ON_ERROR));
 
         exit(0);
     }
 
     if ($action === 'activate') {
-        $retained = deploymentRetained($root, $name);
+        $retained = deploymentRetained($root, $name, $httpUID);
 
         if (deploymentCoordinated($input) && ($input['sha256'] ?? null) !== $retained['sha256']) {
             throw new RuntimeException('Retained deployment checksum differs across hosts');
@@ -111,6 +113,7 @@ try {
         }
 
         $releaseMetadata = deploymentReadMetadata($releaseFile);
+        deploymentVerifyRuntimeUser($releaseMetadata, $name, $httpUID);
 
         if (($releaseMetadata['sha256'] ?? null) !== $input['sha256']) {
             throw new RuntimeException("Release $name already exists with a different checksum");
@@ -183,7 +186,9 @@ try {
 
         $releaseMetadata['ready'] = false;
         deploymentWriteMetadata($releaseFile, $releaseMetadata);
-        deploymentRuntimeCache($root, $release, $name, true);
+        if ($acl === null) {
+            deploymentRuntimeCache($root, $release, $name, true);
+        }
     } else {
         $archive = deploymentReceiveArtifact($input, $root, $id, $upload);
         deploymentSend("PREPARE $id");
@@ -192,18 +197,25 @@ try {
             'release' => $name, 'sha256' => $input['sha256'], 'ready' => false,
             'created_at' => $metadata['created_at'],
         ];
+        if ($httpUID !== null) {
+            $releaseMetadata['http_uid'] = $httpUID;
+        }
         deploymentWriteMetadata($releaseFile, $releaseMetadata);
         deploymentDirectory($release);
         deploymentRun(['tar', '-xzf', $archive, '--no-same-owner', '--no-same-permissions', '-C', $release], $root);
         deploymentRuntimeCache($root, $release, $name);
 
+        if ($acl !== null) {
+            deploymentWritableACL(path_join($root, 'runtime', $name, 'cache'), $acl['http'], $acl['deploy'], true);
+        }
+
         // Persistent shared data is separate from host- and release-local cache.
         foreach ($input['shared_directories'] ?? [] as $relative) {
-            deploymentShare($root, $release, $relative, true, $previous, deploymentCoordinated($input));
+            deploymentShare($root, $release, $relative, true, $previous, deploymentCoordinated($input), $acl);
         }
 
         foreach ($input['shared_files'] ?? [] as $relative) {
-            deploymentShare($root, $release, $relative, false, $previous, deploymentCoordinated($input));
+            deploymentShare($root, $release, $relative, false, $previous, deploymentCoordinated($input), $acl);
         }
 
         putenv('APP_ENV=prod');
@@ -251,7 +263,7 @@ try {
         }
 
         if ($shareInstallLock) {
-            deploymentShare($root, $release, 'install.lock', false, $previous);
+            deploymentShare($root, $release, 'install.lock', false, $previous, false, $acl);
         }
     }
 
@@ -311,7 +323,7 @@ try {
     try {
         if ($cachetool !== null) {
             deploymentCachetoolReset($cachetool);
-        } elseif (($input['probe_php_host'] ?? false) === true) {
+        } elseif (($input['probe_php_host'] ?? false) === true && $acl === null) {
             deploymentRestartPHPProcesses();
         }
     } catch (Throwable $error) {

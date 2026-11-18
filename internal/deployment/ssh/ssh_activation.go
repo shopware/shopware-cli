@@ -28,7 +28,7 @@ func (s *SSH) rollbackCandidates(ctx context.Context) ([]sshCandidate, error) {
 	if err != nil {
 		return nil, err
 	}
-	output, err := s.deploymentCommandOutput(ctx, "deploy", sshRolloutInput{Root: root, Current: s.activeLinkName(), Action: sshDeploymentCandidates})
+	output, err := s.deploymentCommandOutput(ctx, "deploy", s.rolloutInput(sshRolloutInput{Root: root, Current: s.activeLinkName(), Action: sshDeploymentCandidates}))
 	if err != nil {
 		return nil, fmt.Errorf("discover SSH rollback candidates: %w", err)
 	}
@@ -57,10 +57,6 @@ func (s *SSH) ActivateDeployment(ctx context.Context, deployment Deployment, out
 		Release:   deployment.Reference, Deployment: deployment.Reference,
 		Cachetool:    cachetool,
 		ProbePHPHost: cachetool == nil,
-	}
-	if s.env != nil && s.env.SSH != nil {
-		input.PHP = s.env.SSH.PHPBinary
-		input.PHPArgs = s.env.SSH.PHPArgs
 	}
 	return s.runSSHDeployment(ctx, nil, input, output)
 }
