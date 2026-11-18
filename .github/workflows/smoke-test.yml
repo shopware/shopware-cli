@@ -16,6 +16,8 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DO_NOT_TRACK: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2.22.4
@@ -91,6 +93,8 @@ jobs:
     name: Docker project create and dev
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DO_NOT_TRACK: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2.22.4
