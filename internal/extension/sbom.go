@@ -261,11 +261,12 @@ func GenerateSBOM(ctx context.Context, ext Extension, root string, opts SBOMOpti
 		rootComponent.Licenses = append(rootComponent.Licenses, sbomLicense(license))
 	}
 
-	npmComponents, npmDirectRefs, err := bundledNpmComponents(ext, root)
+	npmComponents, npmDirectRefs, npmEdges, err := bundledNpmComponents(ext, root)
 	if err != nil {
 		return nil, err
 	}
 	bom.Components = append(bom.Components, npmComponents...)
+	bom.Dependencies = append(bom.Dependencies, npmEdges...)
 	directRefs = append(directRefs, npmDirectRefs...)
 
 	linkRootDependencies(bom, base.Metadata.Component.BOMRef, directRefs)
@@ -416,6 +417,14 @@ func directComposerRefs(composerJSON *composer.Json, bundled map[string]string, 
 		}
 	}
 
+	// Installed dev requirements are only present in a working copy; link them
+	// so they stay reachable from the root.
+	for name := range composerJSON.RequireDev {
+		if ref, ok := bundled[name]; ok {
+			refs = append(refs, ref)
+		}
+	}
+
 	return refs
 }
 
@@ -484,16 +493,17 @@ type npmLockPackage struct {
 // bundledNpmComponents lists the production npm dependencies of the
 // Administration and Storefront sources. They end up in the compiled
 // JavaScript, so they are part of the shipped extension. It also returns the
-// direct dependencies of the npm projects.
-func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, []string, error) {
+// direct dependencies of the npm projects and the package-to-package edges.
+func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, []string, []sbom.Dependency, error) {
 	indexByPURL := map[string]int{}
 	components := make([]ExtensionComponent, 0)
 	directRefs := make([]string, 0)
+	edges := map[string]map[string]struct{}{}
 
 	for _, lockPath := range npmLockFiles(ext, root) {
 		content, err := os.ReadFile(lockPath)
 		if err != nil {
-			return nil, nil, fmt.Errorf("cannot read %s: %w", lockPath, err)
+			return nil, nil, nil, fmt.Errorf("cannot read %s: %w", lockPath, err)
 		}
 
 		var lock struct {
@@ -501,13 +511,13 @@ func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, []s
 			Packages        map[string]npmLockPackage `json:"packages"`
 		}
 		if err := json.Unmarshal(content, &lock); err != nil {
-			return nil, nil, fmt.Errorf("cannot parse %s: %w", lockPath, err)
+			return nil, nil, nil, fmt.Errorf("cannot parse %s: %w", lockPath, err)
 		}
 
 		// lockfileVersion 1 (npm 6 and older) has no "packages" map, so its
 		// packages would silently be missing from the SBOM.
 		if lock.LockfileVersion < 2 {
-			return nil, nil, fmt.Errorf("cannot read npm packages from %s: lockfileVersion %d is not supported, regenerate it with npm 7 or newer", lockPath, lock.LockfileVersion)
+			return nil, nil, nil, fmt.Errorf("cannot read npm packages from %s: lockfileVersion %d is not supported, regenerate it with npm 7 or newer", lockPath, lock.LockfileVersion)
 		}
 
 		keys := make([]string, 0, len(lock.Packages))
@@ -582,17 +592,85 @@ func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, []s
 			components = append(components, component)
 		}
 
-		project := lock.Packages[""]
-		for _, dependencies := range []map[string]string{project.Dependencies, project.OptionalDependencies} {
+		directRefs = append(directRefs, collectNpmEdges(lock.Packages, purlByKey, edges)...)
+	}
+
+	return components, directRefs, npmDependencies(components, edges), nil
+}
+
+// collectNpmEdges adds an edge from every included package to the packages
+// it requires and returns the direct dependencies of the npm project.
+func collectNpmEdges(packages map[string]npmLockPackage, purlByKey map[string]string, edges map[string]map[string]struct{}) []string {
+	directRefs := make([]string, 0)
+
+	for key, pkg := range packages {
+		from, included := purlByKey[key]
+		if key != "" && !included {
+			continue
+		}
+
+		for _, dependencies := range []map[string]string{pkg.Dependencies, pkg.OptionalDependencies} {
 			for name := range dependencies {
-				if purl, ok := purlByKey["node_modules/"+name]; ok {
-					directRefs = append(directRefs, purl)
+				target, ok := resolveNpmDependency(key, name, purlByKey)
+				if !ok || target == from {
+					continue
 				}
+
+				if key == "" {
+					directRefs = append(directRefs, target)
+					continue
+				}
+
+				if edges[from] == nil {
+					edges[from] = map[string]struct{}{}
+				}
+				edges[from][target] = struct{}{}
 			}
 		}
 	}
 
-	return components, directRefs, nil
+	return directRefs
+}
+
+// resolveNpmDependency finds the install path npm uses for a dependency of the
+// package at key: its own node_modules first, then those of its ancestors.
+func resolveNpmDependency(key, name string, purlByKey map[string]string) (string, bool) {
+	dir := key
+	for {
+		candidate := "node_modules/" + name
+		if dir != "" {
+			candidate = dir + "/" + candidate
+		}
+		if purl, ok := purlByKey[candidate]; ok {
+			return purl, true
+		}
+
+		if dir == "" {
+			return "", false
+		}
+
+		if idx := strings.LastIndex(dir, "/node_modules/"); idx != -1 {
+			dir = dir[:idx]
+		} else {
+			dir = ""
+		}
+	}
+}
+
+// npmDependencies returns one dependency entry per npm component, in
+// component order, with its sorted direct dependencies.
+func npmDependencies(components []ExtensionComponent, edges map[string]map[string]struct{}) []sbom.Dependency {
+	dependencies := make([]sbom.Dependency, 0, len(components))
+	for _, component := range components {
+		dependsOn := make([]string, 0, len(edges[component.BOMRef]))
+		for target := range edges[component.BOMRef] {
+			dependsOn = append(dependsOn, target)
+		}
+		slices.Sort(dependsOn)
+		dependencies = append(dependencies, sbom.Dependency{Ref: component.BOMRef, DependsOn: dependsOn})
+	}
+
+	return dependencies
 }
 
 func npmLockFiles(ext Extension, root string) []string {

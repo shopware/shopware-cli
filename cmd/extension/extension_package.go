@@ -241,12 +241,15 @@ var extensionPackageCmd = &cobra.Command{
 				return fmt.Errorf("cannot generate SBOM: %w", err)
 			}
 
+			embeddedPath := filepath.Join(extDir, extension.DefaultExtensionSBOMOutput)
 			if embedSBOM {
-				embeddedPath := filepath.Join(extDir, extension.DefaultExtensionSBOMOutput)
 				if err := extension.WriteSBOMFile(embeddedPath, data); err != nil {
 					return fmt.Errorf("cannot generate SBOM: %w", err)
 				}
 				logging.FromContext(cmd.Context()).Infof("Wrote SBOM with %d components to %s", sbomComponents, embeddedPath)
+			} else if err := os.Remove(embeddedPath); err != nil && !os.IsNotExist(err) {
+				// An SBOM left over from extension sbom would describe another build.
+				return fmt.Errorf("cannot remove stale SBOM %s: %w", embeddedPath, err)
 			}
 
 			if writeSBOM {

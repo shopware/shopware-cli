@@ -27,6 +27,7 @@ const sbomTestComposerJSON = `{
     "shopware/storefront": "~6.6.0",
     "acme/bundled-lib": "^2.1"
   },
+  "require-dev": {"phpstan/phpstan": "^2.1", "acme/not-installed": "^1.0"},
   "autoload": {"psr-4": {"Acme\\SbomTest\\": "src/"}},
   "extra": {
     "shopware-plugin-class": "Acme\\SbomTest\\AcmeSbomTest",
@@ -69,7 +70,7 @@ const sbomTestPackageLock = `{
   "packages": {
     "": {
       "name": "administration",
-      "dependencies": {"lodash": "^4.17.21", "@acme/ui": "1.0.0", "ui-compat": "npm:lodash@4.17.21"},
+      "dependencies": {"@acme/ui": "1.0.0", "ui-compat": "npm:lodash@4.17.21", "tiny-helper": "^2.0.0"},
       "devDependencies": {"eslint": "^9.0.0"}
     },
     "node_modules/lodash": {
@@ -78,8 +79,15 @@ const sbomTestPackageLock = `{
       "integrity": "sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==",
       "license": "MIT"
     },
-    "node_modules/@acme/ui": {"version": "1.0.0", "license": "Apache-2.0"},
+    "node_modules/@acme/ui": {
+      "version": "1.0.0",
+      "license": "Apache-2.0",
+      "dependencies": {"lodash": "^4.17.0", "tiny-helper": "^1.0.0"},
+      "optionalDependencies": {"fsevents": "^2.3.0"}
+    },
     "node_modules/@acme/ui/node_modules/lodash": {"version": "4.17.21", "license": "MIT"},
+    "node_modules/@acme/ui/node_modules/tiny-helper": {"version": "1.0.0", "license": "MIT"},
+    "node_modules/tiny-helper": {"version": "2.0.0", "license": "MIT"},
     "node_modules/eslint": {"version": "9.0.0", "dev": true, "license": "MIT"},
     "node_modules/ui-compat": {"name": "lodash", "version": "4.17.21", "license": "MIT"},
     "node_modules/fsevents": {"version": "2.3.3", "devOptional": true, "license": "MIT"}
@@ -197,28 +205,38 @@ func TestGenerateSBOMForPlugin(t *testing.T) {
 		"pkg:npm/%40acme/ui@1.0.0",
 		"pkg:npm/lodash@4.17.21",
 		"pkg:npm/fsevents@2.3.3",
+		"pkg:npm/tiny-helper@1.0.0",
+		"pkg:npm/tiny-helper@2.0.0",
 	}, refs)
 
-	// The root depends on its direct requirements only; psr/log is reached
-	// through acme/bundled-lib.
+	// The root depends on its direct requirements only, including installed dev
+	// requirements; psr/log is reached through acme/bundled-lib.
 	require.NotEmpty(t, bom.Dependencies)
 	assert.Equal(t, "app:acme/sbom-test@1.2.3", bom.Dependencies[0].Ref)
 	assert.Equal(t, []string{
 		"pkg:composer/acme/bundled-lib@2.1.4",
+		"pkg:composer/phpstan/phpstan@2.1.0",
 		"pkg:composer/shopware/core",
 		"pkg:composer/shopware/storefront",
 		"pkg:npm/%40acme/ui@1.0.0",
 		"pkg:npm/lodash@4.17.21",
+		"pkg:npm/tiny-helper@2.0.0",
 		"platform:php",
 	}, bom.Dependencies[0].DependsOn)
 
-	var bundledEdges []string
+	edges := map[string][]string{}
 	for _, dependency := range bom.Dependencies {
-		if dependency.Ref == "pkg:composer/acme/bundled-lib@2.1.4" {
-			bundledEdges = dependency.DependsOn
-		}
+		edges[dependency.Ref] = dependency.DependsOn
 	}
-	assert.Equal(t, []string{"pkg:composer/psr/log@3.0.2"}, bundledEdges)
+	assert.Equal(t, []string{"pkg:composer/psr/log@3.0.2"}, edges["pkg:composer/acme/bundled-lib@2.1.4"])
+	// npm dependencies resolve from the package's own node_modules first
+	// (tiny-helper 1.0.0), then from its ancestors (fsevents).
+	assert.Equal(t, []string{
+		"pkg:npm/fsevents@2.3.3",
+		"pkg:npm/lodash@4.17.21",
+		"pkg:npm/tiny-helper@1.0.0",
+	}, edges["pkg:npm/%40acme/ui@1.0.0"])
+	assert.Contains(t, edges, "pkg:npm/tiny-helper@1.0.0")
 }
 
 func TestGenerateSBOMWithoutBundledDependencies(t *testing.T) {

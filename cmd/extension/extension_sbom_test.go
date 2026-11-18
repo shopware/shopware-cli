@@ -191,7 +191,8 @@ func TestPackageKeepsPreviousSidecarWhenZipFails(t *testing.T) {
 	})
 
 	// A directory in place of the ZIP makes CreateZip fail.
-	require.Error(t, extensionPackageCmd.RunE(extensionPackageCmd, []string{extDir}))
+	err := extensionPackageCmd.RunE(extensionPackageCmd, []string{extDir})
+	require.ErrorContains(t, err, "create zip file:")
 
 	content, err := os.ReadFile(sidecar)
 	require.NoError(t, err)
@@ -204,4 +205,38 @@ func TestPackageKeepsPreviousSidecarWhenZipFails(t *testing.T) {
 		names = append(names, entry.Name())
 	}
 	assert.ElementsMatch(t, []string{"FroshTest.zip", "FroshTest.cdx.json"}, names)
+}
+
+func TestPackageSidecarOnlyDropsStaleEmbeddedSBOM(t *testing.T) {
+	extDir := writeSBOMCommandTestPlugin(t)
+	// Left over from an earlier extension sbom run.
+	testhelper.WriteFile(t, filepath.Join(extDir, "sbom.cdx.json"), `{"stale": true}`)
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+
+	disableGit = true
+	t.Cleanup(func() { disableGit = false })
+
+	outputDir := filepath.Join(workDir, "dist")
+	extensionPackageCmd.SetContext(t.Context())
+	require.NoError(t, extensionPackageCmd.Flags().Set("output-directory", outputDir))
+	require.NoError(t, extensionPackageCmd.Flags().Set("sbom", "true"))
+	t.Cleanup(func() {
+		_ = extensionPackageCmd.Flags().Set("output-directory", "")
+		_ = extensionPackageCmd.Flags().Set("sbom", "false")
+	})
+
+	require.NoError(t, extensionPackageCmd.RunE(extensionPackageCmd, []string{extDir}))
+
+	reader, err := zip.OpenReader(filepath.Join(outputDir, "FroshTest.zip"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
+
+	for _, file := range reader.File {
+		assert.NotEqual(t, "FroshTest/sbom.cdx.json", file.Name)
+	}
+
+	// The source file stays.
+	assert.FileExists(t, filepath.Join(extDir, "sbom.cdx.json"))
+	assert.FileExists(t, filepath.Join(outputDir, "FroshTest.cdx.json"))
 }
