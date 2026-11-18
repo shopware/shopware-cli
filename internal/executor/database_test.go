@@ -79,7 +79,11 @@ func TestLocalExecutorDatabaseSocketSelection(t *testing.T) {
 			if tc.probe {
 				out, err := os.ReadFile(marker)
 				require.NoError(t, err)
-				assert.Equal(t, root+":inherited", string(out))
+				// The shell reports the physical working directory; on macOS
+				// t.TempDir lives behind the /var -> /private/var symlink.
+				resolvedRoot, err := filepath.EvalSymlinks(root)
+				require.NoError(t, err)
+				assert.Equal(t, resolvedRoot+":inherited", string(out))
 			} else {
 				assert.NoFileExists(t, marker)
 			}

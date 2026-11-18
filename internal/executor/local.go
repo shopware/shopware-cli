@@ -172,17 +172,31 @@ func (l *LocalExecutor) DatabaseConnection(ctx context.Context, endpoints ...Dat
 	// PDO uses a Unix socket for localhost on Unix, even with an explicit
 	// port. An explicit unix_socket takes precedence and needs no PHP probe.
 	if conn.UnixSocket == "" && conn.Host == "localhost" && runtime.GOOS != "windows" {
-		out, err := l.PHPCommand(ctx, "-r", `echo ini_get("pdo_mysql.default_socket") ?: ini_get("mysqli.default_socket");`).Output()
+		socket, err := l.localMySQLSocket(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("cannot resolve the local MySQL unix socket: %w", err)
+			return nil, err
 		}
-		conn.UnixSocket = strings.TrimSpace(string(out))
-		if conn.UnixSocket == "" {
-			return nil, errors.New("cannot connect using DATABASE_URL with localhost: no MySQL unix socket is configured for PHP; set 'unix_socket' in DATABASE_URL or use '127.0.0.1' for TCP")
-		}
+		conn.UnixSocket = socket
 	}
 
 	return conn, nil
+}
+
+// localMySQLSocket resolves the MySQL unix socket path configured for the
+// project PHP. DATABASE_URLs with host "localhost" make PHP connect through
+// this socket instead of TCP.
+func (l *LocalExecutor) localMySQLSocket(ctx context.Context) (string, error) {
+	out, err := l.PHPCommand(ctx, "-r", `echo ini_get("pdo_mysql.default_socket") ?: ini_get("mysqli.default_socket");`).Output()
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve the local MySQL unix socket: %w", err)
+	}
+
+	socket := strings.TrimSpace(string(out))
+	if socket == "" {
+		return "", errors.New("cannot connect using DATABASE_URL with localhost: no MySQL unix socket is configured for PHP; set 'unix_socket' in DATABASE_URL or use '127.0.0.1' for TCP")
+	}
+
+	return socket, nil
 }
 
 func (l *LocalExecutor) StartEnvironment(_ context.Context) error {
