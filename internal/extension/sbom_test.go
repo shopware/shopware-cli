@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shyim/go-composer/sbom"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -40,15 +41,16 @@ const sbomTestInstalledJSON = `{
       "name": "acme/bundled-lib",
       "version": "2.1.4",
       "type": "library",
-      "license": ["MIT"],
+      "license": ["MIT OR Apache-2.0"],
       "require": {"php": ">=8.1", "psr/log": "^3.0"},
-      "dist": {"type": "zip", "url": "https://example.test/lib.zip", "shasum": "abc123"}
+      "dist": {"type": "zip", "url": "https://example.test/lib.zip", "shasum": "0123456789abcdef0123456789abcdef01234567"}
     },
     {
       "name": "psr/log",
       "version": "3.0.2",
       "type": "library",
-      "license": ["MIT"]
+      "license": ["mit"],
+      "dist": {"type": "zip", "url": "https://example.test/log.zip", "shasum": "abc123"}
     },
     {
       "name": "phpstan/phpstan",
@@ -65,7 +67,11 @@ const sbomTestPackageLock = `{
   "name": "administration",
   "lockfileVersion": 3,
   "packages": {
-    "": {"name": "administration", "dependencies": {"lodash": "^4.17.21", "@acme/ui": "1.0.0"}},
+    "": {
+      "name": "administration",
+      "dependencies": {"lodash": "^4.17.21", "@acme/ui": "1.0.0", "ui-compat": "npm:lodash@4.17.21"},
+      "devDependencies": {"eslint": "^9.0.0"}
+    },
     "node_modules/lodash": {
       "version": "4.17.21",
       "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
@@ -75,6 +81,7 @@ const sbomTestPackageLock = `{
     "node_modules/@acme/ui": {"version": "1.0.0", "license": "Apache-2.0"},
     "node_modules/@acme/ui/node_modules/lodash": {"version": "4.17.21", "license": "MIT"},
     "node_modules/eslint": {"version": "9.0.0", "dev": true, "license": "MIT"},
+    "node_modules/ui-compat": {"name": "lodash", "version": "4.17.21", "license": "MIT"},
     "node_modules/fsevents": {"version": "2.3.3", "devOptional": true, "license": "MIT"}
   }
 }`
@@ -137,6 +144,14 @@ func TestGenerateSBOMForPlugin(t *testing.T) {
 	bundled := findSBOMComponent(t, bom, "pkg:composer/acme/bundled-lib@2.1.4")
 	assert.False(t, bundled.IsExternal)
 	assert.Equal(t, "2.1.4", bundled.Version)
+	// License expressions go into the name, valid digests stay.
+	assert.Equal(t, []sbom.LicenseChoice{{License: sbom.License{Name: "MIT OR Apache-2.0"}}}, bundled.Licenses)
+	assert.Equal(t, []sbom.Hash{{Alg: "SHA-1", Content: "0123456789abcdef0123456789abcdef01234567"}}, bundled.Hashes)
+
+	// A lowercase license id is written canonically, a malformed shasum is dropped.
+	psrLog := findSBOMComponent(t, bom, "pkg:composer/psr/log@3.0.2")
+	assert.Equal(t, []sbom.LicenseChoice{{License: sbom.License{ID: "MIT"}}}, psrLog.Licenses)
+	assert.Empty(t, psrLog.Hashes)
 
 	dev := findSBOMComponent(t, bom, "pkg:composer/phpstan/phpstan@2.1.0")
 	assert.Equal(t, []sbomProperty{{Name: "shopware-cli:composer:dev", Value: "true"}}, dev.Properties)
@@ -170,7 +185,8 @@ func TestGenerateSBOMForPlugin(t *testing.T) {
 	}
 
 	// Bundled composer packages are not listed again as external, platform
-	// extensions are skipped, npm dev packages and duplicates are dropped.
+	// extensions are skipped, npm dev packages are dropped, devOptional packages
+	// stay, and the alias resolves to lodash and is merged with it.
 	assert.ElementsMatch(t, []string{
 		"pkg:composer/acme/bundled-lib@2.1.4",
 		"pkg:composer/psr/log@3.0.2",
@@ -180,11 +196,29 @@ func TestGenerateSBOMForPlugin(t *testing.T) {
 		"pkg:composer/shopware/storefront",
 		"pkg:npm/%40acme/ui@1.0.0",
 		"pkg:npm/lodash@4.17.21",
+		"pkg:npm/fsevents@2.3.3",
 	}, refs)
 
+	// The root depends on its direct requirements only; psr/log is reached
+	// through acme/bundled-lib.
 	require.NotEmpty(t, bom.Dependencies)
 	assert.Equal(t, "app:acme/sbom-test@1.2.3", bom.Dependencies[0].Ref)
-	assert.ElementsMatch(t, refs, bom.Dependencies[0].DependsOn)
+	assert.Equal(t, []string{
+		"pkg:composer/acme/bundled-lib@2.1.4",
+		"pkg:composer/shopware/core",
+		"pkg:composer/shopware/storefront",
+		"pkg:npm/%40acme/ui@1.0.0",
+		"pkg:npm/lodash@4.17.21",
+		"platform:php",
+	}, bom.Dependencies[0].DependsOn)
+
+	var bundledEdges []string
+	for _, dependency := range bom.Dependencies {
+		if dependency.Ref == "pkg:composer/acme/bundled-lib@2.1.4" {
+			bundledEdges = dependency.DependsOn
+		}
+	}
+	assert.Equal(t, []string{"pkg:composer/psr/log@3.0.2"}, bundledEdges)
 }
 
 func TestGenerateSBOMWithoutBundledDependencies(t *testing.T) {
@@ -263,6 +297,15 @@ func TestComposerConstraintToVers(t *testing.T) {
 		"1.0 - 2.0":          "",
 		"dev-main":           "",
 		"^1.0@dev":           "",
+		"^6.6 >=6.6.5":       "vers:composer/>=6.6.5|<7.0.0",
+		">=6.6 >=6.7":        "vers:composer/>=6.7.0",
+		">=6.6 >6.6":         "vers:composer/>6.6.0",
+		"<7.0 <=6.9":         "vers:composer/<=6.9.0",
+		">=7.0 <6.0":         "",
+		">=1.0 <=1.0":        "",
+		"1.2.3 >=1.0":        "",
+		"!=1.2.3":            "vers:composer/!=1.2.3",
+		"^0.0.0.1":           "",
 		">=6.6.0.0 <6.8.0.0": "vers:composer/>=6.6.0.0|<6.8.0.0",
 	}
 
@@ -278,6 +321,10 @@ func TestNpmIntegrityToHash(t *testing.T) {
 	assert.Equal(t, "a9427246a89761780d31184295bd2bb4b73793f7", hash.Content)
 
 	_, ok = npmIntegrityToHash("md5-abc")
+	assert.False(t, ok)
+
+	// Decodes fine, but one byte is not a SHA-512 digest.
+	_, ok = npmIntegrityToHash("sha512-AA==")
 	assert.False(t, ok)
 
 	_, ok = npmIntegrityToHash("")
@@ -312,9 +359,10 @@ type sbomLicenseExpectation struct {
 	name string
 }
 
-func TestGenerateSBOMKeepsAppIdentityWithoutComposerName(t *testing.T) {
+func TestGenerateSBOMUsesManifestForApps(t *testing.T) {
 	dir := testhelper.NewApp(t, "AcmeApp")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{"description": "App with a composer.json"}`), 0o644))
+	// The composer.json of the app's backend must not replace the app identity.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{"name": "acme/backend", "version": "9.9.9", "require": {"php": ">=8.2"}}`), 0o644))
 
 	ext, err := GetExtensionByFolder(t.Context(), dir)
 	require.NoError(t, err)
@@ -327,7 +375,15 @@ func TestGenerateSBOMKeepsAppIdentityWithoutComposerName(t *testing.T) {
 	assert.Equal(t, "1.0.0", root.Version)
 	assert.Empty(t, root.Group)
 	assert.Empty(t, root.PURL)
-	assert.Equal(t, "App with a composer.json", root.Description)
+	assert.Equal(t, []sbom.LicenseChoice{{License: sbom.License{ID: "MIT"}}}, root.Licenses)
+
+	// Without dependencies the inventory is an empty array, not null.
+	data, err := MarshalSBOM(bom)
+	require.NoError(t, err)
+
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(data, &doc))
+	assert.Equal(t, []any{}, doc["components"])
 }
 
 func TestGenerateSBOMRejectsNpmLockfileVersion1(t *testing.T) {
@@ -340,4 +396,21 @@ func TestGenerateSBOMRejectsNpmLockfileVersion1(t *testing.T) {
 
 	_, err = GenerateSBOM(t.Context(), ext, dir, SBOMOptions{})
 	assert.ErrorContains(t, err, "lockfileVersion 1")
+}
+
+func TestIsComposerPlatformRequirement(t *testing.T) {
+	cases := map[string]bool{
+		"php":                  false,
+		"ext-json":             true,
+		"lib-icu":              true,
+		"php-64bit":            true,
+		"composer-runtime-api": true,
+		"php-http/discovery":   false,
+		"ext-vendor/package":   false,
+		"shopware/core":        false,
+	}
+
+	for name, expected := range cases {
+		assert.Equal(t, expected, isComposerPlatformRequirement(name), name)
+	}
 }

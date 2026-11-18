@@ -212,15 +212,17 @@ var extensionPackageCmd = &cobra.Command{
 		writeSBOM, _ := cmd.Flags().GetBool("sbom")
 		embedSBOM, _ := cmd.Flags().GetBool("sbom-embed")
 
-		if writeSBOM || embedSBOM {
-			sbomPaths := make([]string, 0, 2)
-			if embedSBOM {
-				sbomPaths = append(sbomPaths, filepath.Join(extDir, extension.DefaultExtensionSBOMOutput))
+		// The sidecar is staged and only moved next to the ZIP once the ZIP was
+		// written, so a failed run never pairs an old ZIP with a new SBOM.
+		var sidecarPath, stagedSidecar string
+		var sbomComponents int
+		defer func() {
+			if stagedSidecar != "" {
+				_ = os.Remove(stagedSidecar)
 			}
-			if writeSBOM {
-				sbomPaths = append(sbomPaths, strings.TrimSuffix(fileName, ".zip")+".cdx.json")
-			}
+		}()
 
+		if writeSBOM || embedSBOM {
 			// Reload, because BuildModifier may have written a new version to
 			// manifest.xml after tempExt was read.
 			sbomExt, err := extension.GetExtensionByFolder(cmd.Context(), extDir)
@@ -228,8 +230,30 @@ var extensionPackageCmd = &cobra.Command{
 				return fmt.Errorf("cannot generate SBOM: %w", err)
 			}
 
-			if err := extension.WriteSBOM(cmd.Context(), sbomExt, extDir, extension.SBOMOptions{ToolVersion: cliversion.Version}, sbomPaths...); err != nil {
+			bom, err := extension.GenerateSBOM(cmd.Context(), sbomExt, extDir, extension.SBOMOptions{ToolVersion: cliversion.Version})
+			if err != nil {
 				return fmt.Errorf("cannot generate SBOM: %w", err)
+			}
+			sbomComponents = len(bom.Components)
+
+			data, err := extension.MarshalSBOM(bom)
+			if err != nil {
+				return fmt.Errorf("cannot generate SBOM: %w", err)
+			}
+
+			if embedSBOM {
+				embeddedPath := filepath.Join(extDir, extension.DefaultExtensionSBOMOutput)
+				if err := extension.WriteSBOMFile(embeddedPath, data); err != nil {
+					return fmt.Errorf("cannot generate SBOM: %w", err)
+				}
+				logging.FromContext(cmd.Context()).Infof("Wrote SBOM with %d components to %s", sbomComponents, embeddedPath)
+			}
+
+			if writeSBOM {
+				sidecarPath = strings.TrimSuffix(fileName, ".zip") + ".cdx.json"
+				if stagedSidecar, err = extension.StageSBOMFile(sidecarPath, data); err != nil {
+					return fmt.Errorf("cannot generate SBOM: %w", err)
+				}
 			}
 		}
 
@@ -243,6 +267,14 @@ var extensionPackageCmd = &cobra.Command{
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Created file %s", fileName)
+
+		if stagedSidecar != "" {
+			if err := os.Rename(stagedSidecar, sidecarPath); err != nil {
+				return fmt.Errorf("cannot write SBOM %s: %w", sidecarPath, err)
+			}
+			stagedSidecar = ""
+			logging.FromContext(cmd.Context()).Infof("Wrote SBOM with %d components to %s", sbomComponents, sidecarPath)
+		}
 
 		return nil
 	},

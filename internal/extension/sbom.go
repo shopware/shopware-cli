@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -78,29 +79,81 @@ func WriteSBOM(ctx context.Context, ext Extension, root string, opts SBOMOptions
 		return err
 	}
 
-	// Keep version ranges such as >=6.6.5 readable instead of \u003e=6.6.5.
-	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(bom); err != nil {
-		return fmt.Errorf("cannot marshal SBOM: %w", err)
+	data, err := MarshalSBOM(bom)
+	if err != nil {
+		return err
 	}
-	data := buf.Bytes()
 
 	for _, outputPath := range outputPaths {
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-			return fmt.Errorf("cannot create SBOM output directory: %w", err)
-		}
-
-		if err := os.WriteFile(outputPath, data, 0o644); err != nil { //nolint:gosec
-			return fmt.Errorf("cannot write SBOM %s: %w", outputPath, err)
+		if err := WriteSBOMFile(outputPath, data); err != nil {
+			return err
 		}
 
 		logging.FromContext(ctx).Infof("Wrote SBOM with %d components to %s", len(bom.Components), outputPath)
 	}
 
 	return nil
+}
+
+// MarshalSBOM renders the document as indented JSON.
+func MarshalSBOM(bom *ExtensionBOM) ([]byte, error) {
+	// Keep version ranges such as >=6.6.5 readable instead of \u003e=6.6.5.
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(bom); err != nil {
+		return nil, fmt.Errorf("cannot marshal SBOM: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// WriteSBOMFile writes data to outputPath through a temporary file in the same
+// directory. A failed write leaves an existing file untouched, and an existing
+// symlink at outputPath is replaced instead of followed.
+func WriteSBOMFile(outputPath string, data []byte) error {
+	staged, err := StageSBOMFile(outputPath, data)
+	if err != nil {
+		return err
+	}
+
+	if err := os.Rename(staged, outputPath); err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("cannot write SBOM %s: %w", outputPath, err)
+	}
+
+	return nil
+}
+
+// StageSBOMFile writes data to a temporary file next to outputPath and returns
+// its path, so the caller can rename it into place once the rest of its work
+// succeeded.
+func StageSBOMFile(outputPath string, data []byte) (string, error) {
+	dir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("cannot create SBOM output directory: %w", err)
+	}
+
+	file, err := os.CreateTemp(dir, "."+filepath.Base(outputPath)+".*.tmp")
+	if err != nil {
+		return "", fmt.Errorf("cannot write SBOM %s: %w", outputPath, err)
+	}
+
+	_, writeErr := file.Write(data)
+	closeErr := file.Close()
+	if writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr == nil {
+		writeErr = os.Chmod(file.Name(), 0o644) //nolint:gosec
+	}
+	if writeErr != nil {
+		_ = os.Remove(file.Name())
+		return "", fmt.Errorf("cannot write SBOM %s: %w", outputPath, writeErr)
+	}
+
+	return file.Name(), nil
 }
 
 // GenerateSBOM builds a CycloneDX document for the extension located at root.
@@ -112,10 +165,11 @@ func WriteSBOM(ctx context.Context, ext Extension, root string, opts SBOMOptions
 // Shopware 6.5 any package the shop installs for the plugin) are listed as
 // external components with their version constraint.
 func GenerateSBOM(ctx context.Context, ext Extension, root string, opts SBOMOptions) (*ExtensionBOM, error) {
-	// Apps have no composer.json; their identity comes from manifest.xml.
+	// An app is described by manifest.xml. A composer.json in an app belongs to
+	// its backend and must not replace the app's name or version.
 	var composerJSON *composer.Json
 	composerPath := filepath.Join(root, "composer.json")
-	if _, err := os.Stat(composerPath); err == nil {
+	if _, err := os.Stat(composerPath); err == nil && ext.GetType() != TypePlatformApp {
 		if composerJSON, err = composer.ReadJson(composerPath); err != nil {
 			return nil, fmt.Errorf("cannot read composer.json: %w", err)
 		}
@@ -154,6 +208,8 @@ func GenerateSBOM(ctx context.Context, ext Extension, root string, opts SBOMOpti
 	bom := &ExtensionBOM{
 		BOM:      base,
 		Metadata: extensionBOMMetadata{Metadata: base.Metadata},
+		// An extension without dependencies has an empty array, never null.
+		Components: make([]ExtensionComponent, 0, len(base.Components)),
 	}
 
 	rootComponent := ExtensionComponent{Component: *base.Metadata.Component}
@@ -164,31 +220,55 @@ func GenerateSBOM(ctx context.Context, ext Extension, root string, opts SBOMOpti
 		devSet[name] = true
 	}
 
-	bundledComposer := make(map[string]bool, len(base.Components))
+	installedByName := make(map[string]composer.LockPackage, len(installed.packages))
+	for _, pkg := range installed.packages {
+		installedByName[pkg.Name] = pkg
+	}
+
+	bundledComposer := make(map[string]string, len(base.Components))
 	for _, component := range base.Components {
 		extComponent := ExtensionComponent{Component: component}
 		name := strings.TrimPrefix(component.Group+"/"+component.Name, "/")
-		bundledComposer[name] = true
+		bundledComposer[name] = component.BOMRef
+
+		// go-composer copies licenses and dist hashes as they are; normalize them
+		// like the extension's own license and drop malformed digests.
+		extComponent.Licenses = nil
+		for _, license := range installedByName[name].License {
+			extComponent.Licenses = append(extComponent.Licenses, sbomLicense(license))
+		}
+		extComponent.Hashes = slices.DeleteFunc(slices.Clone(component.Hashes), func(hash sbom.Hash) bool {
+			return !isValidSBOMHash(hash)
+		})
+
 		if devSet[name] {
 			extComponent.Properties = append(extComponent.Properties, sbomProperty{Name: "shopware-cli:composer:dev", Value: "true"})
 		}
 		bom.Components = append(bom.Components, extComponent)
 	}
 
+	directRefs := make([]string, 0)
+
 	if composerJSON != nil {
 		enrichRootComponent(&rootComponent, composerJSON)
 		bom.Metadata.Manufacturer = manufacturerFromComposer(composerJSON)
 
-		bom.Components = append(bom.Components, externalComposerComponents(composerJSON, bundledComposer)...)
+		externals := externalComposerComponents(composerJSON, bundledComposer)
+		bom.Components = append(bom.Components, externals...)
+
+		directRefs = append(directRefs, directComposerRefs(composerJSON, bundledComposer, externals)...)
+	} else if license, err := ext.GetLicense(); err == nil && license != "" {
+		rootComponent.Licenses = append(rootComponent.Licenses, sbomLicense(license))
 	}
 
-	npmComponents, err := bundledNpmComponents(ext, root)
+	npmComponents, npmDirectRefs, err := bundledNpmComponents(ext, root)
 	if err != nil {
 		return nil, err
 	}
 	bom.Components = append(bom.Components, npmComponents...)
+	directRefs = append(directRefs, npmDirectRefs...)
 
-	linkRootDependencies(bom, base.Metadata.Component.BOMRef)
+	linkRootDependencies(bom, base.Metadata.Component.BOMRef, directRefs)
 
 	return bom, nil
 }
@@ -261,7 +341,7 @@ func manufacturerFromComposer(composerJSON *composer.Json) *sbomOrganization {
 
 	if links, ok := composerJSON.Extra.GetMap("manufacturerLink"); ok {
 		for _, key := range []string{"en-GB", "de-DE"} {
-			if link, ok := links[key].(string); ok && link != "" && !containsString(org.URL, link) {
+			if link, ok := links[key].(string); ok && link != "" && !slices.Contains(org.URL, link) {
 				org.URL = append(org.URL, link)
 			}
 		}
@@ -274,7 +354,7 @@ func manufacturerFromComposer(composerJSON *composer.Json) *sbomOrganization {
 	return org
 }
 
-func externalComposerComponents(composerJSON *composer.Json, bundled map[string]bool) []ExtensionComponent {
+func externalComposerComponents(composerJSON *composer.Json, bundled map[string]string) []ExtensionComponent {
 	names := make([]string, 0, len(composerJSON.Require))
 	for name := range composerJSON.Require {
 		names = append(names, name)
@@ -283,7 +363,7 @@ func externalComposerComponents(composerJSON *composer.Json, bundled map[string]
 
 	components := make([]ExtensionComponent, 0, len(names))
 	for _, name := range names {
-		if bundled[name] || isComposerPlatformRequirement(name) {
+		if _, ok := bundled[name]; ok || isComposerPlatformRequirement(name) {
 			continue
 		}
 
@@ -318,8 +398,30 @@ func externalComposerComponents(composerJSON *composer.Json, bundled map[string]
 	return components
 }
 
+// directComposerRefs returns the components for the composer.json
+// requirements: the bundled package where there is one, otherwise the external
+// component.
+func directComposerRefs(composerJSON *composer.Json, bundled map[string]string, externals []ExtensionComponent) []string {
+	externalByName := make(map[string]string, len(externals))
+	for _, external := range externals {
+		externalByName[strings.TrimPrefix(external.Group+"/"+external.Name, "/")] = external.BOMRef
+	}
+
+	refs := make([]string, 0, len(composerJSON.Require))
+	for name := range composerJSON.Require {
+		if ref, ok := bundled[name]; ok {
+			refs = append(refs, ref)
+		} else if ref, ok := externalByName[name]; ok {
+			refs = append(refs, ref)
+		}
+	}
+
+	return refs
+}
+
 func isComposerPlatformRequirement(name string) bool {
-	if name == "php" {
+	// Platform packages have no vendor prefix; php-http/discovery is a regular package.
+	if name == "php" || strings.Contains(name, "/") {
 		return false
 	}
 
@@ -367,26 +469,31 @@ func readInstalledPackages(root string) (installedPackages, error) {
 }
 
 type npmLockPackage struct {
-	Version     string `json:"version"`
-	Resolved    string `json:"resolved"`
-	Integrity   string `json:"integrity"`
-	License     any    `json:"license"`
-	Dev         bool   `json:"dev"`
-	DevOptional bool   `json:"devOptional"`
-	Link        bool   `json:"link"`
+	// Name is set when it differs from the install path, e.g. for aliases.
+	Name                 string            `json:"name"`
+	Version              string            `json:"version"`
+	Resolved             string            `json:"resolved"`
+	Integrity            string            `json:"integrity"`
+	License              any               `json:"license"`
+	Dev                  bool              `json:"dev"`
+	Link                 bool              `json:"link"`
+	Dependencies         map[string]string `json:"dependencies"`
+	OptionalDependencies map[string]string `json:"optionalDependencies"`
 }
 
 // bundledNpmComponents lists the production npm dependencies of the
 // Administration and Storefront sources. They end up in the compiled
-// JavaScript, so they are part of the shipped extension.
-func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, error) {
+// JavaScript, so they are part of the shipped extension. It also returns the
+// direct dependencies of the npm projects.
+func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, []string, error) {
 	indexByPURL := map[string]int{}
 	components := make([]ExtensionComponent, 0)
+	directRefs := make([]string, 0)
 
 	for _, lockPath := range npmLockFiles(ext, root) {
 		content, err := os.ReadFile(lockPath)
 		if err != nil {
-			return nil, fmt.Errorf("cannot read %s: %w", lockPath, err)
+			return nil, nil, fmt.Errorf("cannot read %s: %w", lockPath, err)
 		}
 
 		var lock struct {
@@ -394,13 +501,13 @@ func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, err
 			Packages        map[string]npmLockPackage `json:"packages"`
 		}
 		if err := json.Unmarshal(content, &lock); err != nil {
-			return nil, fmt.Errorf("cannot parse %s: %w", lockPath, err)
+			return nil, nil, fmt.Errorf("cannot parse %s: %w", lockPath, err)
 		}
 
 		// lockfileVersion 1 (npm 6 and older) has no "packages" map, so its
 		// packages would silently be missing from the SBOM.
 		if lock.LockfileVersion < 2 {
-			return nil, fmt.Errorf("cannot read npm packages from %s: lockfileVersion %d is not supported, regenerate it with npm 7 or newer", lockPath, lock.LockfileVersion)
+			return nil, nil, fmt.Errorf("cannot read npm packages from %s: lockfileVersion %d is not supported, regenerate it with npm 7 or newer", lockPath, lock.LockfileVersion)
 		}
 
 		keys := make([]string, 0, len(lock.Packages))
@@ -409,15 +516,23 @@ func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, err
 		}
 		sort.Strings(keys)
 
+		purlByKey := make(map[string]string, len(keys))
+
 		for _, key := range keys {
 			pkg := lock.Packages[key]
 			idx := strings.LastIndex(key, "node_modules/")
-			if key == "" || idx == -1 || pkg.Dev || pkg.DevOptional || pkg.Link || pkg.Version == "" {
+			// devOptional packages stay: they can be reached through an optional
+			// production dependency.
+			if key == "" || idx == -1 || pkg.Dev || pkg.Link || pkg.Version == "" {
 				continue
 			}
 
 			name := key[idx+len("node_modules/"):]
+			if pkg.Name != "" {
+				name = pkg.Name
+			}
 			purl := npmPURL(name, pkg.Version)
+			purlByKey[key] = purl
 
 			group, pkgName := "", name
 			if strings.HasPrefix(name, "@") {
@@ -466,9 +581,18 @@ func bundledNpmComponents(ext Extension, root string) ([]ExtensionComponent, err
 			indexByPURL[purl] = len(components)
 			components = append(components, component)
 		}
+
+		project := lock.Packages[""]
+		for _, dependencies := range []map[string]string{project.Dependencies, project.OptionalDependencies} {
+			for name := range dependencies {
+				if purl, ok := purlByKey["node_modules/"+name]; ok {
+					directRefs = append(directRefs, purl)
+				}
+			}
+		}
 	}
 
-	return components, nil
+	return components, directRefs, nil
 }
 
 func npmLockFiles(ext Extension, root string) []string {
@@ -524,17 +648,31 @@ func npmIntegrityToHash(integrity string) (sbom.Hash, bool) {
 		return sbom.Hash{}, false
 	}
 
-	return sbom.Hash{Alg: alg, Content: hex.EncodeToString(digest)}, true
+	hash := sbom.Hash{Alg: alg, Content: hex.EncodeToString(digest)}
+
+	return hash, isValidSBOMHash(hash)
 }
 
-// linkRootDependencies makes the root component depend on every component,
-// including the external and npm ones go-composer/sbom does not know about.
-func linkRootDependencies(bom *ExtensionBOM, rootRef string) {
-	refs := make([]string, 0, len(bom.Components))
-	for _, component := range bom.Components {
-		refs = append(refs, component.BOMRef)
+// isValidSBOMHash reports whether the hash is a hex digest of the length
+// CycloneDX requires for its algorithm.
+func isValidSBOMHash(hash sbom.Hash) bool {
+	lengths := map[string]int{"SHA-1": 40, "SHA-256": 64, "SHA-384": 96, "SHA-512": 128}
+	expected, ok := lengths[hash.Alg]
+	if !ok || len(hash.Content) != expected {
+		return false
 	}
-	sort.Strings(refs)
+
+	_, err := hex.DecodeString(hash.Content)
+
+	return err == nil
+}
+
+// linkRootDependencies sets the root component's direct dependencies. The
+// edges between packages from go-composer/sbom stay as they are.
+func linkRootDependencies(bom *ExtensionBOM, rootRef string, directRefs []string) {
+	refs := slices.Clone(directRefs)
+	slices.Sort(refs)
+	refs = slices.Compact(refs)
 
 	for i, dependency := range bom.Dependencies {
 		if dependency.Ref == rootRef {
@@ -580,16 +718,6 @@ func splitComposerPackageName(name string) (string, string) {
 	return "", name
 }
 
-func containsString(list []string, value string) bool {
-	for _, item := range list {
-		if item == value {
-			return true
-		}
-	}
-
-	return false
-}
-
 var composerVersionPattern = regexp.MustCompile(`^v?(\d+)(?:\.(\d+|\*|x))?(?:\.(\d+|\*|x))?(?:\.(\d+|\*|x))?$`)
 
 type versBound struct {
@@ -630,21 +758,62 @@ func composerConstraintToVers(constraint string) string {
 		bounds = append(bounds, tokenBounds...)
 	}
 
-	sort.SliceStable(bounds, func(i, j int) bool {
-		vi, errI := version.NewVersion(bounds[i].version)
-		vj, errJ := version.NewVersion(bounds[j].version)
-		if errI != nil || errJ != nil {
-			return bounds[i].version < bounds[j].version
-		}
-		return vi.LessThan(vj)
-	})
-
-	rendered := make([]string, 0, len(bounds))
-	for _, b := range bounds {
-		rendered = append(rendered, b.op+b.version)
+	rendered, ok := intersectVersBounds(bounds)
+	if !ok {
+		return ""
 	}
 
 	return "vers:composer/" + strings.Join(rendered, "|")
+}
+
+// intersectVersBounds reduces the bounds to the composer intersection: one
+// lower and one upper bound at most, because vers rejects consecutive bounds of
+// the same direction. Exact versions and != are only kept on their own.
+func intersectVersBounds(bounds []versBound) ([]string, bool) {
+	if len(bounds) == 1 {
+		return []string{bounds[0].op + bounds[0].version}, true
+	}
+
+	var lower, upper *versBound
+	var lowerVersion, upperVersion *version.Version
+
+	for i := range bounds {
+		bound := &bounds[i]
+		if bound.op == "" || bound.op == "!=" {
+			return nil, false
+		}
+
+		v, err := version.NewVersion(bound.version)
+		if err != nil {
+			return nil, false
+		}
+
+		if strings.HasPrefix(bound.op, ">") {
+			if lower == nil || v.GreaterThan(lowerVersion) || (v.Equal(lowerVersion) && bound.op == ">") {
+				lower, lowerVersion = bound, v
+			}
+			continue
+		}
+
+		if upper == nil || v.LessThan(upperVersion) || (v.Equal(upperVersion) && bound.op == "<") {
+			upper, upperVersion = bound, v
+		}
+	}
+
+	rendered := make([]string, 0, 2)
+	if lower != nil {
+		rendered = append(rendered, lower.op+lower.version)
+	}
+	if upper != nil {
+		rendered = append(rendered, upper.op+upper.version)
+	}
+
+	// An empty or single-version intersection is left to the raw constraint.
+	if lower != nil && upper != nil && !lowerVersion.LessThan(upperVersion) {
+		return nil, false
+	}
+
+	return rendered, true
 }
 
 // composerTokenToVersBounds converts a single constraint such as ^6.6, ~6.6.0,
@@ -678,6 +847,12 @@ func composerTokenToVersBounds(token string) ([]versBound, bool) {
 	}
 
 	exact := op == "" || op == "=" || op == "=="
+
+	// Composer bumps a different segment for four-part ^ and ~ constraints;
+	// leave those to the raw constraint.
+	if (op == "^" || op == "~") && len(parts) > 3 {
+		return nil, false
+	}
 
 	switch {
 	case wildcard && !exact:

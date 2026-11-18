@@ -123,7 +123,7 @@ func TestPackageWritesAndEmbedsSBOM(t *testing.T) {
 
 	var embeddedDoc map[string]any
 	require.NoError(t, json.NewDecoder(embedded).Decode(&embeddedDoc))
-	assert.Equal(t, doc["serialNumber"], embeddedDoc["serialNumber"])
+	assert.Equal(t, doc, embeddedDoc)
 
 	// The source folder stays untouched.
 	assert.NoFileExists(t, filepath.Join(extDir, "sbom.cdx.json"))
@@ -131,6 +131,8 @@ func TestPackageWritesAndEmbedsSBOM(t *testing.T) {
 
 func TestPackageSBOMUsesOverwrittenAppVersion(t *testing.T) {
 	extDir := testhelper.NewApp(t, "FroshApp")
+	// A named composer.json of the app's backend must not replace the app identity.
+	testhelper.WriteFile(t, filepath.Join(extDir, "composer.json"), `{"name": "acme/app-backend", "version": "1.0.0"}`)
 	testhelper.WriteFile(t, filepath.Join(extDir, ".shopware-extension.yml"), `build:
   zip:
     composer:
@@ -165,4 +167,41 @@ func TestPackageSBOMUsesOverwrittenAppVersion(t *testing.T) {
 	component := doc["metadata"].(map[string]any)["component"].(map[string]any)
 	assert.Equal(t, "FroshApp", component["name"])
 	assert.Equal(t, "2.3.4", component["version"])
+}
+
+func TestPackageKeepsPreviousSidecarWhenZipFails(t *testing.T) {
+	extDir := writeSBOMCommandTestPlugin(t)
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+
+	disableGit = true
+	t.Cleanup(func() { disableGit = false })
+
+	outputDir := filepath.Join(workDir, "dist")
+	sidecar := filepath.Join(outputDir, "FroshTest.cdx.json")
+	require.NoError(t, os.MkdirAll(filepath.Join(outputDir, "FroshTest.zip"), 0o755))
+	require.NoError(t, os.WriteFile(sidecar, []byte("previous"), 0o644))
+
+	extensionPackageCmd.SetContext(t.Context())
+	require.NoError(t, extensionPackageCmd.Flags().Set("output-directory", outputDir))
+	require.NoError(t, extensionPackageCmd.Flags().Set("sbom", "true"))
+	t.Cleanup(func() {
+		_ = extensionPackageCmd.Flags().Set("output-directory", "")
+		_ = extensionPackageCmd.Flags().Set("sbom", "false")
+	})
+
+	// A directory in place of the ZIP makes CreateZip fail.
+	require.Error(t, extensionPackageCmd.RunE(extensionPackageCmd, []string{extDir}))
+
+	content, err := os.ReadFile(sidecar)
+	require.NoError(t, err)
+	assert.Equal(t, "previous", string(content))
+
+	entries, err := os.ReadDir(outputDir)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	assert.ElementsMatch(t, []string{"FroshTest.zip", "FroshTest.cdx.json"}, names)
 }
