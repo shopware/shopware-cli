@@ -87,17 +87,16 @@ func TestLocalExecutorDatabaseSocketSelection(t *testing.T) {
 	}
 }
 
-func TestDatabaseConnectionOpenUsesUnixSocket(t *testing.T) {
+func TestMySQLSocketDial(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("requires a Unix socket")
 	}
 	// Accept a real local socket connection, then close before the MySQL
 	// handshake. This proves transport selection without a database or credentials.
-	dir, err := os.MkdirTemp("", "mysql-socket-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	socket := filepath.Join(dir, "mysql.sock")
-	listener, err := net.Listen("unix", socket)
+	// Keep the test name short so t.TempDir paths fit Unix socket limits.
+	socket := filepath.Join(t.TempDir(), "mysql.sock")
+	var config net.ListenConfig
+	listener, err := config.Listen(t.Context(), "unix", socket)
 	if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES) {
 		t.Skipf("sandbox does not permit Unix sockets: %v", err)
 	}

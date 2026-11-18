@@ -48,11 +48,12 @@ func (c *DatabaseConnection) Addr() string {
 // connection with mysql.NewConnector and sql.OpenDB instead of a DSN.
 func (c *DatabaseConnection) MySQLConfig() (*mysql.Config, error) {
 	cfg := mysql.NewConfig()
-	if c.tunneledNet != "" {
+	switch {
+	case c.tunneledNet != "":
 		cfg.Net = c.tunneledNet
-	} else if c.UnixSocket != "" {
+	case c.UnixSocket != "":
 		cfg.Net = "unix"
-	} else {
+	default:
 		cfg.Net = "tcp"
 	}
 	cfg.Addr = c.Addr()
