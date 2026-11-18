@@ -27,8 +27,7 @@ stdin. After initialization, the command prints any remaining setup steps.
 
 Requirements:
   - The target server runs PHP 8.4 or higher
-  - The SSH user is the same user that runs PHP (web server / PHP-FPM), so
-    files created during a deployment are readable and writable by the shop`,
+  - For a separate PHP runtime account, set ssh.http_user and install the Linux ACL tools`,
 	Example: `  shopware-cli project deploy init -e production
   shopware-cli -n project deploy init -e production --init-config - < init.json`,
 	Args: cobra.MaximumNArgs(1),

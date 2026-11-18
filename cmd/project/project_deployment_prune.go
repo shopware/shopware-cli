@@ -21,6 +21,7 @@ var projectDeploymentPruneCmd = &cobra.Command{
 	Long: `Remove old SSH deployments and unreferenced cached artifacts from the target.
 Keep the most recent distinct deployments according to --keep. Active, failed,
 and incomplete deployments are protected; interrupted cleanup is resumed.
+Recently deactivated releases stay available while PHP workers may still use them.
 Related runtime data, metadata, and logs are removed with each deployment.
 Artifact cleanup is skipped when archive references cannot be determined safely.
 Interactive runs preview cleanup and ask for confirmation before deleting.
@@ -103,20 +104,28 @@ func confirmProjectDeploymentPrune(cmd *cobra.Command, preview deployment.Deploy
 func writeProjectDeploymentPruneResult(output io.Writer, result deployment.DeploymentPruneResult, verb string, err error) error {
 	if len(result.Hosts) > 0 {
 		for _, host := range result.Hosts {
-			hostResult := deployment.DeploymentPruneResult{Deployments: host.Deployments, Artifacts: host.Artifacts, ArtifactSkipReasons: host.ArtifactSkipReasons, IncompleteDeployments: host.IncompleteDeployments}
+			hostResult := deployment.DeploymentPruneResult{
+				Deployments: host.Deployments, Artifacts: host.Artifacts, RecentDeployments: host.RecentDeployments,
+				ArtifactSkipReasons: host.ArtifactSkipReasons, IncompleteDeployments: host.IncompleteDeployments,
+			}
 			if writeErr := writeDeploymentPruneResult(output, hostResult, verb, "["+host.Host+"] "); writeErr != nil {
 				return errors.Join(err, writeErr)
 			}
 		}
 		return err
 	}
-	if err != nil && len(result.Deployments) == 0 && len(result.Artifacts) == 0 && len(result.ArtifactSkipReasons) == 0 && len(result.IncompleteDeployments) == 0 {
+	if err != nil && result.Empty() {
 		return err
 	}
 	return errors.Join(err, writeDeploymentPruneResult(output, result, verb, ""))
 }
 
 func writeDeploymentPruneResult(output io.Writer, result deployment.DeploymentPruneResult, verb, prefix string) error {
+	for _, name := range result.RecentDeployments {
+		if _, err := fmt.Fprintf(output, "%sKept recently active deployment %q for PHP workers.\n", prefix, name); err != nil {
+			return err
+		}
+	}
 	for _, reason := range result.ArtifactSkipReasons {
 		if _, err := fmt.Fprintf(output, "%sSkipped cached artifact cleanup: %s\n", prefix, reason); err != nil {
 			return err
@@ -127,7 +136,7 @@ func writeDeploymentPruneResult(output io.Writer, result deployment.DeploymentPr
 			return err
 		}
 	}
-	if len(result.Deployments) == 0 && len(result.Artifacts) == 0 && len(result.ArtifactSkipReasons) == 0 && len(result.IncompleteDeployments) == 0 {
+	if result.Empty() {
 		_, err := fmt.Fprintf(output, "%sNo deployments or cached artifacts to prune.\n", prefix)
 		return err
 	}

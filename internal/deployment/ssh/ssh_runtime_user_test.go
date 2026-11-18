@@ -44,7 +44,8 @@ func TestSSHRolloutWithHTTPUser(t *testing.T) {
 	testhelper.WriteFile(t, filepath.Join(root, "shared/.env.local"), "APP_ENV=prod")
 	require.NoError(t, os.Chmod(filepath.Join(root, "shared/.env.local"), 0o600))
 	archive := deploymentTestArchive(t, map[string]string{
-		"vendor/bin/shopware-deployment-helper": `<?php file_put_contents('var/cache/generated', 'cached');`,
+		"vendor/bin/shopware-deployment-helper": `<?php mkdir('var/cache/prod_test'); file_put_contents('var/cache/generated', 'cached');`,
+		"vendor/ezyang/htmlpurifier/README":     "HTMLPurifier",
 		"public/media/seed":                     "media",
 	})
 
@@ -70,6 +71,9 @@ func TestSSHRolloutWithHTTPUser(t *testing.T) {
 	assert.Contains(t, acl("shared/public/media"), "default:user:nobody:rwx")
 	assert.Contains(t, acl("shared/public/media/seed"), "user:nobody:rw-")
 	assert.Contains(t, acl("current/var/cache/generated"), "user:nobody:")
+	for _, serializer := range []string{"HTML", "CSS", "URI"} {
+		assert.Contains(t, acl("current/var/cache/prod_test/"+serializer), "default:user:nobody:rwx")
+	}
 	assert.NotContains(t, acl(".shopware-cli"), "user:nobody:")
 	assert.NotContains(t, acl("current/vendor/bin/shopware-deployment-helper"), "user:nobody:")
 
@@ -91,8 +95,33 @@ func TestSSHRolloutWithHTTPUser(t *testing.T) {
 	out, err = run(second, []byte("CONTINUE second-event\nACTIVATE second-event\n"))
 	require.NoError(t, err, "%s", out)
 	rollback := sshRolloutInput{Root: root, Action: sshDeploymentActivate, Release: "release", Reference: "rollback"}
+	// A failed read-only inspection must leave the retained release reusable.
+	helper := filepath.Join(root, "releases/release/vendor/bin/shopware-deployment-helper")
+	require.NoError(t, os.Chmod(helper, 0o644))
+	failedRollback := rollback
+	failedRollback.Reference = "failed-rollback"
+	_, err = run(failedRollback, []byte("ACTIVATE failed-rollback\n"))
+	require.Error(t, err)
+	require.NoError(t, os.Chmod(helper, 0o444))
 	out, err = run(rollback, []byte("ACTIVATE rollback\n"))
 	require.NoError(t, err, "%s", out)
+	ageDeactivation(t, root, "second", "second-event")
+	if os.Geteuid() != 0 {
+		// A cache with a restrictive ACL must fail the preview before any
+		// marker or release files are changed, even on non-interactive prune.
+		private := filepath.Join(root, "runtime/second/cache/private")
+		testhelper.WriteFile(t, filepath.Join(private, "cached"), "cached")
+		require.NoError(t, os.Chmod(private, 0o555))
+		cmd, program := localDeploymentCommand(t, "prune", map[string]any{"root": root, "keep": 0, "dry_run": false})
+		cmd.Stdin = program
+		_, err = cmd.CombinedOutput()
+		require.Error(t, err)
+		assert.FileExists(t, filepath.Join(root, "releases/second/vendor/bin/shopware-deployment-helper"))
+		out, err = run(candidates, nil)
+		require.NoError(t, err)
+		assert.Contains(t, string(out), `"reference":"second"`)
+		require.NoError(t, os.Chmod(private, 0o755))
+	}
 	runLocalDeploymentCommand(t, "prune", map[string]any{"root": root, "keep": 0, "dry_run": false})
 	assert.NoDirExists(t, filepath.Join(root, "runtime", "second"))
 	assert.DirExists(t, filepath.Join(root, "runtime", "release"))

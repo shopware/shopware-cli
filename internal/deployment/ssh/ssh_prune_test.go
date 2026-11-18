@@ -3,6 +3,7 @@ package ssh
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,6 +38,13 @@ func TestPruneConfirmedPlan(t *testing.T) {
 				require.NoError(t, json.Unmarshal(output, &result))
 				return result, err
 			}
+			// Legacy metadata has no deactivation time. A fresh active link
+			// protects the previous release until its worker grace period ends.
+			recent, err := run(DeploymentPruneOptions{DryRun: true})
+			require.NoError(t, err)
+			require.Equal(t, []string{"B"}, recent.RecentDeployments)
+			require.Empty(t, recent.Deployments)
+			require.NoError(t, exec.CommandContext(t.Context(), "touch", "-h", "-t", "202001010000", filepath.Join(root, "current")).Run())
 			preview, err := run(DeploymentPruneOptions{DryRun: true})
 			require.NoError(t, err)
 			require.Equal(t, []Deployment{{Reference: "B"}}, preview.Deployments)

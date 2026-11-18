@@ -100,7 +100,7 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 	err := huh.NewForm(huh.NewGroup(
 		huh.NewSelect[bool]().
 			Title("Set up this environment for deployments?").
-			Description("Requirements:\n• The server runs PHP 8.4 or higher\n• The SSH user is the same user that runs PHP (web server / PHP-FPM)").
+			Description("Requirements:\n• The server runs PHP 8.4 or higher\n• For a separate PHP runtime account, set ssh.http_user and install the Linux ACL tools").
 			Options(huh.NewOption("Continue", true), huh.NewOption("Cancel", false)).
 			Value(&proceed),
 	)).WithTheme(tui.ShopwareTheme()).RunWithContext(ctx)

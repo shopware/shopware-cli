@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,11 +108,41 @@ func TestDeploymentPayloadLifecycle(t *testing.T) {
 	var pruned DeploymentPruneResult
 	output = runLocalDeploymentCommand(t, "prune", map[string]any{"root": root, "keep": 1, "dry_run": false})
 	require.NoError(t, json.Unmarshal(output, &pruned))
+	assert.Equal(t, []string{"two"}, pruned.RecentDeployments)
+	assert.Empty(t, pruned.Deployments)
+	assert.DirExists(t, filepath.Join(root, "releases", "two"))
+
+	ageDeactivation(t, root, "two", "event-2")
+	output = runLocalDeploymentCommand(t, "prune", map[string]any{"root": root, "keep": 1, "dry_run": false})
+	pruned = DeploymentPruneResult{}
+	require.NoError(t, json.Unmarshal(output, &pruned))
+	assert.Empty(t, pruned.RecentDeployments)
 	assert.Equal(t, []Deployment{{Reference: "two"}}, pruned.Deployments)
 	assert.Empty(t, pruned.Artifacts, "the retained release still uses the artifact")
 	assert.NoDirExists(t, filepath.Join(root, "releases", "two"))
 	assert.DirExists(t, filepath.Join(root, "releases", "one"))
 	assert.Equal(t, "releases/one", active())
+}
+
+func ageDeactivation(t *testing.T, root, name, reference string) {
+	t.Helper()
+	yesterday := time.Now().UTC().Add(-24 * time.Hour)
+	for _, entry := range []string{"releases/" + name, "rollouts/" + reference} {
+		file := filepath.Join(root, ".shopware-cli", entry+".json")
+		data, err := os.ReadFile(file)
+		require.NoError(t, err)
+		var state map[string]any
+		require.NoError(t, json.Unmarshal(data, &state))
+		require.Equal(t, reference, state["reference"])
+		state["deployed_at"] = yesterday.Format(time.RFC3339)
+		if entry == "releases/"+name {
+			require.NotEmpty(t, state["deactivated_at"])
+			state["deactivated_at"] = yesterday.Add(time.Hour).Format(time.RFC3339)
+		}
+		data, err = json.Marshal(state)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(file, data, 0o600))
+	}
 }
 
 func deploymentTestArchive(t *testing.T, files map[string]string) []byte {
