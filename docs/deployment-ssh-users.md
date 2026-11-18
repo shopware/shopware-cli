@@ -41,5 +41,23 @@ user IDs of all participating hosts. Use a new release name when changing the
 PHP runtime user and remove obsolete ACLs when retiring an account.
 Use the CacheTool integration for OPcache resets with a separate PHP user.
 
+During rollout the deployment account prepares Shopware's HTMLPurifier cache
+directories before the first web request. PHP can then use its usual `0022`
+umask. Repeating a rollout or rolling back also works with caches created by
+the PHP account. If an older release or a plugin creates private directories,
+prune reports the inaccessible cache path before starting cleanup. Grant the
+deployment account read, write and traverse access to that directory as its
+owner, then retry prune.
+
 Omitting both options keeps the single-account behavior and requires no ACL
 tools or sudo.
+
+## Pruning after an activation
+
+`project deploy prune` keeps a recently deactivated release for at least
+120 seconds, including after rollback and with `--keep 0`. A higher
+`realpath_cache_ttl` on the target's PHP CLI extends the grace period. Both
+the preview and the actual prune list releases retained for PHP workers.
+Run prune again after the grace period to reclaim them. If the web server
+caches paths for longer or serves long-running requests, schedule cleanup
+after those workers have drained.

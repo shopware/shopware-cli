@@ -142,7 +142,7 @@ try {
                 throw new RuntimeException("Cannot establish the last successful activation of release $name");
             }
 
-            deploymentVerifySealedRelease($root, $release, $name);
+            deploymentVerifySealedRelease($root, $release, $name, $httpUID);
             deploymentSend("UNCHANGED $id\n$reference");
             deploymentActivationResult($input, $successful, true);
             deploymentAwaitCohort($input);
@@ -184,9 +184,9 @@ try {
         deploymentSend("REUSE $id");
         deploymentAwaitPreparation($input, $id);
 
-        $releaseMetadata['ready'] = false;
-        deploymentWriteMetadata($releaseFile, $releaseMetadata);
         if ($acl === null) {
+            $releaseMetadata['ready'] = false;
+            deploymentWriteMetadata($releaseFile, $releaseMetadata);
             deploymentRuntimeCache($root, $release, $name, true);
         }
     } else {
@@ -204,10 +204,6 @@ try {
         deploymentDirectory($release);
         deploymentRun(['tar', '-xzf', $archive, '--no-same-owner', '--no-same-permissions', '-C', $release], $root);
         deploymentRuntimeCache($root, $release, $name);
-
-        if ($acl !== null) {
-            deploymentWritableACL(path_join($root, 'runtime', $name, 'cache'), $acl['http'], $acl['deploy'], true);
-        }
 
         // Persistent shared data is separate from host- and release-local cache.
         foreach ($input['shared_directories'] ?? [] as $relative) {
@@ -265,12 +261,25 @@ try {
         if ($shareInstallLock) {
             deploymentShare($root, $release, 'install.lock', false, $previous, false, $acl);
         }
+
+        if ($acl !== null) {
+            $cache = path_join($root, 'runtime', $name, 'cache');
+            deploymentPermissionDirectory($cache);
+            if (is_dir(path_join($release, 'vendor', 'ezyang', 'htmlpurifier'))) {
+                deploymentPrepareSanitizerCache($cache);
+            }
+            deploymentWritableACL($cache, $acl['http'], $acl['deploy'], true);
+        }
     }
 
-    deploymentVerifyRuntimeCache($root, $release, $name);
-    deploymentReleasePermissions($release, true);
-    $releaseMetadata['ready'] = true;
-    deploymentWriteMetadata($releaseFile, $releaseMetadata);
+    if ($reuse && $acl !== null) {
+        deploymentVerifySealedRelease($root, $release, $name, $httpUID);
+    } else {
+        deploymentVerifyRuntimeCache($root, $release, $name);
+        deploymentReleasePermissions($release, true);
+        $releaseMetadata['ready'] = true;
+        deploymentWriteMetadata($releaseFile, $releaseMetadata);
+    }
     $metadata['status'] = 'prepared';
     deploymentWriteMetadata($metadataFile, $metadata);
     deploymentSend("READY $id");
@@ -291,6 +300,7 @@ try {
     // later no-op report an older activation as the current successful rollout.
     $releaseMetadata['created_at'] ??= deploymentReleaseCreatedAt($root, $name, $releaseMetadata) ?? $metadata['created_at'];
     $releaseMetadata['activation_pending'] = $id;
+    unset($releaseMetadata['deactivated_at']);
     deploymentWriteMetadata($releaseFile, $releaseMetadata);
     $candidate = path_join($root, ".current-$id");
 
@@ -315,6 +325,15 @@ try {
         $releaseMetadata['deployed_at'] = $metadata['deployed_at'];
         unset($releaseMetadata['activation_pending']);
         deploymentWriteMetadata($releaseFile, $releaseMetadata);
+
+        if ($previous !== null) {
+            $previousFile = deploymentStatePath($root, 'releases', sprintf('%s.json', basename($previous)));
+            if (deploymentRegularFile($previousFile, 'release metadata')) {
+                $previousState = deploymentReadMetadata($previousFile);
+                $previousState['deactivated_at'] = $metadata['deployed_at'];
+                deploymentWriteMetadata($previousFile, $previousState);
+            }
+        }
     } catch (Throwable $error) {
         // Activation has committed. Do not misreport it as a failed rollout.
         deploymentLog("Activated $id, but could not finalize rollout metadata: {$error->getMessage()}");
@@ -324,7 +343,7 @@ try {
         if ($cachetool !== null) {
             deploymentCachetoolReset($cachetool);
         } elseif (($input['probe_php_host'] ?? false) === true && $acl === null) {
-            deploymentRestartPHPProcesses();
+            deploymentRestartPHPProcesses($root);
         }
     } catch (Throwable $error) {
         // The switch has committed; a reset failure must not undo readiness.

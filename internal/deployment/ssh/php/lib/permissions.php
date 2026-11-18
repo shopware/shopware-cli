@@ -96,14 +96,23 @@ function deploymentRuntimeDirectoryAccess(string $path, bool $makeWritable = fal
     }
 }
 
-function deploymentValidateCacheTree(string $path, bool $makeWritable = false): void
+function deploymentValidateCacheTree(string $path, bool $makeWritable = false, ?string $httpUID = null): void
 {
-    switch (deploymentFileType(deploymentPermissionStat($path)['mode'])) {
+    $stat = deploymentPermissionStat($path);
+    switch (deploymentFileType($stat['mode'])) {
         case 'directory':
-            deploymentRuntimeDirectoryAccess($path, $makeWritable);
+            if ($httpUID !== null && (string) $stat['uid'] === $httpUID) {
+                // PHP may tighten the ACL mask on its own cache. A retained
+                // release needs no writes here, even when the cache is private.
+                if (!is_readable($path) || !is_executable($path)) {
+                    return;
+                }
+            } else {
+                deploymentRuntimeDirectoryAccess($path, $makeWritable);
+            }
 
             foreach (new FilesystemIterator($path) as $entry) {
-                deploymentValidateCacheTree($entry->getPathname(), $makeWritable);
+                deploymentValidateCacheTree($entry->getPathname(), $makeWritable, $httpUID);
             }
 
             break;
@@ -115,7 +124,7 @@ function deploymentValidateCacheTree(string $path, bool $makeWritable = false): 
     }
 }
 
-function deploymentVerifyRuntimeCache(string $root, string $release, string $name): void
+function deploymentVerifyRuntimeCache(string $root, string $release, string $name, ?string $httpUID = null): void
 {
     $directories = [
         $root,
@@ -138,7 +147,23 @@ function deploymentVerifyRuntimeCache(string $root, string $release, string $nam
         throw new RuntimeException("Release cache must link to $cache");
     }
 
-    deploymentValidateCacheTree($cache);
+    deploymentRuntimeDirectoryAccess($cache);
+    deploymentValidateCacheTree($cache, false, $httpUID);
+}
+
+// HTMLPurifier otherwise creates its serializer directories on the first web
+// request and chmods away the deploy user's inherited write ACL (umask 0022).
+// Prepare only the fresh release's local Shopware production caches.
+function deploymentPrepareSanitizerCache(string $cache): void
+{
+    foreach (new FilesystemIterator($cache) as $entry) {
+        if ($entry->isLink() || !$entry->isDir() || !str_starts_with($entry->getFilename(), 'prod_')) {
+            continue;
+        }
+        foreach (['HTML', 'CSS', 'URI'] as $type) {
+            deploymentDirectory(path_join($entry->getPathname(), $type));
+        }
+    }
 }
 
 // Called only for inactive releases, under the deployment lock and after
@@ -270,12 +295,12 @@ function deploymentReleasePermissions(string $path, bool $seal): void
     }
 }
 
-function deploymentVerifySealedRelease(string $root, string $release, string $name): void
+function deploymentVerifySealedRelease(string $root, string $release, string $name, ?string $httpUID): void
 {
     try {
-        deploymentVerifyRuntimeCache($root, $release, $name);
+        deploymentVerifyRuntimeCache($root, $release, $name, $httpUID);
         deploymentReleasePermissions($release, false);
     } catch (Throwable $error) {
-        throw new RuntimeException("Active release $name is not protected by the readonly runtime-cache policy; deploy a new release name. {$error->getMessage()}", 0, $error);
+        throw new RuntimeException(sprintf('Release %s is not protected by the readonly runtime-cache policy; deploy a new release name. %s', $name, $error->getMessage()), 0, $error);
     }
 }
