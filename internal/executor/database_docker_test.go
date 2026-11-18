@@ -12,6 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDockerDatabaseConnectionRejectsContainerSocket(t *testing.T) {
+	d := &DockerExecutor{env: map[string]string{"DATABASE_URL": "mysql://app:secret@localhost/shop?unix_socket=/run/mysql.sock"}}
+	_, err := d.DatabaseConnection(t.Context())
+	require.ErrorContains(t, err, "cannot connect to a container MySQL unix socket")
+}
+
 // writeFakeDocker puts a docker stub on PATH that answers
 // `docker compose exec ... env` with DATABASE_URL=execOutput (or fails when
 // empty) and `docker compose port <service> <port>` with portScript.
