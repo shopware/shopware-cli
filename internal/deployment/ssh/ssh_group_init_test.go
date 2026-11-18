@@ -11,6 +11,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // fixtureInitializationGroup creates a two-host group with inspectable in-memory configuration stores.
@@ -117,7 +118,7 @@ func TestSSHGroupInitializationRepeatVerifiesWithoutWriting(t *testing.T) {
 			if !consistent {
 				stores["a"].states[1].RuntimeSHA256 = "different"
 			}
-			err := g.initializeDeployment(t.Context(), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
+			err := g.initializeDeployment(logging.DisableLogger(t.Context()), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
 				t.Fatal("completed initialization must not prompt")
 				return sshDeploymentInitConfig{}, false, nil
 			})

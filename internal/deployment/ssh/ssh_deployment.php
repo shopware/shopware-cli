@@ -448,7 +448,8 @@ try {
     if (is_link($lockPath) || (file_exists($lockPath) && !is_file($lockPath))) {
         throw new RuntimeException("Deployment lock must be a regular file");
     }
-    $lock = fopen($lockPath, $action === 'candidates' || $sameActive ? 'r' : 'c');
+    // Close the lock descriptor on exec so hook subprocesses cannot retain it.
+    $lock = fopen($lockPath, $action === 'candidates' || $sameActive ? 're' : 'ce');
     if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
         throw new RuntimeException("Another deployment holds the lock for $root");
     }
