@@ -1,5 +1,49 @@
 <?php
 
+function deploymentRuntimeAccounts(string $httpUser, string $root): ?array
+{
+    if ($httpUser === '') {
+        return null;
+    }
+    $deploy = trim(deploymentRunBoundedCommand(['id', '-u'], $root, 5, true));
+    try {
+        $http = trim(deploymentRunBoundedCommand(['id', '-u', '--', $httpUser], $root, 5, true));
+    } catch (Throwable $error) {
+        throw new RuntimeException("Cannot resolve PHP runtime user $httpUser: {$error->getMessage()}", 0, $error);
+    }
+    if (!ctype_digit($deploy) || !ctype_digit($http)) {
+        throw new RuntimeException("Cannot resolve deployment user IDs for PHP runtime user $httpUser");
+    }
+    return $http === $deploy ? null : ['http' => $http, 'deploy' => $deploy];
+}
+
+// Install access ACLs on writable roots and default ACLs for children created
+// by either PHP or the deployment helper. Only walk freshly extracted data.
+// Shared directories already serving traffic can be large and application-owned.
+function deploymentWritableACL(string $path, string $httpUID, string $deployUID, bool $fresh): void
+{
+    $access = "u:$httpUID:rwx,u:$deployUID:rwx,d:u:$httpUID:rwx,d:u:$deployUID:rwx";
+    if ($fresh) {
+        // Physical traversal skips symlinks. A hard-linked file may also be
+        // release code, so never change its ACL through a writable directory.
+        // Keep the tree private while granting ACLs on its descendants.
+        $mode = deploymentPermissionStat($path)['mode'] & 07777;
+        if (!chmod($path, 0700)) {
+            throw new RuntimeException("Cannot prepare runtime permissions: $path");
+        }
+        try {
+            deploymentRun(['find', '-P', $path, '-mindepth', '1',
+                '(', '-type', 'f', '-links', '1', '-exec', 'setfacl', '-m', "u:$httpUID:rwX,u:$deployUID:rwX", '--', '{}', '+', ')',
+                '-o', '(', '-type', 'd', '-exec', 'setfacl', '-m', $access, '--', '{}', '+', ')'], $path);
+        } finally {
+            if (!chmod($path, $mode)) {
+                throw new RuntimeException("Cannot restore runtime permissions: $path");
+            }
+        }
+    }
+    deploymentRun(['setfacl', '-m', $access, '--', $path], $path);
+}
+
 // Runtime data lives outside the sealed release. Never follow a symlink while
 // inspecting or changing permissions: shared paths belong to the application.
 function deploymentPermissionStat(string $path): array

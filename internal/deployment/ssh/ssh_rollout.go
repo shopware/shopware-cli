@@ -67,7 +67,22 @@ type sshRolloutInput struct {
 	SharedFiles       []string                            `json:"shared_files"`
 	SharedDirectories []string                            `json:"shared_directories"`
 	Cachetool         *sshCachetoolInput                  `json:"cachetool,omitempty"`
+	HTTPUser          string                              `json:"http_user,omitempty"`
 	ProbePHPHost      bool                                `json:"probe_php_host,omitempty"`
+}
+
+// rolloutInput applies the resolved host configuration to a deploy payload.
+func (s *SSH) rolloutInput(input sshRolloutInput) sshRolloutInput {
+	if s.env != nil && s.env.SSH != nil {
+		config := s.env.SSH
+		input.HTTPUser = config.HTTPUser
+		if input.Action != sshDeploymentCandidates {
+			input.Hooks = config.Hooks
+			input.PHP = config.PHPBinary
+			input.PHPArgs = config.PHPArgs
+		}
+	}
+	return input
 }
 
 // RolloutDeployment prepares a release and atomically switches current.
@@ -139,11 +154,6 @@ func (s *SSH) rolloutArchive(ctx context.Context, deployment Deployment, archive
 		Cachetool:    cachetool,
 		ProbePHPHost: cachetool == nil,
 	}
-	if sshConfig != nil {
-		// Preserve configured wrappers and their PHP flags when invoking the helper.
-		input.PHP = sshConfig.PHPBinary
-		input.PHPArgs = sshConfig.PHPArgs
-	}
 	return s.runSSHDeployment(ctx, file, input, output)
 }
 
@@ -189,9 +199,6 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 		output = io.Discard
 	}
 	output = &synchronizedWriter{output: output}
-	if s.env != nil && s.env.SSH != nil {
-		input.Hooks = s.env.SSH.Hooks
-	}
 	// current may not exist yet.
 	session, err := s.openDeploymentSession(ctx, input, output)
 	if err != nil {

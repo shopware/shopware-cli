@@ -11,14 +11,14 @@ import (
 // TestSSHResolveHostsInheritanceAndIsolation checks host overrides and independence of mutable resolved settings.
 func TestSSHResolveHostsInheritanceAndIsolation(t *testing.T) {
 	base := &EnvironmentSSHConfig{
-		User: "deploy", Port: 2222, Directory: "/srv/shop", IdentityFile: "/key", PHPBinary: "php8.4",
+		User: "deploy", HTTPUser: "www-data", Become: "shop", Port: 2222, Directory: "/srv/shop", IdentityFile: "/key", PHPBinary: "php8.4",
 		PHPArgs:       []string{"-d", "memory_limit=192M"},
 		MigrationHost: "web-2", Parallelism: 3,
 		Shared: &EnvironmentSSHSharedConfig{Files: new([]string{"base"}), Directories: new([]string{"data"})},
 		Hosts: map[string]*EnvironmentSSHHostConfig{
 			"web-2": {Host: "two"},
 			"web-1": {
-				Host: "one", User: "other", Port: 23, Directory: "/other", IdentityFile: "/other-key", PHPBinary: "php",
+				Host: "one", User: "other", HTTPUser: "www-one", Become: "shop-one", Port: 23, Directory: "/other", IdentityFile: "/other-key", PHPBinary: "php",
 				Shared: &EnvironmentSSHSharedConfig{Files: new([]string{})},
 			},
 		},
@@ -30,12 +30,16 @@ func TestSSHResolveHostsInheritanceAndIsolation(t *testing.T) {
 	assert.Equal(t, "web-1", hosts[0].Name)
 	one, two := hosts[0].Config, hosts[1].Config
 	assert.Equal(t, "other", one.User)
+	assert.Equal(t, "www-one", one.HTTPUser)
+	assert.Equal(t, "shop-one", one.Become)
 	assert.Equal(t, 23, one.Port)
 	assert.Equal(t, "/other", one.Directory)
 	assert.Equal(t, "/other-key", one.IdentityFile)
 	assert.Equal(t, "php", one.PHPBinary)
 	assert.Nil(t, one.Shared.Directories)
 	assert.Equal(t, "deploy", two.User)
+	assert.Equal(t, "www-data", two.HTTPUser)
+	assert.Equal(t, "shop", two.Become)
 	assert.Equal(t, 2222, two.Port)
 	assert.Equal(t, "/srv/shop", two.Directory)
 	assert.Equal(t, "/key", two.IdentityFile)
@@ -95,6 +99,8 @@ func TestSSHResolveHostsInvalid(t *testing.T) {
 		{"legacy primary", &EnvironmentSSHConfig{Host: "one", MigrationHost: "other"}, "must name an entry"},
 		{"missing primary", &EnvironmentSSHConfig{Hosts: map[string]*EnvironmentSSHHostConfig{"a": {}, "b": {}}}, "required with multiple"},
 		{"duplicate", &EnvironmentSSHConfig{Directory: "/srv", MigrationHost: "a", Hosts: map[string]*EnvironmentSSHHostConfig{"a": {Host: "one"}, "b": {Host: "one", Port: 22}}}, "same host"},
+		{"invalid ACL user", &EnvironmentSSHConfig{Host: "one", Directory: "/srv", HTTPUser: "web:rwx,o"}, "http_user"},
+		{"invalid deployment user", &EnvironmentSSHConfig{Host: "one", Directory: "/srv", Become: "-u root"}, "become"},
 		{"bad shared path", &EnvironmentSSHConfig{Host: "one", Directory: "/srv", Shared: &EnvironmentSSHSharedConfig{Files: new([]string{"../escape"})}}, "project-relative"},
 	}
 	for _, label := range []string{"", "-web", "../web", "web/x", strings.Repeat("a", 129)} {

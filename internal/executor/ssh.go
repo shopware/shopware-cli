@@ -72,13 +72,15 @@ func (s *SSHExecutor) quotedPHP() string {
 	return strings.Join(quoted, " ")
 }
 
-// RemotePHPCommand runs PHP without a directory change or a TTY.
+// RemotePHPCommand runs the deployment protocol as the configured deployment
+// account, without a directory change or a TTY.
 // Callers own stdin, stdout and stderr independently through Process.Cmd.
 func (s *SSHExecutor) RemotePHPCommand(ctx context.Context, args ...string) *Process {
-	command := []string{"exec", shellQuoteArg(s.php())}
-	for _, arg := range s.phpArgs {
-		command = append(command, shellQuoteArg(arg))
+	command := []string{"exec"}
+	if s.envCfg != nil && s.envCfg.SSH != nil && s.envCfg.SSH.Become != "" {
+		command = append(command, "sudo", "-n", "-H", "-u", shellQuoteArg(s.envCfg.SSH.Become), "--")
 	}
+	command = append(command, s.quotedPHP())
 	for _, arg := range args {
 		command = append(command, shellQuoteArg(arg))
 	}
