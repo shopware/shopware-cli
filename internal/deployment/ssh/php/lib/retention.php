@@ -185,7 +185,14 @@ function prunePlan(array $input, array &$progress): array
     $lock = deploymentLock($root, 'r+');
 
     try {
-        foreach ([path_join($root, 'releases'), path_join($root, 'runtime'), path_join($state, 'releases'), path_join($state, 'rollouts'), path_join($state, 'logs'), path_join($state, 'artifacts')] as $directory) {
+        foreach ([
+            path_join($root, 'releases'),
+            path_join($root, 'runtime'),
+            path_join($state, 'releases'),
+            path_join($state, 'rollouts'),
+            path_join($state, 'logs'),
+            path_join($state, 'artifacts'),
+        ] as $directory) {
             deploymentRealDirectory($directory);
         }
 

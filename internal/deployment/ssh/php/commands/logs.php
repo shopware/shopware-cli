@@ -6,7 +6,7 @@ $stream = null;
 $exitCode = 0;
 
 try {
-    $input = deploymentInput($argv[1] ?? null);
+    $input = deploymentInput($argv[1] ?? '');
     $root = deploymentRoot($input);
     $release = $input['release'] ?? null;
 

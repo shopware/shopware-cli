@@ -236,7 +236,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		return phpConstraintFor(releases, effectiveVersion(), filteredVersions).SupportedVersions()
 	}
 
-	theme := tui.SetupTheme()
+	theme := tui.ShopwareTheme()
 
 	onOff := func(v bool) string {
 		if v {

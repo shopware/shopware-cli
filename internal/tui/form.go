@@ -16,13 +16,3 @@ func NewYesNo() *huh.Select[string] {
 			huh.NewOption("No", No),
 		)
 }
-
-// SetupTheme returns the shared theme for project setup wizards.
-func SetupTheme() huh.Theme {
-	return huh.ThemeFunc(func(isDark bool) *huh.Styles {
-		s := huh.ThemeCharm(isDark)
-		s.Focused.Title = s.Focused.Title.Foreground(BlueColor)
-		s.Blurred.Title = s.Blurred.Title.Foreground(BlueColor)
-		return s
-	})
-}

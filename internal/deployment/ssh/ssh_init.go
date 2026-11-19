@@ -103,7 +103,7 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 			Description("Requirements:\n• The server runs PHP 8.4 or higher\n• The SSH user is the same user that runs PHP (web server / PHP-FPM)").
 			Options(huh.NewOption("Continue", true), huh.NewOption("Cancel", false)).
 			Value(&proceed),
-	)).WithTheme(tui.SetupTheme()).RunWithContext(ctx)
+	)).WithTheme(tui.ShopwareTheme()).RunWithContext(ctx)
 	if errors.Is(err, huh.ErrUserAborted) {
 		return sshDeploymentInitConfig{}, false, nil
 	}
@@ -193,7 +193,7 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 					Validate(tui.CombineValidators(requiredValue, shopinstall.ValidateAdminPassword)).
 					Value(&adminPassword),
 			).WithHideFunc(func() bool { return configureInstall != tui.Yes }),
-		).WithTheme(tui.SetupTheme())
+		).WithTheme(tui.ShopwareTheme())
 		if err := form.RunWithContext(ctx); err != nil {
 			if errors.Is(err, huh.ErrUserAborted) {
 				return sshDeploymentInitConfig{}, false, nil
@@ -229,7 +229,7 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 					huh.NewOption("Cancel", "cancel"),
 				).
 				Value(&selectConfirm),
-		)).WithTheme(tui.SetupTheme())
+		)).WithTheme(tui.ShopwareTheme())
 		if err := confirmForm.RunWithContext(ctx); err != nil {
 			if errors.Is(err, huh.ErrUserAborted) {
 				return sshDeploymentInitConfig{}, false, nil

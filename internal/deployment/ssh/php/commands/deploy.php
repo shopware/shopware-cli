@@ -15,7 +15,7 @@ $exitCode = 0;
 $cachetool = null;
 
 try {
-    $input = deploymentInput($argv[1] ?? null);
+    $input = deploymentInput($argv[1] ?? '');
     $root = deploymentRoot($input);
     $hookTimeout = $input['hooks']['timeout_seconds'] ?? 0;
 

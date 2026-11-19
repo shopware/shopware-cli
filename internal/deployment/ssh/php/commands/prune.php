@@ -9,7 +9,7 @@ try {
     set_error_handler(static function (int $severity, string $message): never {
         throw new RuntimeException($message);
     });
-    $input = deploymentInput($argv[1] ?? null);
+    $input = deploymentInput($argv[1] ?? '');
     echo json_encode(prunePlan($input, $progress), JSON_THROW_ON_ERROR) . "\n";
 } catch (Throwable $error) {
     echo json_encode($progress, JSON_THROW_ON_ERROR) . "\n";
