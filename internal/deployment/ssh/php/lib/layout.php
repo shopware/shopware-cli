@@ -1,9 +1,9 @@
 <?php
 
 /** Decode the JSON options sent by the Go client. */
-function deploymentInput(string|false|null $json): array
+function deploymentInput(string $json): array
 {
-    $input = json_decode((string) $json, true, 512, JSON_THROW_ON_ERROR);
+    $input = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
 
     if (!is_array($input)) {
         throw new RuntimeException('Invalid deployment input');

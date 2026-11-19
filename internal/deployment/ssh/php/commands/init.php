@@ -5,7 +5,7 @@ require_once __DIR__ . '/../bootstrap.php';
 $lock = null;
 
 try {
-    $input = deploymentInput(stream_get_contents(STDIN));
+    $input = deploymentInput((string) stream_get_contents(STDIN));
     $root = deploymentRoot($input);
     $current = deploymentCurrentPath($input, $root);
     umask(0022);
