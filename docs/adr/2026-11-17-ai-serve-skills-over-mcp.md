@@ -178,9 +178,10 @@ The rest of the 2026-08-06 decision stays as it is.
   repository.
 - No separate install per skill or per agent.
 - No Node.js or npx needed for this path.
-- Changes to a skill reach agents within 24 hours, without the user doing
-  anything. New skills added to the `ai` directory need a CLI update, because
-  the directory ships with the binary.
+- Changes to a skill reach new agent sessions without the user doing anything,
+  once the 24-hour cache expires and the next download succeeds. A running
+  session keeps the files it started with. New skills added to the `ai`
+  directory need a CLI update, because the directory ships with the binary.
 
 ### Costs and risks
 
@@ -194,9 +195,9 @@ The rest of the 2026-08-06 decision stays as it is.
   documentation must explain it.
 - Popular agents do not support SEP-2640 yet. Until they do, `ai serve` is ready
   but nobody uses it.
-- Whatever is on a repository's default branch reaches agents within 24 hours.
-  A broken skill reaches users just as fast. This is the same as `ai add`
-  without a version today.
+- Whatever is on a repository's default branch reaches new agent sessions as
+  soon as the cache expires. A broken skill reaches users just as fast. This is
+  the same as `ai add` without a version today.
 
 ### Ownership
 
