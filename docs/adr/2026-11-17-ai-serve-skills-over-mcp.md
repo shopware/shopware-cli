@@ -195,9 +195,9 @@ The rest of the 2026-08-06 decision stays as it is.
   documentation must explain it.
 - Popular agents do not support SEP-2640 yet. Until they do, `ai serve` is ready
   but nobody uses it.
-- Whatever is on a repository's default branch reaches new agent sessions as
-  soon as the cache expires. A broken skill reaches users just as fast. This is
-  the same as `ai add` without a version today.
+- Whatever is on a repository's default branch reaches new agent sessions once
+  the cache expires and the next download succeeds. A broken skill reaches users
+  just as fast. This is the same as `ai add` without a version today.
 
 ### Ownership
 
