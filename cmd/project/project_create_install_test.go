@@ -1,6 +1,8 @@
 package project
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -66,5 +68,33 @@ func TestPrintCreateSummaryOmitsMakeSetup(t *testing.T) {
 		plain := ansi.Strip(output)
 		assert.NotContains(t, plain, "Access your shop")
 		assert.NotContains(t, plain, "make setup")
+		assert.NotContains(t, plain, "shopware-cli project validate")
 	})
+}
+
+func TestPrintCreateSummaryWorkflowGuideposts(t *testing.T) {
+	for _, ci := range []string{shop.CINone, shop.CIGitHub, shop.CIGitLab} {
+		for _, docker := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/docker=%t", ci, docker), func(t *testing.T) {
+				output, err := captureStdout(func() error {
+					printCreateSummary(t.Context(), &createOptions{
+						projectFolder: ".",
+						selectedCI:    ci,
+						useDocker:     docker,
+						interactive:   true,
+					})
+					return nil
+				})
+				require.NoError(t, err)
+				plain := ansi.Strip(output)
+				assert.Contains(t, plain, "shopware-cli project validate .")
+				assert.Contains(t, plain, "shopware-cli extension fix custom/plugins/MyPlugin --dry-run")
+				assert.Contains(t, plain, "shopware-cli project dump --output dump.sql")
+				assert.Equal(t, docker, strings.Contains(plain, "http://127.0.0.1:8000"))
+				assert.Equal(t, ci == shop.CIGitHub, strings.Contains(plain, ".github/workflows/ci.yml"))
+				assert.Equal(t, ci == shop.CIGitLab, strings.Contains(plain, ".gitlab-ci.yml"))
+				assert.NotContains(t, plain, "shopware-cli project deploy")
+			})
+		}
+	}
 }

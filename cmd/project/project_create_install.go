@@ -157,6 +157,15 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		}
 	}
 
+	ciTemplate := ""
+	switch opts.selectedCI {
+	case shop.CIGitHub:
+		ciTemplate = ".github/workflows/ci.yml"
+	case shop.CIGitLab:
+		ciTemplate = ".gitlab-ci.yml"
+	}
+	fmt.Print(tui.ProjectWorkflowGuideposts(ciTemplate))
+
 	if opts.selectedDeployment == shop.DeploymentContainer {
 		fmt.Println()
 		fmt.Println(tui.SectionHeadingStyle.Render("Deploy as a container"))
