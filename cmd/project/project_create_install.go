@@ -164,7 +164,7 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 	case shop.CIGitLab:
 		ciTemplate = ".gitlab-ci.yml"
 	}
-	fmt.Print(tui.ProjectWorkflowGuideposts(ciTemplate))
+	fmt.Print(tui.ProjectWorkflowGuideposts(ciTemplate, opts.useDocker))
 
 	if opts.selectedDeployment == shop.DeploymentContainer {
 		fmt.Println()

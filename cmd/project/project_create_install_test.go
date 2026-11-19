@@ -91,6 +91,7 @@ func TestPrintCreateSummaryWorkflowGuideposts(t *testing.T) {
 				assert.Contains(t, plain, "shopware-cli extension fix custom/plugins/MyPlugin --dry-run")
 				assert.Contains(t, plain, "shopware-cli project dump --output dump.sql")
 				assert.Equal(t, docker, strings.Contains(plain, "http://127.0.0.1:8000"))
+				assert.Equal(t, docker, strings.Contains(plain, "host PHP 8.2+"))
 				assert.Equal(t, ci == shop.CIGitHub, strings.Contains(plain, ".github/workflows/ci.yml"))
 				assert.Equal(t, ci == shop.CIGitLab, strings.Contains(plain, ".gitlab-ci.yml"))
 				assert.NotContains(t, plain, "shopware-cli project deploy")

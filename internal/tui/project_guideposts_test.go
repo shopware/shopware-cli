@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -10,7 +11,7 @@ import (
 func TestProjectWorkflowGuideposts(t *testing.T) {
 	for _, template := range []string{"", ".github/workflows/ci.yml", ".gitlab-ci.yml"} {
 		t.Run("template="+template, func(t *testing.T) {
-			output := ansi.Strip(ProjectWorkflowGuideposts(template))
+			output := ansi.Strip(ProjectWorkflowGuideposts(template, false))
 			for _, scope := range []string{"project", "extension"} {
 				path := "."
 				if scope == "extension" {
@@ -40,5 +41,14 @@ func TestProjectWorkflowGuideposts(t *testing.T) {
 				assert.NotContains(t, output, other)
 			}
 		})
+	}
+}
+
+func TestProjectWorkflowGuidepostsDockerPrerequisites(t *testing.T) {
+	for _, docker := range []bool{false, true} {
+		output := ansi.Strip(ProjectWorkflowGuideposts("", docker))
+		assert.Equal(t, docker, strings.Contains(output, "host PHP 8.2+, Composer and Node.js 20+ (npm)"))
+		assert.Contains(t, output, "shopware-cli project dump --output dump.sql")
+		assert.NotContains(t, output, "docker run")
 	}
 }

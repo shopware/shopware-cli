@@ -7,10 +7,13 @@ import (
 
 // ProjectWorkflowGuideposts renders commands to run from the newly created
 // project directory. ciTemplate is empty when no CI template was created.
-func ProjectWorkflowGuideposts(ciTemplate string) string {
+func ProjectWorkflowGuideposts(ciTemplate string, docker bool) string {
 	var out strings.Builder
 	out.WriteString("\n")
 	out.WriteString(DimText.Render("  Run these commands from your project directory.") + "\n")
+	if docker {
+		out.WriteString(DimText.Render("  validate, format and fix need host PHP 8.2+, Composer and Node.js 20+ (npm).") + "\n")
+	}
 
 	sections := []struct {
 		title string
