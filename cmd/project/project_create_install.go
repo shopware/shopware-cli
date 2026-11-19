@@ -117,8 +117,19 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		}
 	}
 
+	ciTemplate := ""
+	switch opts.selectedCI {
+	case shop.CIGitHub:
+		ciTemplate = ".github/workflows/ci.yml"
+	case shop.CIGitLab:
+		ciTemplate = ".gitlab-ci.yml"
+	}
+
 	if !opts.interactive {
 		logging.FromContext(ctx).Infof("Project created successfully in %s", projectDisplay)
+		// Hints are useful without prompts too. Keep stdout untouched for pipes
+		// and render plain text without querying the terminal for its background.
+		fmt.Fprint(os.Stderr, tui.ProjectWorkflowGuideposts(ciTemplate, opts.useDocker, false))
 		return
 	}
 
@@ -157,14 +168,7 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		}
 	}
 
-	ciTemplate := ""
-	switch opts.selectedCI {
-	case shop.CIGitHub:
-		ciTemplate = ".github/workflows/ci.yml"
-	case shop.CIGitLab:
-		ciTemplate = ".gitlab-ci.yml"
-	}
-	fmt.Print(tui.ProjectWorkflowGuideposts(ciTemplate, opts.useDocker))
+	fmt.Print(tui.ProjectWorkflowGuideposts(ciTemplate, opts.useDocker, true))
 
 	if opts.selectedDeployment == shop.DeploymentContainer {
 		fmt.Println()

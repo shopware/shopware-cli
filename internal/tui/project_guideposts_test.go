@@ -11,7 +11,7 @@ import (
 func TestProjectWorkflowGuideposts(t *testing.T) {
 	for _, template := range []string{"", ".github/workflows/ci.yml", ".gitlab-ci.yml"} {
 		t.Run("template="+template, func(t *testing.T) {
-			output := ansi.Strip(ProjectWorkflowGuideposts(template, false))
+			output := ansi.Strip(ProjectWorkflowGuideposts(template, false, true))
 			for _, scope := range []string{"project", "extension"} {
 				path := "."
 				if scope == "extension" {
@@ -46,9 +46,24 @@ func TestProjectWorkflowGuideposts(t *testing.T) {
 
 func TestProjectWorkflowGuidepostsDockerPrerequisites(t *testing.T) {
 	for _, docker := range []bool{false, true} {
-		output := ansi.Strip(ProjectWorkflowGuideposts("", docker))
+		output := ansi.Strip(ProjectWorkflowGuideposts("", docker, true))
 		assert.Equal(t, docker, strings.Contains(output, "host PHP 8.2+, Composer and Node.js 20+ (npm)"))
 		assert.Contains(t, output, "shopware-cli project dump --output dump.sql")
 		assert.NotContains(t, output, "docker run")
 	}
+}
+
+// Plain output must not resolve adaptive colours: those can read stdin and write
+// terminal queries to stdout, even when the hints themselves go to stderr.
+func TestProjectWorkflowGuidepostsPlainDoesNotQueryTerminal(t *testing.T) {
+	original := hasDarkBackground
+	hasDarkBackground = func() bool {
+		t.Fatal("plain guideposts queried the terminal")
+		return false
+	}
+	t.Cleanup(func() { hasDarkBackground = original })
+	output := ProjectWorkflowGuideposts(".github/workflows/ci.yml", true, false)
+	assert.NotContains(t, output, "\x1b")
+	assert.Contains(t, output, "shopware-cli project validate .")
+	assert.Contains(t, output, ".github/workflows/ci.yml")
 }
