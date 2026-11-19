@@ -4,11 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/symfony"
@@ -401,8 +403,28 @@ func TestSetupCI(t *testing.T) {
 
 		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitHub, DeploymentNone))
 
-		assert.FileExists(t, filepath.Join(tmpDir, ".github", "workflows", "ci.yml"))
 		assert.NoFileExists(t, filepath.Join(tmpDir, ".github", "workflows", "deploy.yml"))
+
+		var workflow struct {
+			Jobs map[string]struct {
+				Needs any `yaml:"needs"`
+				Steps []struct {
+					Uses string `yaml:"uses"`
+				} `yaml:"steps"`
+			} `yaml:"jobs"`
+		}
+		require.NoError(t, yaml.Unmarshal([]byte(readScaffoldFile(t, tmpDir, ".github", "workflows", "ci.yml")), &workflow))
+
+		assert.Contains(t, workflow.Jobs, "check")
+		require.Contains(t, workflow.Jobs, "build")
+		build := workflow.Jobs["build"]
+		assert.Nil(t, build.Needs)
+
+		uses := make([]string, 0, len(build.Steps))
+		for _, step := range build.Steps {
+			uses = append(uses, strings.Split(step.Uses, "@")[0])
+		}
+		assert.Contains(t, uses, "shopware/build-project-action")
 	})
 
 	t.Run("github with deployer creates the deploy workflow", func(t *testing.T) {
@@ -424,6 +446,7 @@ func TestSetupCI(t *testing.T) {
 		content := readScaffoldFile(t, tmpDir, ".gitlab-ci.yml")
 		assert.Contains(t, content, "project-validate")
 		assert.NotContains(t, content, "project-deploy")
+		assertGitLabBuildJob(t, content)
 	})
 
 	t.Run("gitlab with deployer includes the deploy pipeline", func(t *testing.T) {
@@ -434,7 +457,25 @@ func TestSetupCI(t *testing.T) {
 
 		content := readScaffoldFile(t, tmpDir, ".gitlab-ci.yml")
 		assert.Contains(t, content, "project-deploy")
+		assertGitLabBuildJob(t, content)
 	})
+}
+
+func assertGitLabBuildJob(t *testing.T, content string) {
+	t.Helper()
+
+	var pipeline struct {
+		Build struct {
+			Stage  string   `yaml:"stage"`
+			Script []string `yaml:"script"`
+		} `yaml:"build"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(content), &pipeline))
+
+	assert.Equal(t, "check", pipeline.Build.Stage)
+	assert.True(t, slices.ContainsFunc(pipeline.Build.Script, func(line string) bool {
+		return strings.Contains(line, "project ci")
+	}))
 }
 
 func readScaffoldFile(t *testing.T, root string, path ...string) string {

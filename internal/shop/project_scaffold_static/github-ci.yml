@@ -15,3 +15,22 @@ jobs:
         uses: shopware/github-actions/project-validate@main
         with:
           phpVersion: '8.4'
+
+  # Checks that the production Administration and Storefront build succeeds. Delete this job if you do not need it.
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      - name: Install Shopware CLI
+        uses: shopware/shopware-cli-action@v3
+
+      - name: Build Project
+        uses: shopware/build-project-action@v1

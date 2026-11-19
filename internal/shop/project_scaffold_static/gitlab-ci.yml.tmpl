@@ -13,3 +13,17 @@ include:
     inputs:
       php_version: "8.4"
 {{- end }}
+
+# Checks that the production Administration and Storefront build succeeds. Delete this job if you do not need it.
+build:
+  stage: check
+  image:
+    name: ghcr.io/shopware/shopware-cli:latest-php-8.4
+    entrypoint: ["/bin/sh", "-c"]
+  variables:
+    COMPOSER_HOME: ${CI_PROJECT_DIR}/.composer
+  cache:
+    paths:
+      - .composer/
+  script:
+    - shopware-cli project ci .
