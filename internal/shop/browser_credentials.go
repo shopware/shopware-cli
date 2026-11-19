@@ -96,6 +96,9 @@ func (c *browserCredentials) token(ctx context.Context) (*oauth2.Token, error) {
 		if err == nil {
 			return c.save(token)
 		}
+		if oauthEndpointMissing(err) {
+			return nil, ErrBrowserLoginUnsupported
+		}
 		if !invalidRefreshToken(err) {
 			return nil, tokenRequestError("refresh browser session", err)
 		}
@@ -137,6 +140,12 @@ func invalidRefreshToken(err error) bool {
 		}
 	}
 	return false
+}
+
+// A 404 from the token endpoint means the shop does not provide OAuth login.
+func oauthEndpointMissing(err error) bool {
+	var response *oauth2.RetrieveError
+	return errors.As(err, &response) && response.Response.StatusCode == http.StatusNotFound
 }
 
 // OAuth error bodies can contain credentials or authorization request details.

@@ -55,6 +55,8 @@ func TestImplicitBrowserSession(t *testing.T) {
 			default:
 				t.Errorf("unexpected grant type %s", r.FormValue("grant_type"))
 			}
+		case "/api/oauth/authorize":
+			w.WriteHeader(http.StatusOK)
 		case "/api/_info/config":
 			assert.Contains(t, []string{"Bearer first", "Bearer second"}, r.Header.Get("Authorization"))
 			_, _ = fmt.Fprint(w, `{"version":"6.7.15.0"}`)
@@ -138,7 +140,15 @@ func TestImplicitBrowserSession(t *testing.T) {
 
 func TestBrowserSessionDenial(t *testing.T) {
 	isolateBrowserSessions(t)
-	browser, err := newBrowserCredentials(&Config{URL: "https://store.example"})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/oauth/authorize" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	browser, err := newBrowserCredentials(&Config{URL: server.URL})
 	require.NoError(t, err)
 	browser.open = func(ctx context.Context, raw string) error {
 		u, err := url.Parse(raw)
@@ -187,4 +197,70 @@ func TestBrowserRefreshFailure(t *testing.T) {
 			assert.Equal(t, tc.wantLogin, opened)
 		})
 	}
+}
+
+func TestBrowserLoginUnsupportedShop(t *testing.T) {
+	isolateBrowserSessions(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	browser, err := newBrowserCredentials(&Config{URL: server.URL})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	browser.open = func(context.Context, string) error {
+		t.Error("browser must not open when the shop does not support OAuth login")
+		cancel()
+		return nil
+	}
+	_, err = browser.token(ctx)
+	assert.ErrorIs(t, err, ErrBrowserLoginUnsupported)
+	assert.NoFileExists(t, browser.path)
+}
+
+func TestBrowserExchangeUnsupportedShop(t *testing.T) {
+	isolateBrowserSessions(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/oauth/authorize" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	browser, err := newBrowserCredentials(&Config{URL: server.URL})
+	require.NoError(t, err)
+	browser.open = func(ctx context.Context, raw string) error {
+		u, err := url.Parse(raw)
+		require.NoError(t, err)
+		q := u.Query()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, q.Get("redirect_uri")+"?code=approved&state="+q.Get("state"), nil)
+		require.NoError(t, err)
+		res, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		return res.Body.Close()
+	}
+	_, err = browser.token(t.Context())
+	assert.ErrorIs(t, err, ErrBrowserLoginUnsupported)
+	assert.NoFileExists(t, browser.path)
+}
+
+func TestBrowserRefreshUnsupportedShop(t *testing.T) {
+	isolateBrowserSessions(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	browser, err := newBrowserCredentials(&Config{URL: server.URL})
+	require.NoError(t, err)
+	browser.path = t.TempDir() + "/session.json"
+	_, err = browser.save(&oauth2.Token{AccessToken: "expired", RefreshToken: "old", Expiry: time.Now().Add(-time.Hour)})
+	require.NoError(t, err)
+	browser.open = func(context.Context, string) error {
+		t.Error("browser must not open when the shop does not support OAuth login")
+		return nil
+	}
+	_, err = browser.token(t.Context())
+	assert.ErrorIs(t, err, ErrBrowserLoginUnsupported)
 }

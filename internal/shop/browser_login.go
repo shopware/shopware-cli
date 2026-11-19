@@ -12,6 +12,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// ErrBrowserLoginUnsupported is returned when the shop does not expose the OAuth endpoints required for browser login.
+var ErrBrowserLoginUnsupported = errors.New("cannot sign in through the browser: the shop does not support OAuth login (Shopware 6.7.15.0 or newer is required), configure integration credentials in environments.<name>.admin_api or set SHOPWARE_CLI_API_CLIENT_ID and SHOPWARE_CLI_API_CLIENT_SECRET")
+
 func (c *browserCredentials) login(ctx context.Context) (*oauth2.Token, error) {
 	var lc net.ListenConfig
 	listener, err := lc.Listen(ctx, "tcp4", "127.0.0.1:0")
@@ -46,6 +49,9 @@ func (c *browserCredentials) login(ctx context.Context) (*oauth2.Token, error) {
 	defer func() { _ = server.Close(); _ = listener.Close() }()
 
 	authorize := conf.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier))
+	if err := checkBrowserLoginSupport(ctx, authorize); err != nil {
+		return nil, err
+	}
 	_, _ = fmt.Fprintf(os.Stderr, "Sign in to the shop in your browser. If it does not open, visit:\n%s\n", authorize)
 	_ = c.open(ctx, authorize)
 
@@ -60,8 +66,34 @@ func (c *browserCredentials) login(ctx context.Context) (*oauth2.Token, error) {
 		}
 		token, err := conf.Exchange(ctx, code, oauth2.VerifierOption(verifier))
 		if err != nil {
+			if oauthEndpointMissing(err) {
+				return nil, ErrBrowserLoginUnsupported
+			}
 			return nil, tokenRequestError("exchange browser authorization code", err)
 		}
 		return token, nil
 	}
+}
+
+// checkBrowserLoginSupport tries the authorize URL before opening the browser.
+// Shops without the OAuth endpoints answer with 404; fail with a credential
+// hint instead of waiting for a callback that never arrives.
+func checkBrowserLoginSupport(ctx context.Context, authorize string) error {
+	client := http.DefaultClient
+	if c, ok := ctx.Value(oauth2.HTTPClient).(*http.Client); ok {
+		client = c
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authorize, nil)
+	if err != nil {
+		return fmt.Errorf("cannot start browser login: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("cannot reach the shop for browser login: %w", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrBrowserLoginUnsupported
+	}
+	return nil
 }
