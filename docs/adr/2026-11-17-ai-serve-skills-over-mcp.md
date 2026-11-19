@@ -1,8 +1,13 @@
 ---
 title: Serve Shopware skills over MCP from the CLI
-status: Proposed
+status: Accepted
 tags: [ai, MCP Server, Agent Skill, integration]
 ---
+
+Accepted on 2026-11-19. Implementation is deferred until its value justifies
+the effort, for example when popular agents support SEP-2640. See the
+discussion in
+[shopware/shopware-cli#1945](https://github.com/shopware/shopware-cli/pull/1945).
 
 - Related:
   [2026-08-06 Handling Shopware AI integrations](2026-08-06-ai-command.md),
@@ -47,7 +52,7 @@ from. So one server can provide skills from many repositories.
 
 ### Why the CLI and not another server
 
-I have looked at the other Shopware MCP servers:
+We have looked at the other Shopware MCP servers:
 
 - The **Shopware Core MCP server** runs inside a shop. It can only provide what
   is installed in that shop. Development skills, such as the CLI or Deployment
@@ -95,11 +100,40 @@ gives the agent every skill from the `ai` directory, using SEP-2640.
 4. When the agent needs a skill, the CLI sends its files.
 5. When the session ends, the agent stops the process.
 
+### The `shopware-skills-mcp` directory entry
+
+`shopware-skills-mcp` is an entry of type `mcp` in the `ai` directory. Its
+delivery uses a new `delivery.kind` value, `mcp-stdio`, for MCP servers that the
+agent starts as a local command:
+
+| Field              | Required | Value for `shopware-skills-mcp` |
+| ------------------ | -------- | ------------------------------- |
+| `delivery.kind`    | yes      | `mcp-stdio`                     |
+| `delivery.command` | yes      | `shopware-cli`                  |
+| `delivery.args`    | no       | `["ai", "serve"]`               |
+
+`ai info --format json` returns:
+
+```json
+{
+  "delivery": {
+    "kind": "mcp-stdio",
+    "command": "shopware-cli",
+    "args": ["ai", "serve"]
+  }
+}
+```
+
+The change to `internal/ai/directory/CONTRACT.md` is additive. The contract
+allows new `delivery.kind` values, and entries with `kind: mcp` still require
+`url` and `transport`.
+
 ### Where the skill files come from
 
 - The CLI downloads every skill from its repository: the `skills/<name>/`
-  folder on the default branch. This is the same version that `ai add <name>`
-  installs today.
+  folder on the default branch. This is the same source that `ai add <name>`
+  installs from. Because of the cache described below, `ai serve` can serve an
+  older revision than a new `ai add` installs.
 - The CLI does not ship its own skills inside the binary. ADR 2026-08-06 was
   updated on 2026-10-13 to remove a bundled skill. If `ai serve` shipped skills
   inside the binary, it could give out a different version of a skill than
@@ -109,6 +143,9 @@ gives the agent every skill from the `ai` directory, using SEP-2640.
   the old copy.
 - If a skill is not in the cache and cannot be downloaded, the CLI leaves it out
   of the list and prints a warning.
+- If a skill's `SKILL.md` frontmatter does not parse, the CLI leaves the skill
+  out of the list and prints a warning. The skill's owners fix the file in their
+  repository.
 - While one `ai serve` process runs, the files of a skill do not change, even
   if the repository changes.
 
@@ -141,8 +178,9 @@ The rest of the 2026-08-06 decision stays as it is.
   repository.
 - No separate install per skill or per agent.
 - No Node.js or npx needed for this path.
-- New skills added to the `ai` directory reach agents without the user doing
-  anything.
+- Changes to a skill reach agents within 24 hours, without the user doing
+  anything. New skills added to the `ai` directory need a CLI update, because
+  the directory ships with the binary.
 
 ### Costs and risks
 
@@ -165,7 +203,7 @@ The rest of the 2026-08-06 decision stays as it is.
 The DX Tools team owns `ai serve`: the command, downloading, caching, and
 following SEP-2640. The teams that own a skill own its content, as before.
 
-## Next steps after acceptance
+## Next steps when implementation starts
 
 Each step is its own pull request, in this order:
 
@@ -177,8 +215,9 @@ Each step is its own pull request, in this order:
      messages (`skills/list`, `skills/get`, reading files);
    - the `shopware-skills-mcp` entry in the `ai` directory. `ai add` already
      writes MCP server entries to `.mcp.json`, for example for `meteor`, but
-     only for remote servers with a URL. This step extends it to local servers
-     started by a command (`"type": "stdio"`, `command`, `args`) and updates
+     only for remote servers with a URL. This step adds the `mcp-stdio`
+     delivery kind described above, writes it to `.mcp.json` as a
+     `"type": "stdio"` entry with `command` and `args`, and updates
      `internal/ai/directory/CONTRACT.md`. After this, `ai add
      shopware-skills-mcp` and `ai remove shopware-skills-mcp` work like they do
      for `meteor`;
