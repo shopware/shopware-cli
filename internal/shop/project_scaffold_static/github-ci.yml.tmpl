@@ -14,7 +14,7 @@ jobs:
       - name: Project Validate
         uses: shopware/github-actions/project-validate@main
         with:
-          phpVersion: '8.4'
+          phpVersion: '{{ .PHPVersion }}'
 
   # Checks that the production Administration and Storefront build succeeds. Delete this job if you do not need it.
   build:
@@ -27,7 +27,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '{{ .PHPVersion }}'
 
       - name: Install Shopware CLI
         uses: shopware/shopware-cli-action@v3

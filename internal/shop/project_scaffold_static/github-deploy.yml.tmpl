@@ -11,4 +11,5 @@ jobs:
       - name: Deploy
         uses: shopware/github-actions/project-deployer@main
         with:
-          sshPrivateKey: ${{ secrets.SSH_PRIVATE_KEY }}
+          sshPrivateKey: {{ "${{ secrets.SSH_PRIVATE_KEY }}" }}
+          phpVersion: '{{ .PHPVersion }}'
