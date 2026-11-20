@@ -113,7 +113,7 @@ func WriteConsoleRecommendation(w io.Writer, args []string, explicitProjectSelec
 		detail += " Reuse any explicit --env or --project-config selection."
 	}
 	// The hint is advisory. A write failure must not prevent the console command from running.
-	_, _ = fmt.Fprintf(w, "To %s, use \"shopware-cli %s\".%s\n", recommendation.purpose, recommendation.command, detail)
+	_, _ = fmt.Fprintf(w, "Next time you want to %s, use the native Shopware CLI command \"shopware-cli %s\".%s\n", recommendation.purpose, recommendation.command, detail)
 
 	return name
 }
