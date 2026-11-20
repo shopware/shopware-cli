@@ -3,6 +3,7 @@ package verifier
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -163,6 +164,68 @@ printf '{"files":{},"errors":[]}'
 	expectedDir, err := filepath.EvalSymlinks(workDir)
 	require.NoError(t, err)
 	assert.Equal(t, expectedDir, string(workingDir))
+}
+
+func TestPHPStanNextMajor(t *testing.T) {
+	for _, scenario := range []string{"bundled config", "custom config", "missing ruleset"} {
+		t.Run(scenario, func(t *testing.T) {
+			root := t.TempDir()
+			tools := filepath.Join(t.TempDir(), "tools with spaces")
+			t.Setenv("TEST_ROOT", root)
+			fakeTools(t, map[string]string{
+				"composer": `case " $* " in *' --prefer-lowest '*) exit 99 ;; esac
+/bin/mkdir -p vendor/composer
+printf '{"packages":[{"name":"shopware/core","version":"6.7.14.0"}]}' > vendor/composer/installed.json
+: > vendor/autoload.php
+`,
+				"php": `while [ "$1" != "--configuration" ]; do shift || exit 99; done
+printf '%s\n' "$2" "$SHOPWARE_CLI_PHPSTAN_BASE_CONFIG" "$PHP_DIR" > "$TEST_ROOT/php-config"
+/bin/cat "$2" > "$TEST_ROOT/php-includes" || exit 99
+printf '{"files":{},"errors":[]}'
+`,
+			})
+			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{}`), 0o644))
+			baseConfig := filepath.Join(tools, "php", "configs", "phpstan.neon")
+			if scenario == "custom config" {
+				baseConfig = filepath.Join(root, "phpstan.neon.dist")
+			}
+			const baseContents = "parameters:\n    level: 5\n"
+			require.NoError(t, os.MkdirAll(filepath.Dir(baseConfig), 0o755))
+			require.NoError(t, os.WriteFile(baseConfig, []byte(baseContents), 0o644))
+			ruleset := filepath.Join(tools, "php", "vendor", "shopwarelabs", "phpstan-shopware", "future-compatibility.neon")
+			if scenario != "missing ruleset" {
+				require.NoError(t, os.MkdirAll(filepath.Dir(ruleset), 0o755))
+				require.NoError(t, os.WriteFile(ruleset, nil, 0o644))
+			}
+
+			result := runCheckTool(t, PhpStan{}, ToolConfig{
+				RootDir: root, ToolDirectory: tools, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstNextMajor,
+			})
+
+			if scenario == "missing ruleset" {
+				require.Len(t, result.Errors, 1)
+				assert.ErrorIs(t, result.Errors[0].Err, os.ErrNotExist)
+				assert.NoFileExists(t, filepath.Join(root, "php-config"))
+				return
+			}
+			require.Empty(t, result.Errors)
+			assert.Equal(t, "Shopware 6.7.14.0 (next-major)", result.Note)
+			assert.Equal(t, CheckAgainstNextMajor, tracking.CommandTags()[tracking.TagCheckAgainst])
+			assert.FileExists(t, filepath.Join(root, "var/cache/shopware-cli/composer-highest/vendor/autoload.php"))
+			config, err := os.ReadFile(filepath.Join(root, "php-config"))
+			require.NoError(t, err)
+			wrapper, arguments, _ := strings.Cut(string(config), "\n")
+			assert.Equal(t, baseConfig+"\n"+filepath.Join(tools, "php")+"\n", arguments)
+			includes, err := os.ReadFile(filepath.Join(root, "php-includes"))
+			require.NoError(t, err)
+			assert.Contains(t, string(includes), "%env.SHOPWARE_CLI_PHPSTAN_BASE_CONFIG%")
+			assert.Contains(t, string(includes), "%env.PHP_DIR%/vendor/shopwarelabs/phpstan-shopware/future-compatibility.neon")
+			assert.NoFileExists(t, wrapper)
+			original, err := os.ReadFile(baseConfig)
+			require.NoError(t, err)
+			assert.Equal(t, baseContents, string(original))
+		})
+	}
 }
 
 func TestPHPStanSkipsAnalysisAfterFailedDependencyRefresh(t *testing.T) {
