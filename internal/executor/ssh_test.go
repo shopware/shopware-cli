@@ -480,6 +480,19 @@ func TestSSHExecutorDatabaseConnectionLocalhostSocket(t *testing.T) {
 	assert.Contains(t, string(recorded), "default_socket", "the remote PHP socket configuration is queried")
 }
 
+func TestSSHExecutorDatabaseConnectionExplicitSocket(t *testing.T) {
+	e := testSSHExecutor()
+	e.env = map[string]string{"DATABASE_URL": "mysql://app:secret@localhost/shop?unix_socket=/run/custom.sock"}
+	// No remote PHP or SSH command is needed until the connection is opened.
+	conn, err := e.DatabaseConnection(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "/run/custom.sock", conn.Addr())
+	cfg, err := conn.MySQLConfig()
+	require.NoError(t, err)
+	assert.NotEqual(t, "unix", cfg.Net)
+	assert.NotEqual(t, "tcp", cfg.Net)
+}
+
 func TestDialViaSSHUnixSocket(t *testing.T) {
 	tmp := t.TempDir()
 	argsFile := filepath.Join(tmp, "args.txt")
@@ -596,4 +609,29 @@ func TestShellQuoteArg(t *testing.T) {
 	assert.Equal(t, `'it'\''s'`, shellQuoteArg("it's"))
 	assert.Equal(t, "'semi;colon'", shellQuoteArg("semi;colon"))
 	assert.Equal(t, "'dollar$var'", shellQuoteArg("dollar$var"))
+}
+
+func TestSSHSocketDelimiterEscaping(t *testing.T) {
+	for _, tc := range []struct{ addr, want string }{
+		{"/run/mysql:blue.sock", `/run/mysql\:blue.sock`},
+		{`/run/mysql\blue:one.sock`, `/run/mysql\\blue\:one.sock`},
+		{"db.example.com:3306", "db.example.com:3306"},
+		{"[::1]:3306", "[::1]:3306"},
+	} {
+		t.Run(tc.addr, func(t *testing.T) {
+			tmp := t.TempDir()
+			args := filepath.Join(tmp, "args")
+			out := filepath.Join(tmp, "out")
+			require.NoError(t, os.WriteFile(out, nil, 0644))
+			writeRecordingSSH(t, args, out, "", "")
+			c, err := dialViaSSH(t.Context(), nil, "example.invalid", tc.addr)
+			require.NoError(t, err)
+			_, err = io.ReadAll(c)
+			require.NoError(t, err)
+			require.NoError(t, c.Close())
+			recorded, err := os.ReadFile(args)
+			require.NoError(t, err)
+			assert.Contains(t, string(recorded), "-W\n"+tc.want+"\n")
+		})
+	}
 }

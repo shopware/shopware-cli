@@ -39,6 +39,7 @@ devenv.local.nix
 /.gopath
 .soulforge
 .claude/scheduled_tasks.lock
+AGENTS.local.md
 
 # Go test binaries
 *.test
