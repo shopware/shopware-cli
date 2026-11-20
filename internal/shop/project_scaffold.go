@@ -297,12 +297,14 @@ func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod, php
 			return err
 		}
 
-		if err := writeCITemplate(ctx, projectFolder, filepath.Join(".github", "workflows", "ci.yml"), githubCITemplate, data); err != nil {
+		ciPath := filepath.Join(".github", "workflows", "ci.yml")
+		if err := writeCITemplate(ctx, projectFolder, ciPath, githubCITemplate, data); err != nil {
 			return err
 		}
 
 		if data.Deployer {
-			return writeCITemplate(ctx, projectFolder, filepath.Join(".github", "workflows", "deploy.yml"), githubDeployTemplate, data)
+			deployPath := filepath.Join(".github", "workflows", "deploy.yml")
+			return writeCITemplate(ctx, projectFolder, deployPath, githubDeployTemplate, data)
 		}
 
 	case CIGitLab:
