@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -19,13 +20,27 @@ func notInstalledConsole(ctx context.Context, _ ...string) *executor.Process {
 	return shellProcess(ctx, "false")
 }
 
+// fakeDeploymentHelper returns a fake for the deployment helper. The
+// is-installed check executes the shell script probe; any other command, such
+// as the install, executes run.
+func fakeDeploymentHelper(probe, run string) func(ctx context.Context, args ...string) *executor.Process {
+	return func(ctx context.Context, args ...string) *executor.Process {
+		if slices.Contains(args, "is-installed") {
+			return shellProcess(ctx, probe)
+		}
+		return shellProcess(ctx, run)
+	}
+}
+
 func TestRunHeadlessSkipsWhenInstalled(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
 
 	fake := &fakeExecutor{
-		php: func(ctx context.Context, _ ...string) *executor.Process {
-			t.Fatal("the deployment helper must not run when Shopware is already installed")
-			return nil
+		php: func(ctx context.Context, args ...string) *executor.Process {
+			if !slices.Contains(args, "is-installed") {
+				t.Fatal("the deployment helper must not run when Shopware is already installed")
+			}
+			return shellProcess(ctx, "true")
 		},
 	}
 
@@ -46,9 +61,7 @@ func TestRunHeadlessInstallsAndPersists(t *testing.T) {
 
 	fake := &fakeExecutor{
 		console: notInstalledConsole,
-		php: func(ctx context.Context, _ ...string) *executor.Process {
-			return shellProcess(ctx, `echo "Start: bin/console system:install"; echo migrated; echo "Start: bin/console user:create admin"`)
-		},
+		php:     fakeDeploymentHelper("echo 'Shopware is not installed'; exit 1", `echo "Start: bin/console system:install"; echo migrated; echo "Start: bin/console user:create admin"`),
 	}
 
 	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://localhost:8000"}
@@ -75,6 +88,22 @@ func TestRunHeadlessInstallsAndPersists(t *testing.T) {
 	written, err := os.ReadFile(filepath.Join(dir, ".config/shopware-project.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "password: secret123")
+}
+
+func TestRunHeadlessInstallsAfterCancelledInstall(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+
+	fake := &fakeExecutor{
+		php: fakeDeploymentHelper("echo 'Shopware is not installed'; exit 1", `echo "Start: bin/console system:install"`),
+	}
+
+	var out bytes.Buffer
+	err := RunHeadless(t.Context(), fake, &shop.Config{}, &shop.EnvironmentConfig{}, t.TempDir(), HeadlessOptions{Out: &out})
+	require.NoError(t, err)
+
+	plain := ansi.Strip(out.String())
+	assert.Contains(t, plain, "Installing Shopware")
+	assert.NotContains(t, plain, "already installed")
 }
 
 func TestRunHeadlessFailureNamesStep(t *testing.T) {

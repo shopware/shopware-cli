@@ -136,8 +136,25 @@ func (o Options) CustomCredentials() bool {
 	return o.AdminUsername != DefaultAdminUsername || o.AdminPassword != DefaultAdminPassword
 }
 
-// IsInstalled reports whether the shop is already installed.
+// helperNotInstalledOutput is printed by the deployment helper's is-installed
+// command when the shop is not installed.
+const helperNotInstalledOutput = "Shopware is not installed"
+
+// IsInstalled reports whether the shop is already installed. It asks the
+// deployment helper first: its check (readable system_config, an admin user and
+// a sales channel) is what `shopware-deployment-helper run` uses to decide
+// between install and update, so a cancelled installation counts as not
+// installed. system:is-installed only checks that the migration table exists
+// and is used when the helper cannot answer (missing, or older than 0.1.0).
 func IsInstalled(ctx context.Context, exec executor.Executor) bool {
+	output, err := exec.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "is-installed").CombinedOutput()
+	if err == nil {
+		return true
+	}
+	if strings.Contains(string(output), helperNotInstalledOutput) {
+		return false
+	}
+
 	return exec.ConsoleCommand(ctx, "system:is-installed").Run() == nil
 }
 

@@ -188,16 +188,67 @@ func TestFailedStep(t *testing.T) {
 }
 
 func TestIsInstalled(t *testing.T) {
-	installed := &fakeExecutor{}
-	assert.True(t, IsInstalled(t.Context(), installed))
-
-	notInstalled := &fakeExecutor{
-		console: func(ctx context.Context, args ...string) *executor.Process {
-			assert.Equal(t, []string{"system:is-installed"}, args)
-			return shellProcess(ctx, "false")
+	cases := []struct {
+		name          string
+		helper        string
+		console       string
+		wantConsole   bool
+		wantInstalled bool
+	}{
+		{
+			name:          "helper reports installed",
+			helper:        "echo 'Shopware is installed'",
+			console:       "false",
+			wantInstalled: true,
+		},
+		{
+			name:          "helper reports not installed after a cancelled install",
+			helper:        "echo 'Shopware is not installed'; exit 1",
+			console:       "true",
+			wantInstalled: false,
+		},
+		{
+			name:          "old helper falls back to installed console check",
+			helper:        `echo 'Command "is-installed" is not defined.' 1>&2; exit 1`,
+			console:       "true",
+			wantConsole:   true,
+			wantInstalled: true,
+		},
+		{
+			name:          "old helper falls back to not installed console check",
+			helper:        `echo 'Command "is-installed" is not defined.' 1>&2; exit 1`,
+			console:       "false",
+			wantConsole:   true,
+			wantInstalled: false,
+		},
+		{
+			name:          "missing helper falls back to console check",
+			helper:        "exit 127",
+			console:       "true",
+			wantConsole:   true,
+			wantInstalled: true,
 		},
 	}
-	assert.False(t, IsInstalled(t.Context(), notInstalled))
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			consoleCalled := false
+			fake := &fakeExecutor{
+				php: func(ctx context.Context, args ...string) *executor.Process {
+					assert.Equal(t, []string{"vendor/bin/shopware-deployment-helper", "is-installed"}, args)
+					return shellProcess(ctx, tc.helper)
+				},
+				console: func(ctx context.Context, args ...string) *executor.Process {
+					consoleCalled = true
+					assert.Equal(t, []string{"system:is-installed"}, args)
+					return shellProcess(ctx, tc.console)
+				},
+			}
+
+			assert.Equal(t, tc.wantInstalled, IsInstalled(t.Context(), fake))
+			assert.Equal(t, tc.wantConsole, consoleCalled)
+		})
+	}
 }
 
 func TestRunPassesEnvAndStreamsLines(t *testing.T) {
