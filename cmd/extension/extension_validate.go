@@ -38,7 +38,13 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := extensionValidationFormat(cmd)
-		ctx := cmd.Context()
+		timeout, _ := cmd.Flags().GetString("timeout")
+		ctx, cancel, err := verifier.WithQATimeout(cmd.Context(), timeout, cmd.Flags().Changed("timeout"))
+		if err != nil {
+			return err
+		}
+		defer cancel()
+
 		progress := verifier.NewProgress(reportingFormat)
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
@@ -62,12 +68,14 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
 
 		if stat.IsDir() {
 			ext, err := extension.GetExtensionByFolder(ctx, path)
+			err = verifier.QAPhaseError(ctx, verifier.QAPhaseExtensionDiscovery, err)
 			if err != nil {
 				return err
 			}
 
 			finishConfig := progress.Start("discovering extension configuration")
 			toolCfg, err = verifier.ConvertExtensionToToolConfig(ctx, ext)
+			err = verifier.QAPhaseError(ctx, verifier.QAPhaseConfigurationDiscovery, err)
 			finishConfig(err)
 			if err != nil {
 				return err
@@ -77,6 +85,10 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
 		} else {
 			finishMetadata := progress.Start("extracting extension archive")
 			ext, err := extension.GetExtensionByZip(ctx, args[0])
+			if err == nil {
+				defer func() { _ = os.RemoveAll(filepath.Dir(ext.GetPath())) }()
+			}
+			err = verifier.QAPhaseError(ctx, verifier.QAPhaseArchiveExtraction, err)
 			finishMetadata(err)
 			if err != nil {
 				return err
@@ -84,6 +96,7 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
 
 			finishConfig := progress.Start("discovering extension configuration")
 			toolCfg, err = verifier.ConvertExtensionToToolConfig(ctx, ext)
+			err = verifier.QAPhaseError(ctx, verifier.QAPhaseConfigurationDiscovery, err)
 			finishConfig(err)
 			if err != nil {
 				return err
@@ -102,6 +115,7 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
 		if needsTools {
 			finishSetup := progress.Start("preparing tools")
 			setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+			setupErr = verifier.QAPhaseError(ctx, verifier.QAPhaseToolSetup, setupErr)
 			finishSetup(setupErr)
 			if setupErr != nil {
 				return setupErr
@@ -112,6 +126,9 @@ The extension's vendor/ and composer.lock are preserved. Custom PHPStan configur
 		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
 			return tool.Check(ctx, *toolCfg, execution)
 		})
+		cancel()
+
+		results = verifier.EnsureQATimeoutResult(ctx, results)
 		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
@@ -140,6 +157,7 @@ func extensionValidationFormat(cmd *cobra.Command) (string, error) {
 
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
+
 	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run all validation checks")
 	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Enable Store compliance (deprecated: use validation.store_compliance in the extension configuration)")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
@@ -149,16 +167,20 @@ func init() {
 	extensionValidateCmd.PersistentFlags().Bool("exclude-formatters", false, "Exclude validation checks that also support formatting")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
-	_ = extensionValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
-	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{verifier.CheckAgainstHighest, verifier.CheckAgainstLowest}, cobra.ShellCompDirectiveNoFileComp))
-	_ = extensionValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
-	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
+	extensionValidateCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Limit total QA execution time (0 disables; "+verifier.QATimeoutEnv+" sets the default)")
+
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", deprecation.Message("2027-02-10", ""))
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", deprecation.Message("2027-02-10", "validation.store_compliance in the extension configuration"))
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", deprecation.Message("2027-02-10", "--format"))
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("no-copy", deprecation.Message("2027-02-10", ""))
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
+
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{verifier.CheckAgainstHighest, verifier.CheckAgainstLowest}, cobra.ShellCompDirectiveNoFileComp))
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
+
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if _, err := extensionValidationFormat(cmd); err != nil {
 			return err

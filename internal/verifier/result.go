@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,12 +21,9 @@ import (
 
 type ToolResult = validation.ToolResult
 
-// RunTools collects findings as tools publish them and waits for every tool,
-// including when a sibling fails. Finding delivery is serialized per tool, while
-// verbose output is serialized across tools. Tools return ToolSummary metadata;
-// the runner obtains HasFindings and Errors from the execution helper after all tool cleanup has
-// completed. A tool that returns after ctx is cancelled fails with the
-// cancellation, so interrupted commands exit nonzero.
+// RunTools waits for every tool and its cleanup, even when a sibling fails.
+// Findings are serialized per tool and verbose output across tools. A tool
+// returning after cancellation fails with the context cause.
 func RunTools[T Tool](
 	ctx context.Context,
 	tools ToolList[T],
@@ -75,7 +73,9 @@ func RunTools[T Tool](
 			if ctx.Err() == nil {
 				summary = run(tool, execution)
 			}
-			result := execution.finalize(ctx.Err())
+			cancellation := context.Cause(ctx)
+
+			result := execution.finalize(cancellation)
 			result.Name = tool.Name()
 			result.Note = summary.Note
 			result.ChangeAction = summary.ChangeAction
@@ -94,6 +94,20 @@ func RunTools[T Tool](
 		})
 	}
 	group.Wait()
+
+	var timedOut []string
+	for _, report := range results {
+		if slices.ContainsFunc(report.Errors, func(err ToolError) bool { return errors.Is(err, ErrQATimeout) }) {
+			timedOut = append(timedOut, report.Name)
+		}
+	}
+
+	if len(timedOut) > 0 {
+		slices.Sort(timedOut)
+		tracking.SetCommandTag(tracking.TagQATimeoutPhase, QAPhaseExecution)
+		tracking.SetCommandTag(tracking.TagQATimeoutTools, strings.Join(timedOut, ","))
+	}
+
 	if cpuTimeCoversChildren {
 		tracking.SetCommandTag(tracking.TagCPUMS, strconv.FormatInt(time.Duration(cpuTime.Load()).Milliseconds(), 10))
 	}

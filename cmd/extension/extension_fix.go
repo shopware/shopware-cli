@@ -30,6 +30,13 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		timeout, _ := cmd.Flags().GetString("timeout")
+		ctx, cancel, err := verifier.WithQATimeout(cmd.Context(), timeout, cmd.Flags().Changed("timeout"))
+		if err != nil {
+			return err
+		}
+		defer cancel()
+
 		progress := verifier.NewProgress("")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -43,13 +50,15 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		ext, err := extension.GetExtensionByFolder(cmd.Context(), path)
+		ext, err := extension.GetExtensionByFolder(ctx, path)
+		err = verifier.QAPhaseError(ctx, verifier.QAPhaseExtensionDiscovery, err)
 		if err != nil {
 			return err
 		}
 
 		finishSetup := progress.Start("preparing tools and discovering extension configuration")
-		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
+		toolCfg, err := verifier.SetupExtensionToolConfig(ctx, cmd.Root().Version, ext)
+		err = verifier.QAPhaseError(ctx, verifier.QAPhaseSetupAndDiscovery, err)
 		finishSetup(err)
 		if err != nil {
 			return err
@@ -58,22 +67,29 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
 		results := verifier.RunTools(
-			cmd.Context(), tools, statuses, *toolCfg, progress,
+			ctx, tools, statuses, *toolCfg, progress,
 			func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
-				return tool.Fix(cmd.Context(), *toolCfg, execution, dryRun)
+				return tool.Fix(ctx, *toolCfg, execution, dryRun)
 			},
 		)
+		cancel()
+
+		results = verifier.EnsureQATimeoutResult(ctx, results)
 		return validation.ReportTools(results, "summary", "Fixers")
 	},
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
+
 	extensionFixCmd.Flags().Bool("dry-run", false, "Report files that would change, without changing them")
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
+	extensionFixCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Limit total QA execution time (0 disables; "+verifier.QATimeoutEnv+" sets the default)")
+
 	_ = extensionFixCmd.Flags().MarkDeprecated("allow-non-git", deprecation.Message("2027-02-10", ""))
+
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }
