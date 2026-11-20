@@ -15,8 +15,20 @@ import (
 var projectFixCmd = &cobra.Command{
 	Use:   "fix [path]",
 	Short: "Apply code-quality fixes to a project",
-	Long:  "Run code-quality fixers on the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. Use --dry-run to report findings and proposed changes without applying fixes.",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Apply code-quality fixes to project extensions and configured bundles.
+
+Extensions outside vendor/ are fixed, including those in custom/. Packages
+installed in vendor/ are not changed.
+
+Fixes include PHP refactoring, JavaScript and SCSS corrections, and conversion
+of Symfony service and routing XML in plugins to YAML. Rector uses the
+project's rector.php when present and the bundled Shopware rules otherwise.
+It uses the project's installed Composer dependencies.
+
+Changes are written directly to source files. Use --dry-run to report findings
+and proposed changes without modifying files. If the command is interrupted, it
+does not undo changes already made.`,
+	Args: cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -93,7 +105,7 @@ func init() {
 	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
-	projectFixCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Limit total QA execution time (0 disables; "+verifier.QATimeoutEnv+" sets the default)")
+	projectFixCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Interrupt fixing after e.g. 30s, 5m or 1h30m (no timeout by default, 0 disables, "+verifier.QATimeoutEnv+" sets the default)")
 
 	_ = projectFixCmd.PersistentFlags().MarkDeprecated("allow-non-git", deprecation.Message("2027-02-10", ""))
 

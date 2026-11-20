@@ -18,13 +18,24 @@ var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
 	Short: "Validate extension metadata, assets, and code quality",
 	Long: `Validate an extension folder or ZIP file.
-Prettier and PHP-CS-Fixer check formatting without changing source files. Formatting violations fail validation.
-Use --exclude-formatters to skip formatting checks.
 
-Store compliance checks that Administration and Storefront source files have matching compiled assets.
-Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.
-A folder is validated in place; PHPStan's composer dependencies are always resolved inside var/cache/shopware-cli for the requested --check-against baseline.
-The extension's vendor/ and composer.lock are preserved. Custom PHPStan configurations that load vendor/autoload.php themselves still load local dependencies.`,
+Folders are validated in place. ZIP files are extracted to a temporary
+folder before validation.
+
+PHP-CS-Fixer and Prettier check formatting in dry-run mode without changing
+source files. Formatting differences fail validation. Use --exclude-formatters
+to skip these checks.
+
+Store compliance checks report Administration and Storefront sources without a
+build directory and builds without sources. Enable these checks with
+validation.store_compliance in the extension configuration or
+SHOPWARE_CLI_STORE_COMPLIANCE=1.
+
+Use --check-against to select the lowest or highest supported Shopware version
+for PHPStan. Dependencies for the analysis are installed in
+var/cache/shopware-cli, leaving the extension's vendor/ and composer.lock
+unchanged. A custom PHPStan configuration that loads vendor/autoload.php still
+loads local dependencies.`,
 	Example: `  # Validate an extension
   shopware-cli extension validate ./my-extension
 
@@ -167,7 +178,7 @@ func init() {
 	extensionValidateCmd.PersistentFlags().Bool("exclude-formatters", false, "Exclude validation checks that also support formatting")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
-	extensionValidateCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Limit total QA execution time (0 disables; "+verifier.QATimeoutEnv+" sets the default)")
+	extensionValidateCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Interrupt validation after e.g. 30s, 5m or 1h30m (no timeout by default, 0 disables, "+verifier.QATimeoutEnv+" sets the default)")
 
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", deprecation.Message("2027-02-10", ""))

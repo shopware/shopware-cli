@@ -17,10 +17,17 @@ var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
 	Short: "Apply code-quality fixes to an extension",
 	Long: `Apply code-quality fixes to an extension.
-Use --dry-run to report findings and proposed changes without applying fixes.
-Rector resolves the lowest compatible dependencies in var/cache/shopware-cli,
-preserving the extension's vendor/, composer.json and composer.lock.
-A local rector.php takes precedence over the bundled Shopware rules.`,
+
+Fixes include PHP refactoring, JavaScript and SCSS corrections, and conversion
+of Symfony service and routing XML in plugins to YAML.
+
+Rector uses the extension's rector.php when present and the bundled Shopware
+rules otherwise. It installs the lowest compatible dependencies in
+var/cache/shopware-cli.
+
+Changes are written directly to source files. Use --dry-run to report findings
+and proposed changes without modifying files. If the command is interrupted, it
+does not undo changes already made.`,
 	Args: cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		only, _ := cmd.Flags().GetString("only")
@@ -86,7 +93,7 @@ func init() {
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
-	extensionFixCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Limit total QA execution time (0 disables; "+verifier.QATimeoutEnv+" sets the default)")
+	extensionFixCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Interrupt fixing after e.g. 30s, 5m or 1h30m (no timeout by default, 0 disables, "+verifier.QATimeoutEnv+" sets the default)")
 
 	_ = extensionFixCmd.Flags().MarkDeprecated("allow-non-git", deprecation.Message("2027-02-10", ""))
 

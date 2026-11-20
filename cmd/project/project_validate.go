@@ -15,11 +15,15 @@ import (
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Run static analysis and Shopware checks on a project",
-	Long: `Validate the project's own code, such as extensions in custom/ and configured bundles.
-Packages that Composer installs into vendor/ are not validated, but PHPStan needs them, so run composer install first.
+	Long: `Validate project extensions and configured bundles.
 
-Prettier and PHP-CS-Fixer check formatting without changing source files. Formatting violations fail validation.
-Use --exclude-formatters to skip formatting checks.`,
+Extensions outside vendor/ are checked, including those in custom/. Packages
+installed in vendor/ are not checked. PHPStan uses the project's installed
+dependencies, so run composer install first.
+
+PHP-CS-Fixer and Prettier check formatting in dry-run mode without changing
+source files. Formatting differences fail validation. Use --exclude-formatters
+to skip these checks.`,
 	Example: `  # Validate a project
   shopware-cli project validate ./my-project
 
@@ -126,7 +130,7 @@ func init() {
 	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the project directory itself, not a temporary copy")
 	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Validate only extensions in custom/* folders")
-	projectValidateCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Limit total QA execution time (0 disables; "+verifier.QATimeoutEnv+" sets the default)")
+	projectValidateCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Interrupt validation after e.g. 30s, 5m or 1h30m (no timeout by default, 0 disables, "+verifier.QATimeoutEnv+" sets the default)")
 
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", deprecation.Message("2027-02-10", "--format"))

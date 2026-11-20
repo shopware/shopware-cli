@@ -14,8 +14,19 @@ import (
 var projectFormatCmd = &cobra.Command{
 	Use:   "format [path]",
 	Short: "Format a project's code with PHP-CS-Fixer and Prettier",
-	Long:  "Format the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. PHP-CS-Fixer uses the project's .php-cs-fixer.dist.php if present; Prettier always uses the CLI's own config. Use --dry-run to only report files that would change.",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Format project extensions and configured bundles with PHP-CS-Fixer and Prettier.
+
+Extensions outside vendor/ are formatted, including those in custom/. Packages
+installed in vendor/ are not changed.
+
+PHP-CS-Fixer uses the project's .php-cs-fixer.dist.php when present and the
+CLI's bundled configuration otherwise. Prettier uses the CLI's bundled
+configuration.
+
+Changes are written directly to source files. Use --dry-run to report changes
+without modifying files. If the command is interrupted, it does not undo
+changes already made.`,
+	Args: cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
 			return err
@@ -95,7 +106,7 @@ func init() {
 	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
 	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Report files that would change, without changing them")
 	projectFormatCmd.PersistentFlags().String("exclude", "", "Exclude specified formatters from running (comma-separated, e.g. prettier,php-cs-fixer). When combined with --only, exclude formatters from the selected set")
-	projectFormatCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Limit total QA execution time (0 disables; "+verifier.QATimeoutEnv+" sets the default)")
+	projectFormatCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Interrupt formatting after e.g. 30s, 5m or 1h30m (no timeout by default, 0 disables, "+verifier.QATimeoutEnv+" sets the default)")
 
 	_ = projectFormatCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FormatTool])
 	_ = projectFormatCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FormatTool])
