@@ -40,7 +40,7 @@ func Method(method string) Config {
 
 // BearerToken sets the "authorization:" header.
 func BearerToken(token string) Config {
-	return Header("Authorization", token)
+	return Header("Authorization", "Bearer "+token)
 }
 
 // Args allows custom strings as arguments to the curl call.

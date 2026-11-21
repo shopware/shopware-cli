@@ -17,6 +17,7 @@ require (
 	github.com/dustin/go-humanize v1.1.0
 	github.com/evanw/esbuild v0.28.2
 	github.com/go-sql-driver/mysql v1.10.1
+	github.com/gofrs/flock v0.13.0
 	github.com/gorilla/schema v1.4.1
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jaswdr/faker/v2 v2.10.0
