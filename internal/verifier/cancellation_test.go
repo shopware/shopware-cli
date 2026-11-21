@@ -103,3 +103,36 @@ fi`,
 	assert.FileExists(t, filepath.Join(installed, "js", "installed"))
 	assert.Equal(t, installed, GetToolDirectory())
 }
+
+func TestTimedOutInstallationIsNotPublished(t *testing.T) {
+	cache := t.TempDir()
+	ready := filepath.Join(cache, "ready")
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", cache)
+	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", "")
+	t.Setenv("PHP_BINARY", "")
+	t.Setenv("INSTALL_READY", ready)
+	previous := toolDirectory
+	t.Cleanup(func() { setToolDirectory(previous) })
+	fakeTools(t, map[string]string{
+		"php":      "printf 'PHP 8.2.0 (cli)'",
+		"node":     "printf 'v20.0.0'",
+		"composer": `: > "$INSTALL_READY"; exec /bin/sleep 30`,
+		"npm":      ":",
+	})
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	done := make(chan error, 1)
+	go func() { done <- SetupTools(ctx, "timeout-test") }()
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(ready)
+		return err == nil
+	}, 5*time.Second, 10*time.Millisecond)
+	cancel(ErrQATimeout)
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, QAPhaseError(ctx, QAPhaseToolSetup, err), ErrQATimeout)
+	case <-time.After(5 * time.Second):
+		t.Fatal("tool installation did not stop")
+	}
+	assert.NoDirExists(t, filepath.Join(cache, "tools", "timeout-test"))
+}

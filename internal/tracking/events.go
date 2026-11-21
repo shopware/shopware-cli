@@ -67,6 +67,10 @@ const (
 	TagFailedStep = "failed_step"
 	// TagDeprecated lists the deprecated items a run used, sorted and comma-separated.
 	TagDeprecated = "deprecated"
+	// QA timeout budget and the phase interrupted by the budget.
+	TagQATimeoutMS    = "qa_timeout_ms"
+	TagQATimeoutPhase = "qa_timeout_phase"
+	TagQATimeoutTools = "qa_timeout_tools"
 	// Input counts of validate, fix and format, set by RunTools with SetCommandTag.
 	// Configured bundles are not extensions, so they only count as directories.
 	TagExtensionCount     = "extension_count"

@@ -1,6 +1,8 @@
 package extension
 
 import (
+	"archive/zip"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -314,4 +316,50 @@ func TestGetShopwareVersionConstraintForBuild(t *testing.T) {
 		require.NotNil(t, constraint)
 		assert.True(t, constraint.Check(version.Must(version.NewVersion("6.4.0.0"))))
 	})
+}
+
+func TestGetExtensionByZip(t *testing.T) {
+	temp := t.TempDir()
+	t.Setenv("TMPDIR", temp)
+	create := func(name string, entries map[string]string) string {
+		p := filepath.Join(temp, name)
+		file, err := os.Create(p)
+		require.NoError(t, err)
+		w := zip.NewWriter(file)
+		for name, content := range entries {
+			entry, err := w.Create(name)
+			require.NoError(t, err)
+			_, err = entry.Write([]byte(content))
+			require.NoError(t, err)
+		}
+		require.NoError(t, w.Close())
+		require.NoError(t, file.Close())
+		return p
+	}
+	valid := create("valid.zip", map[string]string{"Example/manifest.xml": exampleManifest})
+	ext, err := GetExtensionByZip(t.Context(), valid)
+	require.NoError(t, err)
+	assert.Equal(t, TypePlatformApp, ext.GetType())
+	require.NoError(t, os.RemoveAll(filepath.Dir(ext.GetPath())))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = GetExtensionByZip(ctx, valid)
+	assert.ErrorIs(t, err, context.Canceled)
+	empty := create("empty.zip", nil)
+	_, err = GetExtensionByZip(t.Context(), empty)
+	assert.Error(t, err)
+	for _, name := range []string{"./manifest.xml", "/manifest.xml"} {
+		archive := create("root-layout.zip", map[string]string{name: exampleManifest})
+		_, err = GetExtensionByZip(t.Context(), archive)
+		assert.Error(t, err, "entry %s", name)
+	}
+	bad := filepath.Join(temp, "bad.zip")
+	require.NoError(t, os.WriteFile(bad, []byte("bad"), 0o644))
+	_, err = GetExtensionByZip(t.Context(), bad)
+	assert.Error(t, err)
+	entries, err := os.ReadDir(temp)
+	require.NoError(t, err)
+	for _, entry := range entries {
+		assert.False(t, entry.IsDir(), "unexpected extraction directory %s", entry.Name())
+	}
 }

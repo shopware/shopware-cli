@@ -19,6 +19,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
 // useTrackingTestRoot swaps rootCmd for a minimal tree containing
@@ -161,6 +162,23 @@ func TestTrackCommandExecution_Result(t *testing.T) {
 			assert.Equal(t, tt.want, (*events)[0][tracking.TagResult])
 		})
 	}
+}
+
+func TestTrackCommandExecution_QATimeoutAndParentCancellation(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	parent, cancelParent := context.WithCancel(t.Context())
+	defer cancelParent()
+	qaCtx, cancelQA := context.WithCancelCause(parent)
+	cancelQA(verifier.ErrQATimeout)
+	runErr := verifier.QAPhaseError(qaCtx, verifier.QAPhaseToolSetup, fmt.Errorf("cannot load tools: %w", context.Canceled))
+
+	trackCommandExecution(parent, []string{"project", "console"}, 0, runErr, "")
+	cancelParent()
+	trackCommandExecution(parent, []string{"project", "console"}, 0, runErr, "")
+
+	require.Len(t, *events, 2)
+	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
+	assert.Equal(t, tracking.ResultCancelled, (*events)[1][tracking.TagResult])
 }
 
 func TestTrackCommandExecution_Tags(t *testing.T) {

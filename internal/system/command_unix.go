@@ -1,6 +1,6 @@
 //go:build unix
 
-package verifier
+package system
 
 import (
 	"errors"
@@ -9,9 +9,9 @@ import (
 	"syscall"
 )
 
-// Tools may launch workers that inherit their output pipes. Kill the entire
-// process group on cancellation so those workers cannot outlive the command.
-func configureToolCancellation(cmd *exec.Cmd) {
+// configureCommandCancellation gives the command its own process group so context
+// cancellation kills the command and workers in that group together.
+func configureCommandCancellation(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
