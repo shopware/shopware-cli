@@ -10,7 +10,11 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/archiver"
+	internalgit "github.com/shopware/shopware-cli/internal/git"
 )
+
+// ErrNotGitRepository is returned when the folder to package is not inside a Git working tree.
+var ErrNotGitRepository = errors.New("not inside a Git repository")
 
 func gitTagOrBranchOfFolder(ctx context.Context, source string) (string, error) {
 	// Prefer a tag that points exactly at HEAD. This keeps the resulting filename
@@ -42,7 +46,15 @@ func gitTagOrBranchOfFolder(ctx context.Context, source string) (string, error) 
 }
 
 func GitCopyFolder(ctx context.Context, source, target, commitHash string) (string, error) {
-	var err error
+	isGitRepository, err := internalgit.IsInsideWorkTree(ctx, source)
+	if err != nil {
+		return "", err
+	}
+
+	if !isGitRepository {
+		return "", fmt.Errorf("cannot package %s: %w (pass --disable-git to package the working copy)", source, ErrNotGitRepository)
+	}
+
 	if commitHash == "" {
 		commitHash, err = gitTagOrBranchOfFolder(ctx, source)
 

@@ -197,20 +197,26 @@ func unshallowRepository(ctx context.Context, repo string) error {
 	return err
 }
 
-func IsWorkingTreeDirty(ctx context.Context, repo string) (bool, bool, error) {
-	cmd := exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--is-inside-work-tree") //nolint:gosec
+// IsInsideWorkTree reports whether dir is inside a Git working tree.
+func IsInsideWorkTree(ctx context.Context, dir string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--is-inside-work-tree") //nolint:gosec
 	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return false, false, nil
+			return false, nil
 		}
 
-		return false, false, fmt.Errorf("checking git repository: %w", err)
+		return false, fmt.Errorf("checking git repository: %w", err)
 	}
 
-	if strings.TrimSpace(string(output)) != "true" {
-		return false, false, nil
+	return strings.TrimSpace(string(output)) == "true", nil
+}
+
+func IsWorkingTreeDirty(ctx context.Context, repo string) (bool, bool, error) {
+	isGitRepository, err := IsInsideWorkTree(ctx, repo)
+	if err != nil || !isGitRepository {
+		return false, false, err
 	}
 
 	statusCmd := exec.CommandContext(ctx, "git", "-C", repo, "status", "--porcelain", "--untracked-files=all") //nolint:gosec
