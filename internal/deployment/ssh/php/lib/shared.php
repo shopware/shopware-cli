@@ -1,6 +1,6 @@
 <?php
 
-function deploymentShare(string $root, string $release, string $relative, bool $directory, ?string $previous, bool $coordinated = false): void
+function deploymentShare(string $root, string $release, string $relative, bool $directory, ?string $previous, bool $coordinated = false, ?array $acl = null): void
 {
     $shared = path_join($root, 'shared', $relative);
     $source = path_join($release, $relative);
@@ -11,7 +11,9 @@ function deploymentShare(string $root, string $release, string $relative, bool $
         throw new RuntimeException("Shared paths must not be symlinks: $shared");
     }
 
-    if (!file_exists($shared)) {
+    $fresh = !file_exists($shared);
+
+    if ($fresh) {
         if ($coordinated && ($directory || file_exists($source) || is_link($source))) {
             throw new RuntimeException("Provision shared path before multi-host deployment: $shared");
         }
@@ -35,6 +37,14 @@ function deploymentShare(string $root, string $release, string $relative, bool $
 
     if (($directory && !is_dir($shared)) || (!$directory && !is_file($shared))) {
         throw new RuntimeException("Unexpected shared path type: $shared");
+    }
+
+    if ($acl !== null) {
+        if ($directory) {
+            deploymentWritableACL($shared, $acl['http'], $acl['deploy'], $fresh);
+        } else {
+            deploymentRun(['setfacl', '-m', sprintf('u:%s:r', $acl['http']), '--', $shared], $root);
+        }
     }
 
     deploymentRemove($source);

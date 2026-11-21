@@ -87,8 +87,15 @@ function deploymentReleaseCreatedAt(string $root, string $name, array $state): ?
     return $created === null ? null : deploymentTimestamp($created);
 }
 
+function deploymentVerifyRuntimeUser(array $state, string $name, ?string $httpUID): void
+{
+    if (($state['http_uid'] ?? null) !== $httpUID) {
+        throw new RuntimeException(sprintf('Cannot reuse release %s with a different PHP runtime user; deploy a new release name', $name));
+    }
+}
+
 // Only fully recorded activations are eligible for reuse.
-function deploymentRetained(string $root, string $name): array
+function deploymentRetained(string $root, string $name, ?string $httpUID): array
 {
     $release = path_join($root, 'releases', $name);
 
@@ -97,6 +104,7 @@ function deploymentRetained(string $root, string $name): array
     }
 
     $state = deploymentReadMetadata(deploymentStatePath($root, 'releases', "$name.json"));
+    deploymentVerifyRuntimeUser($state, $name, $httpUID);
     $reference = $state['reference'] ?? null;
 
     if (($state['release'] ?? null) !== $name || ($state['ready'] ?? null) !== true
@@ -126,7 +134,7 @@ function deploymentRetained(string $root, string $name): array
 }
 
 /** List retained releases that can be activated again, newest first. */
-function deploymentCandidates(string $root, ?string $active): array
+function deploymentCandidates(string $root, ?string $active, ?string $httpUID): array
 {
     $candidates = [];
     $releases = path_join($root, 'releases');
@@ -135,7 +143,7 @@ function deploymentCandidates(string $root, ?string $active): array
         $name = $entry->getFilename();
 
         try {
-            $event = deploymentRetained($root, $name);
+            $event = deploymentRetained($root, $name, $httpUID);
         } catch (Throwable) {
             continue;
         }

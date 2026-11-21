@@ -92,6 +92,12 @@ func (s *SSH) preflightTarget(name string) (PreflightTarget, error) {
 		PreflightField{Label: "Active path", Value: path.Join(root, s.activeLinkName())},
 		PreflightField{Label: "Deployment root", Value: root},
 	)
+	if config.Become != "" {
+		target.Fields = append(target.Fields, PreflightField{Label: "Deployment user", Value: config.Become})
+	}
+	if config.HTTPUser != "" {
+		target.Fields = append(target.Fields, PreflightField{Label: "PHP runtime user", Value: config.HTTPUser})
+	}
 	return target, nil
 }
 

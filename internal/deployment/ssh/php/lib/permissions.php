@@ -1,5 +1,50 @@
 <?php
 
+function deploymentRuntimeAccounts(string $httpUser, string $root): ?array
+{
+    if ($httpUser === '') {
+        return null;
+    }
+    $deploy = trim(deploymentRunBoundedCommand(['id', '-u'], $root, 5, true));
+    try {
+        $http = trim(deploymentRunBoundedCommand(['id', '-u', '--', $httpUser], $root, 5, true));
+    } catch (Throwable $error) {
+        throw new RuntimeException(sprintf('Cannot resolve PHP runtime user %s: %s', $httpUser, $error->getMessage()), 0, $error);
+    }
+    if (!ctype_digit($deploy) || !ctype_digit($http)) {
+        throw new RuntimeException(sprintf('Cannot resolve deployment user IDs for PHP runtime user %s', $httpUser));
+    }
+    return $http === $deploy ? null : ['http' => $http, 'deploy' => $deploy];
+}
+
+// Install access ACLs on writable roots and default ACLs for children created
+// by either PHP or the deployment helper. Only walk freshly extracted data.
+// Shared directories already serving traffic can be large and application-owned.
+function deploymentWritableACL(string $path, string $httpUID, string $deployUID, bool $fresh): void
+{
+    $access = sprintf('u:%1$s:rwx,u:%2$s:rwx,d:u:%1$s:rwx,d:u:%2$s:rwx', $httpUID, $deployUID);
+    if ($fresh) {
+        // Physical traversal skips symlinks. A hard-linked file may also be
+        // release code, so never change its ACL through a writable directory.
+        // Keep the tree private while granting ACLs on its descendants.
+        $mode = deploymentPermissionStat($path)['mode'] & 07777;
+        if (!chmod($path, 0700)) {
+            throw new RuntimeException(sprintf('Cannot prepare runtime permissions: %s', $path));
+        }
+        try {
+            $fileAccess = sprintf('u:%s:rwX,u:%s:rwX', $httpUID, $deployUID);
+            deploymentRun(['find', '-P', $path, '-mindepth', '1',
+                '(', '-type', 'f', '-links', '1', '-exec', 'setfacl', '-m', $fileAccess, '--', '{}', '+', ')',
+                '-o', '(', '-type', 'd', '-exec', 'setfacl', '-m', $access, '--', '{}', '+', ')'], $path);
+        } finally {
+            if (!chmod($path, $mode)) {
+                throw new RuntimeException(sprintf('Cannot restore runtime permissions: %s', $path));
+            }
+        }
+    }
+    deploymentRun(['setfacl', '-m', $access, '--', $path], $path);
+}
+
 // Runtime data lives outside the sealed release. Never follow a symlink while
 // inspecting or changing permissions: shared paths belong to the application.
 function deploymentPermissionStat(string $path): array
@@ -51,14 +96,23 @@ function deploymentRuntimeDirectoryAccess(string $path, bool $makeWritable = fal
     }
 }
 
-function deploymentValidateCacheTree(string $path, bool $makeWritable = false): void
+function deploymentValidateCacheTree(string $path, bool $makeWritable = false, ?string $httpUID = null): void
 {
-    switch (deploymentFileType(deploymentPermissionStat($path)['mode'])) {
+    $stat = deploymentPermissionStat($path);
+    switch (deploymentFileType($stat['mode'])) {
         case 'directory':
-            deploymentRuntimeDirectoryAccess($path, $makeWritable);
+            if ($httpUID !== null && (string) $stat['uid'] === $httpUID) {
+                // PHP may tighten the ACL mask on its own cache. A retained
+                // release needs no writes here, even when the cache is private.
+                if (!is_readable($path) || !is_executable($path)) {
+                    return;
+                }
+            } else {
+                deploymentRuntimeDirectoryAccess($path, $makeWritable);
+            }
 
             foreach (new FilesystemIterator($path) as $entry) {
-                deploymentValidateCacheTree($entry->getPathname(), $makeWritable);
+                deploymentValidateCacheTree($entry->getPathname(), $makeWritable, $httpUID);
             }
 
             break;
@@ -70,7 +124,7 @@ function deploymentValidateCacheTree(string $path, bool $makeWritable = false): 
     }
 }
 
-function deploymentVerifyRuntimeCache(string $root, string $release, string $name): void
+function deploymentVerifyRuntimeCache(string $root, string $release, string $name, ?string $httpUID = null): void
 {
     $directories = [
         $root,
@@ -93,7 +147,23 @@ function deploymentVerifyRuntimeCache(string $root, string $release, string $nam
         throw new RuntimeException("Release cache must link to $cache");
     }
 
-    deploymentValidateCacheTree($cache);
+    deploymentRuntimeDirectoryAccess($cache);
+    deploymentValidateCacheTree($cache, false, $httpUID);
+}
+
+// HTMLPurifier otherwise creates its serializer directories on the first web
+// request and chmods away the deploy user's inherited write ACL (umask 0022).
+// Prepare only the fresh release's local Shopware production caches.
+function deploymentPrepareSanitizerCache(string $cache): void
+{
+    foreach (new FilesystemIterator($cache) as $entry) {
+        if ($entry->isLink() || !$entry->isDir() || !str_starts_with($entry->getFilename(), 'prod_')) {
+            continue;
+        }
+        foreach (['HTML', 'CSS', 'URI'] as $type) {
+            deploymentDirectory(path_join($entry->getPathname(), $type));
+        }
+    }
 }
 
 // Called only for inactive releases, under the deployment lock and after
@@ -225,12 +295,12 @@ function deploymentReleasePermissions(string $path, bool $seal): void
     }
 }
 
-function deploymentVerifySealedRelease(string $root, string $release, string $name): void
+function deploymentVerifySealedRelease(string $root, string $release, string $name, ?string $httpUID): void
 {
     try {
-        deploymentVerifyRuntimeCache($root, $release, $name);
+        deploymentVerifyRuntimeCache($root, $release, $name, $httpUID);
         deploymentReleasePermissions($release, false);
     } catch (Throwable $error) {
-        throw new RuntimeException("Active release $name is not protected by the readonly runtime-cache policy; deploy a new release name. {$error->getMessage()}", 0, $error);
+        throw new RuntimeException(sprintf('Release %s is not protected by the readonly runtime-cache policy; deploy a new release name. %s', $name, $error->getMessage()), 0, $error);
     }
 }

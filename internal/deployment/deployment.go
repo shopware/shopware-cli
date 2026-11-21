@@ -66,15 +66,23 @@ type DeploymentPruneOptions struct {
 // DeploymentPruneResult lists removals, or planned removals for a dry run.
 type DeploymentPruneResult struct {
 	ArtifactSkipReasons   []string                    `json:"artifact_skip_reasons,omitempty"`
+	RecentDeployments     []string                    `json:"recent_deployments,omitempty"`
 	IncompleteDeployments []string                    `json:"incomplete_deployments,omitempty"`
 	Deployments           []Deployment                `json:"deployments"`
 	Artifacts             []string                    `json:"artifacts"`
 	Hosts                 []DeploymentPruneHostResult `json:"hosts,omitempty"`
 }
 
+// Empty reports whether there are any removals, retention decisions or host results to display.
+func (r DeploymentPruneResult) Empty() bool {
+	return len(r.Deployments) == 0 && len(r.Artifacts) == 0 && len(r.Hosts) == 0 &&
+		len(r.ArtifactSkipReasons) == 0 && len(r.RecentDeployments) == 0 && len(r.IncompleteDeployments) == 0
+}
+
 // DeploymentPruneHostResult records confirmed host-local progress, including partial failures.
 type DeploymentPruneHostResult struct {
 	ArtifactSkipReasons   []string     `json:"artifact_skip_reasons,omitempty"`
+	RecentDeployments     []string     `json:"recent_deployments,omitempty"`
 	IncompleteDeployments []string     `json:"incomplete_deployments,omitempty"`
 	Host                  string       `json:"host"`
 	Deployments           []Deployment `json:"deployments"`

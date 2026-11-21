@@ -17,6 +17,8 @@ type EnvironmentSSHHostConfig struct {
 	Cachetool    *EnvironmentSSHCachetoolConfig `yaml:"cachetool,omitempty"`
 	Host         string                         `yaml:"host" jsonschema:"required"`
 	User         string                         `yaml:"user,omitempty"`
+	Become       string                         `yaml:"become,omitempty"`
+	HTTPUser     string                         `yaml:"http_user,omitempty"`
 	Port         int                            `yaml:"port,omitempty"`
 	Directory    string                         `yaml:"directory,omitempty"`
 	IdentityFile string                         `yaml:"identity_file,omitempty"`
@@ -31,6 +33,8 @@ type SSHHost struct {
 }
 
 var sshHostLabel = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+var sshAccountName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*\$?$`)
 
 // Validate checks a complete SSH configuration, including inherited host settings.
 func (c *EnvironmentSSHConfig) Validate() error {
@@ -118,7 +122,7 @@ func (c *EnvironmentSSHConfig) ResolveHosts() ([]SSHHost, string, error) {
 			target *string
 			value  string
 		}{
-			{&member.User, override.User}, {&member.Directory, override.Directory},
+			{&member.User, override.User}, {&member.HTTPUser, override.HTTPUser}, {&member.Become, override.Become}, {&member.Directory, override.Directory},
 			{&member.IdentityFile, override.IdentityFile}, {&member.PHPBinary, override.PHPBinary},
 		} {
 			if field.value != "" {
@@ -157,6 +161,12 @@ func (c *EnvironmentSSHConfig) ResolveHosts() ([]SSHHost, string, error) {
 
 // validateSSHMember requires a host and directory and validates the resolved shared paths.
 func validateSSHMember(c *EnvironmentSSHConfig) error {
+	if c.Become != "" && !sshAccountName.MatchString(c.Become) {
+		return errors.New("cannot configure ssh.become: expected a Unix user name")
+	}
+	if c.HTTPUser != "" && !sshAccountName.MatchString(c.HTTPUser) {
+		return errors.New("cannot configure ssh.http_user: expected a Unix user name or numeric UID")
+	}
 	if c.Hooks != nil && c.Hooks.TimeoutSeconds < 0 {
 		return errors.New("cannot configure ssh.hooks.timeout_seconds: must be zero or positive")
 	}
