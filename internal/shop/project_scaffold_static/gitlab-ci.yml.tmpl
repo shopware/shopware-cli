@@ -7,9 +7,23 @@ stages:
 include:
   - component: gitlab.com/shopware/ci-components/project-validate@main
     inputs:
-      php_version: "8.4"
+      php_version: "{{ .PHPVersion }}"
 {{- if .Deployer }}
   - component: gitlab.com/shopware/ci-components/project-deployer@main
     inputs:
-      php_version: "8.4"
+      php_version: "{{ .PHPVersion }}"
 {{- end }}
+
+# Checks that the production Administration and Storefront build succeeds. 
+build:
+  stage: check
+  image:
+    name: ghcr.io/shopware/shopware-cli:latest-php-{{ .PHPVersion }}
+    entrypoint: ["/bin/sh", "-c"]
+  variables:
+    COMPOSER_HOME: ${CI_PROJECT_DIR}/.composer
+  cache:
+    paths:
+      - .composer/
+  script:
+    - shopware-cli project ci .

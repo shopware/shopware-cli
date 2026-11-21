@@ -26,10 +26,10 @@ const (
 //go:embed project_scaffold_static/deploy.php
 var deployerTemplate string
 
-//go:embed project_scaffold_static/github-ci.yml
+//go:embed project_scaffold_static/github-ci.yml.tmpl
 var githubCITemplate string
 
-//go:embed project_scaffold_static/github-deploy.yml
+//go:embed project_scaffold_static/github-deploy.yml.tmpl
 var githubDeployTemplate string
 
 //go:embed project_scaffold_static/gitlab-ci.yml.tmpl
@@ -198,7 +198,7 @@ func (s *ShopwareProjectScaffold) scaffold(ctx context.Context) error {
 		return err
 	}
 
-	return setupCI(ctx, s.ProjectFolder, s.CISystem, s.DeploymentMethod)
+	return setupCI(ctx, s.ProjectFolder, s.CISystem, s.DeploymentMethod, s.PHPVersion)
 }
 
 // WriteComposerJson (re)generates the project's composer.json from the
@@ -278,7 +278,19 @@ func (s ShopwareProjectScaffold) writeDockerfile(ctx context.Context) error {
 	return nil
 }
 
-func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod string) error {
+func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod, phpVersion string) error {
+	if phpVersion == "" {
+		phpVersion = "8.4"
+	}
+
+	data := struct {
+		Deployer   bool
+		PHPVersion string
+	}{
+		Deployer:   deploymentMethod == DeploymentDeployer,
+		PHPVersion: phpVersion,
+	}
+
 	switch ciSystem {
 	case CIGitHub:
 		if err := os.MkdirAll(filepath.Join(projectFolder, ".github", "workflows"), os.ModePerm); err != nil {
@@ -286,36 +298,37 @@ func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod stri
 		}
 
 		ciPath := filepath.Join(".github", "workflows", "ci.yml")
-		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), []byte(githubCITemplate), os.ModePerm); err != nil {
+		if err := writeCITemplate(ctx, projectFolder, ciPath, githubCITemplate, data); err != nil {
 			return err
 		}
-		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
 
-		if deploymentMethod == DeploymentDeployer {
+		if data.Deployer {
 			deployPath := filepath.Join(".github", "workflows", "deploy.yml")
-			if err := os.WriteFile(filepath.Join(projectFolder, deployPath), []byte(githubDeployTemplate), os.ModePerm); err != nil {
-				return err
-			}
-			logging.FromContext(ctx).Infof("Created CI template %s", deployPath)
+			return writeCITemplate(ctx, projectFolder, deployPath, githubDeployTemplate, data)
 		}
 
 	case CIGitLab:
-		tmpl, err := template.New("gitlab-ci").Parse(gitlabCITemplate)
-		if err != nil {
-			return err
-		}
-
-		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, struct{ Deployer bool }{Deployer: deploymentMethod == DeploymentDeployer}); err != nil {
-			return err
-		}
-
-		ciPath := ".gitlab-ci.yml"
-		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), buf.Bytes(), os.ModePerm); err != nil {
-			return err
-		}
-		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
+		return writeCITemplate(ctx, projectFolder, ".gitlab-ci.yml", gitlabCITemplate, data)
 	}
+
+	return nil
+}
+
+func writeCITemplate(ctx context.Context, projectFolder, ciPath, content string, data any) error {
+	tmpl, err := template.New(ciPath).Parse(content)
+	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(filepath.Join(projectFolder, ciPath), buf.Bytes(), os.ModePerm); err != nil {
+		return err
+	}
+	logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
 
 	return nil
 }
