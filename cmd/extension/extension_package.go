@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/archiver"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
@@ -208,6 +209,57 @@ var extensionPackageCmd = &cobra.Command{
 			return fmt.Errorf("before hooks pack: %w", err)
 		}
 
+		writeSBOM, _ := cmd.Flags().GetBool("sbom")
+		embedSBOM, _ := cmd.Flags().GetBool("sbom-embed")
+
+		// The sidecar is staged and only moved next to the ZIP once the ZIP was
+		// written, so a failed run never pairs an old ZIP with a new SBOM.
+		var sidecarPath, stagedSidecar string
+		var sbomComponents int
+		defer func() {
+			if stagedSidecar != "" {
+				_ = os.Remove(stagedSidecar)
+			}
+		}()
+
+		if writeSBOM || embedSBOM {
+			// Reload, because BuildModifier may have written a new version to
+			// manifest.xml after tempExt was read.
+			sbomExt, err := extension.GetExtensionByFolder(cmd.Context(), extDir)
+			if err != nil {
+				return fmt.Errorf("cannot generate SBOM: %w", err)
+			}
+
+			bom, err := extension.GenerateSBOM(cmd.Context(), sbomExt, extDir, extension.SBOMOptions{ToolVersion: cliversion.Version})
+			if err != nil {
+				return fmt.Errorf("cannot generate SBOM: %w", err)
+			}
+			sbomComponents = len(bom.Components)
+
+			data, err := extension.MarshalSBOM(bom)
+			if err != nil {
+				return fmt.Errorf("cannot generate SBOM: %w", err)
+			}
+
+			embeddedPath := filepath.Join(extDir, extension.DefaultExtensionSBOMOutput)
+			if embedSBOM {
+				if err := extension.WriteSBOMFile(embeddedPath, data); err != nil {
+					return fmt.Errorf("cannot generate SBOM: %w", err)
+				}
+				logging.FromContext(cmd.Context()).Infof("Wrote SBOM with %d components to %s", sbomComponents, embeddedPath)
+			} else if err := os.Remove(embeddedPath); err != nil && !os.IsNotExist(err) {
+				// An SBOM left over from extension sbom would describe another build.
+				return fmt.Errorf("cannot remove stale SBOM %s: %w", embeddedPath, err)
+			}
+
+			if writeSBOM {
+				sidecarPath = strings.TrimSuffix(fileName, ".zip") + ".cdx.json"
+				if stagedSidecar, err = extension.StageSBOMFile(sidecarPath, data); err != nil {
+					return fmt.Errorf("cannot generate SBOM: %w", err)
+				}
+			}
+		}
+
 		// Generate checksums.json file before creating the zip
 		if err := extension.GenerateChecksumJSON(cmd.Context(), extDir, ext); err != nil {
 			return fmt.Errorf("generate checksum.json: %w", err)
@@ -218,6 +270,14 @@ var extensionPackageCmd = &cobra.Command{
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Created file %s", fileName)
+
+		if stagedSidecar != "" {
+			if err := os.Rename(stagedSidecar, sidecarPath); err != nil {
+				return fmt.Errorf("cannot write SBOM %s: %w", sidecarPath, err)
+			}
+			stagedSidecar = ""
+			logging.FromContext(cmd.Context()).Infof("Wrote SBOM with %d components to %s", sbomComponents, sidecarPath)
+		}
 
 		return nil
 	},
@@ -236,6 +296,8 @@ func init() {
 	extensionPackageCmd.Flags().String("output-directory", "", "Directory for the ZIP file (created if missing)")
 	extensionPackageCmd.Flags().String("git-commit", "", "Git commit hash, tag, or branch to package (default: the current tag or branch)")
 	extensionPackageCmd.Flags().String("filename", "", "Name of the ZIP file (default: <name>-<tag>.zip when tagged, otherwise <name>.zip)")
+	extensionPackageCmd.Flags().Bool("sbom", false, "Write a CycloneDX SBOM of the packaged files next to the ZIP (<zip name>.cdx.json)")
+	extensionPackageCmd.Flags().Bool("sbom-embed", false, "Add the CycloneDX SBOM as sbom.cdx.json to the root of the extension inside the ZIP")
 
 	extensionZipCmd := &cobra.Command{
 		Use:        "zip path [branch]",
