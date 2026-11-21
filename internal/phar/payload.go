@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"strconv"
 	"strings"
 )
 
@@ -13,7 +14,7 @@ import (
 var loader string
 
 // Payload contains an archive and its PHP loader, ready for an executor.
-// The loader consumes stdin, writes a temporary archive on the target system,
+// The loader reads the archive prefix from stdin, writes it on the target system,
 // and removes it on PHP shutdown (including exit and fatal errors). Cleanup
 // cannot run if the remote PHP process crashes or is forcibly killed.
 type Payload struct {
@@ -59,12 +60,14 @@ func Build(source fs.FS, entrypoint string) (*Payload, error) {
 
 // PHPArgs returns arguments for Executor.PHPCommand or SSHExecutor.RemotePHPCommand.
 // args are passed unchanged to the entrypoint as $argv[1:] rather than PHP options.
+// Loader errors go to stderr, keeping stdout for the entrypoint's own output.
 func (p *Payload) PHPArgs(args ...string) []string {
-	return append([]string{"-r", strings.TrimPrefix(loader, "<?php\n"), "--"}, args...)
+	script := strings.ReplaceAll(strings.TrimPrefix(loader, "<?php\n"), "__SHOPWARE_CLI_PHAR_SIZE__", strconv.Itoa(len(p.archive)))
+	return append([]string{"-d", "display_errors=stderr", "-r", script, "--"}, args...)
 }
 
 // Stdin returns a fresh reader for each invocation. The archive consumes the
-// process's stdin; entrypoint input should be passed as arguments instead.
+// beginning of stdin; callers may append entrypoint input after the archive.
 func (p *Payload) Stdin() io.Reader {
 	return bytes.NewReader(p.archive)
 }
