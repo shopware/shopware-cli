@@ -95,3 +95,12 @@ func TestGitCopyFolderFallsBackToBranchWithoutTagAtHead(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `{"version":"1.0.1"}`, string(content))
 }
+
+func TestGitCopyFolderOutsideGitRepository(t *testing.T) {
+	source := t.TempDir()
+	writeComposerJSON(t, source, `{"version":"1.0.0"}`)
+
+	_, err := GitCopyFolder(t.Context(), source, t.TempDir(), "")
+
+	assert.ErrorIs(t, err, ErrNotGitRepository)
+}
