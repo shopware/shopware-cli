@@ -1337,7 +1337,8 @@ func (m OverviewModel) renderSecurityPlugin() string {
 		c = tui.MutedColor
 	}
 
-	row := tui.KVRow(key, lipgloss.NewStyle().Foreground(c).Render(m.securityPlugin.Label()))
+	var row strings.Builder
+	row.WriteString(tui.KVRow(key, lipgloss.NewStyle().Foreground(c).Render(m.securityPlugin.Label())))
 	for _, step := range m.securityPlugin.NextSteps() {
 		// The docs URL is too long for the column, so it becomes a short link.
 		text, linked := strings.CutSuffix(step, securityplugin.DocsURL)
@@ -1345,9 +1346,9 @@ func (m OverviewModel) renderSecurityPlugin() string {
 		if linked {
 			hint += tui.StyledLink(securityplugin.DocsURL, "the Security Plugin documentation", tui.LinkStyle)
 		}
-		row += strings.Repeat(" ", tui.KVRowIndent) + hint + "\n"
+		row.WriteString(strings.Repeat(" ", tui.KVRowIndent) + hint + "\n")
 	}
-	return row
+	return row.String()
 }
 
 // renderSecurityEnd formats the end-of-life date as "until YYYY-MM-DD (N days
