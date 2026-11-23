@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"strings"
 )
 
 // appSecretEnvKey is the Symfony secret. It belongs in the gitignored
@@ -12,11 +13,12 @@ import (
 const appSecretEnvKey = "APP_SECRET"
 
 // EnsureAppSecret writes a random APP_SECRET to the project's .env.local
-// unless that file already defines a non-empty one. Values in other env files
+// unless that file already defines a non-empty one. An empty value in single
+// or double quotes counts as empty, like in Symfony. Values in other env files
 // are ignored. It reports whether a secret was generated.
 func EnsureAppSecret(projectRoot string) (bool, error) {
 	path := filepath.Join(projectRoot, ".env.local")
-	if ReadEnvVar(path, appSecretEnvKey) != "" {
+	if strings.Trim(ReadEnvVar(path, appSecretEnvKey), `"'`) != "" {
 		return false, nil
 	}
 

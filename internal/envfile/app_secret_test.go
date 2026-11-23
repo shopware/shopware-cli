@@ -43,6 +43,21 @@ func TestEnsureAppSecret(t *testing.T) {
 		assert.Equal(t, "APP_ENV=dev\nAPP_SECRET="+secret+"\nFOO=bar\n", string(content))
 	})
 
+	t.Run("fills a quoted empty value", func(t *testing.T) {
+		t.Parallel()
+
+		for _, quoted := range []string{`""`, `''`} {
+			root := t.TempDir()
+			path := filepath.Join(root, ".env.local")
+			require.NoError(t, os.WriteFile(path, []byte("APP_SECRET="+quoted+"\n"), 0o644))
+
+			generated, err := EnsureAppSecret(root)
+			require.NoError(t, err)
+			assert.True(t, generated)
+			assert.Regexp(t, hexSecret, ReadEnvVar(path, appSecretEnvKey))
+		}
+	})
+
 	t.Run("keeps an existing value", func(t *testing.T) {
 		t.Parallel()
 
