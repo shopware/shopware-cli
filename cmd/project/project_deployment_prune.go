@@ -21,7 +21,8 @@ var projectDeploymentPruneCmd = &cobra.Command{
 	Long: `Remove old SSH deployments and unreferenced cached artifacts from the target.
 Keep the most recent distinct deployments according to --keep. Active, failed,
 and incomplete deployments are protected; interrupted cleanup is resumed.
-Recently deactivated releases stay available while PHP workers may still use them.
+Prune keeps deactivated releases for a grace period of 120 seconds, or the
+target's PHP CLI realpath_cache_ttl if it is higher.
 Related runtime data, metadata, and logs are removed with each deployment.
 Artifact cleanup is skipped when archive references cannot be determined safely.
 Interactive runs preview cleanup and ask for confirmation before deleting.

@@ -46,7 +46,7 @@ func TestSSHRolloutWithHTTPUser(t *testing.T) {
 	archive := deploymentTestArchive(t, map[string]string{
 		"vendor/bin/shopware-deployment-helper": `<?php mkdir('var/cache/prod_test'); file_put_contents('var/cache/generated', 'cached');`,
 		"vendor/ezyang/htmlpurifier/README":     "HTMLPurifier",
-		"public/media/seed":                     "media",
+		"public/media/nested/seed":              "media",
 	})
 
 	s := SSH{env: &shop.EnvironmentConfig{SSH: &shop.EnvironmentSSHConfig{HTTPUser: "nobody"}}}
@@ -60,7 +60,21 @@ func TestSSHRolloutWithHTTPUser(t *testing.T) {
 		cmd.Stdin = io.MultiReader(program, bytes.NewReader(stdin))
 		return cmd.CombinedOutput()
 	}
-	out, err := run(input, append(archive, "CONTINUE event\nACTIVATE event\n"...))
+	t.Run("failed descendant ACL setup leaves shared path unpublished", func(t *testing.T) {
+		bin := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(bin, "setfacl"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		failed := input
+		failed.Release, failed.Deployment, failed.Reference = "failed", "failed", "failed-event"
+		cmd, program := localDeploymentCommand(t, "deploy", s.rolloutInput(failed))
+		cmd.Stdin = io.MultiReader(program, bytes.NewReader(archive), strings.NewReader("CONTINUE failed-event\n"))
+		out, err := cmd.CombinedOutput()
+		require.Error(t, err, "%s", out)
+		assert.NoDirExists(t, filepath.Join(root, "shared/public/media"))
+		assert.FileExists(t, filepath.Join(root, "releases/failed/public/media/nested/seed"))
+	})
+	// Retry with a new release name and the cached artifact.
+	out, err := run(input, []byte("CONTINUE event\nACTIVATE event\n"))
 	require.NoError(t, err, "%s", out)
 	acl := func(path string) string {
 		out, err := exec.CommandContext(t.Context(), "getfacl", "-cp", filepath.Join(root, path)).CombinedOutput()
@@ -69,7 +83,9 @@ func TestSSHRolloutWithHTTPUser(t *testing.T) {
 	}
 	assert.Contains(t, acl("shared/.env.local"), "user:nobody:r--")
 	assert.Contains(t, acl("shared/public/media"), "default:user:nobody:rwx")
-	assert.Contains(t, acl("shared/public/media/seed"), "user:nobody:rw-")
+	assert.Contains(t, acl("shared/public/media/nested"), "default:user:nobody:rwx")
+	seed := "shared/public/media/nested/seed"
+	assert.Contains(t, acl(seed), "user:nobody:rw-")
 	assert.Contains(t, acl("current/var/cache/generated"), "user:nobody:")
 	for _, serializer := range []string{"HTML", "CSS", "URI"} {
 		assert.Contains(t, acl("current/var/cache/prod_test/"+serializer), "default:user:nobody:rwx")
@@ -92,8 +108,12 @@ func TestSSHRolloutWithHTTPUser(t *testing.T) {
 	s.env.SSH.HTTPUser = "nobody"
 	second := input
 	second.Release, second.Deployment, second.Reference = "second", "second", "second-event"
+	// Updating an existing shared root must preserve application-managed descendant ACLs.
+	aclOutput, err := exec.CommandContext(t.Context(), "setfacl", "-x", "u:nobody", filepath.Join(root, seed)).CombinedOutput()
+	require.NoError(t, err, "%s", aclOutput)
 	out, err = run(second, []byte("CONTINUE second-event\nACTIVATE second-event\n"))
 	require.NoError(t, err, "%s", out)
+	assert.NotContains(t, acl(seed), "user:nobody:")
 	rollback := sshRolloutInput{Root: root, Action: sshDeploymentActivate, Release: "release", Reference: "rollback"}
 	// A failed read-only inspection must leave the retained release reusable.
 	helper := filepath.Join(root, "releases/release/vendor/bin/shopware-deployment-helper")
