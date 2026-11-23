@@ -41,6 +41,11 @@ type Options struct {
 	AltScreen *bool
 	// Mouse enables cell-motion mouse when true.
 	Mouse bool
+	// MouseFunc overrides Mouse each frame when set, so content can release
+	// the mouse on screens that have no use for it and leave text selection to
+	// the terminal. While the mouse is captured, the shell selects and copies
+	// text itself (see selection.go). Not part of lattice's shell.
+	MouseFunc func() bool
 	// OnExit runs once the program has ended, with the error Run returns. It
 	// also runs when a signal or a recovered panic ends the program without
 	// another Update, which the content cannot see. Only Run calls it, not a
@@ -62,11 +67,17 @@ type App struct {
 	fullOverlay bool
 	altScreen   bool
 	mouse       bool
+	mouseFn     func() bool
 	onExit      func(error)
 
 	overlays OverlayStack
 	keys     KeyMap
 	commands *CommandRegistry
+
+	// selection is the block of cells being dragged over, and frame the last
+	// rendered view it is read from.
+	selection selection
+	frame     string
 
 	// status is an optional one-line status message apps can set.
 	status string
@@ -92,6 +103,7 @@ func New(opts Options) *App {
 		fullOverlay: fullOverlay,
 		altScreen:   alt,
 		mouse:       opts.Mouse,
+		mouseFn:     opts.MouseFunc,
 		onExit:      opts.OnExit,
 		commands:    NewCommandRegistry(),
 	}
@@ -246,6 +258,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if cmd, consumed := a.updateSelection(msg); consumed {
+		return a, cmd
+	}
+
 	// An open overlay captures input messages. Non-input messages are also
 	// offered to the overlay for its private async work, then continue to
 	// Content (resize and background results must not disappear merely
@@ -313,6 +329,11 @@ func (a *App) View() tea.View {
 		body = Frame(w, h, header, main, footer)
 	}
 
+	a.frame = body
+	if a.selection.visible {
+		body = highlightSelection(body, a.selection)
+	}
+
 	v := tea.NewView(body)
 	v.AltScreen = a.altScreen
 	title := a.windowTitle
@@ -324,7 +345,11 @@ func (a *App) View() tea.View {
 	if title != "" {
 		v.WindowTitle = title
 	}
-	if a.mouse {
+	mouse := a.mouse
+	if a.mouseFn != nil {
+		mouse = a.mouseFn()
+	}
+	if mouse {
 		v.MouseMode = tea.MouseModeCellMotion
 	}
 	return v
