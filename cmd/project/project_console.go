@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 var (
@@ -136,6 +137,9 @@ var projectConsoleCmd = &cobra.Command{
 		}
 
 		p := cmdExecutor.ConsoleCommand(ctx, args...)
+		if name := shop.WriteConsoleRecommendation(cmd.ErrOrStderr(), args, environmentName != "" || projectConfigPath != ""); name != "" {
+			tracking.SetCommandTag(tracking.TagConsoleCommand, name)
+		}
 		if err := runExecutorProcess(cmd, p); err != nil {
 			return err
 		}
