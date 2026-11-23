@@ -249,11 +249,27 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 
 	assert.Equal(t, "myadmin", final.overview.username)
 	assert.Equal(t, "supersecret", final.overview.password)
+	assert.Empty(t, final.overview.installWarning)
 
 	assert.Empty(t, final.overlayLines)
 	assert.Nil(t, final.dockerOutChan)
 	assert.NotNil(t, cmd, "should kick off dashboard")
 	assert.Equal(t, 1, sessionStarts(*events))
+}
+
+func TestUpdateLifecycle_ShopwareInstallDone_WarnsWhenMarkerStays(t *testing.T) {
+	captureDevEvents(t)
+	m := newLifecycleModel(t)
+	m.phase = phaseInstalling
+	m.install = installWizard{CredentialStep: tui.NewCredentialStep(tui.CredentialStepOptions{})}
+	m.installProg = installProgress{progress: newInstallProgress()}
+	m.telemetry = newTelemetryState(false)
+
+	updated, _ := m.updateLifecycle(shopwareInstallDoneMsg{clearErr: errors.New("permission denied")})
+	final := updated.(Model)
+
+	assert.Equal(t, phaseDashboard, final.phase, "the warning does not block the dashboard")
+	assert.Contains(t, final.overview.installWarning, filepath.Join(m.projectRoot, ".shopware-cli", "install", "pending"))
 }
 
 func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsFailedPhase(t *testing.T) {

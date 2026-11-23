@@ -143,7 +143,7 @@ var projectDevCmd = &cobra.Command{
 			if err := env.start(cmd); err != nil {
 				return err
 			}
-			if !install.IsInstalled(cmd.Context(), env.executor) {
+			if !install.IsInstalled(cmd.Context(), env.executor, env.projectRoot) {
 				fmt.Println(tui.DimText.Render("  Shopware is not installed yet. Run ") + tui.BoldText.Render("shopware-cli project dev install") + tui.DimText.Render(" to install it."))
 				fmt.Println()
 			}

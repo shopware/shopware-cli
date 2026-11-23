@@ -115,6 +115,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 
 		m.overview.username = username
 		m.overview.password = password
+		if msg.clearErr != nil {
+			m.overview.installWarning = install.ClearPendingWarning(m.projectRoot, msg.clearErr)
+		}
 
 		m.phase = phaseDashboard
 		m.overlayLines = nil

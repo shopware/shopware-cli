@@ -6,7 +6,11 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -100,6 +104,9 @@ type Options struct {
 	Currency      string
 	AdminUsername string
 	AdminPassword string
+	// ForceReinstall makes the deployment helper drop and reinstall a
+	// half-built database left by an unfinished installation.
+	ForceReinstall bool
 }
 
 // ApplyDefaults fills empty fields with the wizard defaults.
@@ -136,37 +143,96 @@ func (o Options) CustomCredentials() bool {
 	return o.AdminUsername != DefaultAdminUsername || o.AdminPassword != DefaultAdminPassword
 }
 
-// helperNotInstalledOutput is printed by the deployment helper's is-installed
-// command when the shop is not installed.
-const helperNotInstalledOutput = "Shopware is not installed"
+// ForceReinstallEnv makes the deployment helper (0.0.18 and newer) reinstall
+// with a dropped database, as long as no installation has completed.
+const ForceReinstallEnv = "SHOPWARE_DEPLOYMENT_FORCE_REINSTALL"
 
-// IsInstalled reports whether the shop is already installed. It asks the
-// deployment helper first: its check (readable system_config, an admin user and
-// a sales channel) is what `shopware-deployment-helper run` uses to decide
-// between install and update, so a cancelled installation counts as not
-// installed. system:is-installed only checks that the migration table exists
-// and is used when the helper cannot answer (missing, or older than 0.1.0).
-func IsInstalled(ctx context.Context, exec executor.Executor) bool {
-	output, err := exec.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "is-installed").CombinedOutput()
-	if err == nil {
-		return true
+// ResumeNotice is shown before an installation that replaces an unfinished one.
+const ResumeNotice = "Previous installation did not finish, reinstalling from scratch"
+
+func pendingMarkerPath(projectRoot string) string {
+	return filepath.Join(projectRoot, ".shopware-cli", "install", "pending")
+}
+
+// MarkPending records that an installation is about to start. resume reports
+// whether an earlier installation did not finish. The marker folder ignores
+// itself in git, so the user's .gitignore stays untouched.
+func MarkPending(projectRoot string) (resume bool, err error) {
+	resume = IsPending(projectRoot)
+
+	if err := writePendingMarker(pendingMarkerPath(projectRoot)); err != nil {
+		return false, fmt.Errorf("cannot mark the installation as pending: %w", err)
 	}
-	if strings.Contains(string(output), helperNotInstalledOutput) {
+
+	return resume, nil
+}
+
+func writePendingMarker(marker string) error {
+	dir := filepath.Dir(marker)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	gitignore := filepath.Join(dir, ".gitignore")
+	if _, err := os.Stat(gitignore); errors.Is(err, fs.ErrNotExist) {
+		if err := os.WriteFile(gitignore, []byte("*\n"), 0o644); err != nil {
+			return err
+		}
+	}
+
+	return os.WriteFile(marker, nil, 0o644)
+}
+
+// IsPending reports whether an installation started by the CLI did not finish.
+func IsPending(projectRoot string) bool {
+	_, err := os.Stat(pendingMarkerPath(projectRoot))
+	return err == nil
+}
+
+// ClearPending removes the marker written by MarkPending.
+func ClearPending(projectRoot string) error {
+	if err := os.Remove(pendingMarkerPath(projectRoot)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// ClearPendingWarning tells the user to remove the marker by hand after
+// ClearPending failed; otherwise every start offers the installation again.
+func ClearPendingWarning(projectRoot string, err error) string {
+	marker := pendingMarkerPath(projectRoot)
+	if abs, absErr := filepath.Abs(marker); absErr == nil {
+		marker = abs
+	}
+	if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
+		err = pathErr.Err
+	}
+	return fmt.Sprintf("Shopware is installed, but the pending install marker cannot be removed (%s): delete %q by hand", err, marker)
+}
+
+// IsInstalled reports whether the shop is installed. An installation started
+// by the CLI that did not finish counts as not installed, because
+// system:is-installed already succeeds once the base schema exists.
+func IsInstalled(ctx context.Context, exec executor.Executor, projectRoot string) bool {
+	if IsPending(projectRoot) {
 		return false
 	}
-
 	return exec.ConsoleCommand(ctx, "system:is-installed").Run() == nil
 }
 
 // Run installs Shopware by running the deployment helper with the INSTALL_*
 // env vars. Combined stdout/stderr is emitted line by line via onLine.
 func Run(ctx context.Context, exec executor.Executor, opts Options, onLine func(string)) error {
-	withEnv := exec.WithEnv(map[string]string{
+	env := map[string]string{
 		"INSTALL_LOCALE":         opts.Locale,
 		"INSTALL_CURRENCY":       opts.Currency,
 		"INSTALL_ADMIN_USERNAME": opts.AdminUsername,
 		"INSTALL_ADMIN_PASSWORD": opts.AdminPassword,
-	})
+	}
+	if opts.ForceReinstall {
+		env[ForceReinstallEnv] = "1"
+	}
+	withEnv := exec.WithEnv(env)
 	p := withEnv.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run")
 
 	lw := tui.NewLineWriter(onLine)

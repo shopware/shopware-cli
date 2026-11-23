@@ -216,7 +216,16 @@ func (m Model) renderPhase(ctx app.Context) string {
 			}
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
-		content.WriteString(tui.RenderPhaseCardFit(strings.TrimRight(card.String(), "\n"), cardWidth, cardHeight))
+		body := strings.TrimRight(card.String(), "\n")
+		rendered := tui.RenderPhaseCardFit(body, cardWidth, cardHeight)
+		if m.installProg.resume {
+			// The notice gives way on small terminals rather than cropping the steps.
+			withNotice := tui.RenderPhaseCardFit(tui.DimStyle.Render(install.ResumeNotice)+"\n\n"+body, cardWidth, cardHeight)
+			if lipgloss.Height(withNotice) <= cardHeight {
+				rendered = withNotice
+			}
+		}
+		content.WriteString(rendered)
 	case phaseInstallFailed:
 		if m.installProg.showLogs {
 			// Appended at render time, not when the install failed: output is

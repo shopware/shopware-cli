@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -258,6 +259,38 @@ func TestInstallStepCredentials_EnterOnCheckboxStartsInstall(t *testing.T) {
 	mm := updated.(Model)
 	assert.Equal(t, phaseInstalling, mm.phase)
 	assert.True(t, mm.install.PasswordMasked(), "enter must not toggle the checkbox")
+}
+
+func TestInstallProgressShowsResumeNotice(t *testing.T) {
+	ctx := app.Context{Width: 100, Height: 30, MainHeight: 28}
+
+	for _, resume := range []bool{false, true} {
+		m := newTestInstallModel()
+		m.projectRoot = t.TempDir()
+		if resume {
+			_, err := install.MarkPending(m.projectRoot)
+			require.NoError(t, err)
+		}
+
+		updated, _ := m.startInstall()
+		view := ansi.Strip(updated.(Model).View(ctx))
+		if resume {
+			assert.Contains(t, view, install.ResumeNotice)
+		} else {
+			assert.NotContains(t, view, install.ResumeNotice)
+		}
+	}
+
+	small := app.Context{Width: 60, Height: 20, MainHeight: 18}
+	m := newTestInstallModel()
+	m.projectRoot = t.TempDir()
+	_, err := install.MarkPending(m.projectRoot)
+	require.NoError(t, err)
+
+	updated, _ := m.startInstall()
+	view := updated.(Model).View(small)
+	assert.LessOrEqual(t, lipgloss.Height(view), small.MainHeight)
+	assert.Contains(t, ansi.Strip(view), install.Steps[len(install.Steps)-1].Label)
 }
 
 func TestInstallStepCredentials_CheckboxFocusedSwallowsTypedKeys(t *testing.T) {

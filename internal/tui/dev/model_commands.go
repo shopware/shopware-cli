@@ -99,8 +99,9 @@ func composeServiceSet(ctx context.Context, projectRoot string, args ...string) 
 func (m *Model) checkShopwareInstalled() tea.Cmd {
 	ctx := m.commandContext()
 	exec := m.executor
+	projectRoot := m.projectRoot
 	return func() tea.Msg {
-		if !install.IsInstalled(ctx, exec) {
+		if !install.IsInstalled(ctx, exec, projectRoot) {
 			return shopwareNotInstalledMsg{}
 		}
 		return shopwareInstalledMsg{}
@@ -110,6 +111,7 @@ func (m *Model) checkShopwareInstalled() tea.Cmd {
 func (m *Model) runShopwareInstall() tea.Cmd {
 	ctx := m.commandContext()
 	e := m.executor
+	projectRoot := m.projectRoot
 	language := m.install.language
 	currency := m.install.currency
 	username := m.install.Username()
@@ -119,14 +121,27 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 	m.dockerOutChan = ch
 
 	doneCmd := func() tea.Msg {
-		installExecutor := e.WithEnv(map[string]string{
+		resume, err := install.MarkPending(projectRoot)
+		if err != nil {
+			close(ch)
+			return shopwareInstallDoneMsg{source: ch, err: err}
+		}
+
+		env := map[string]string{
 			"INSTALL_LOCALE":         language,
 			"INSTALL_CURRENCY":       currency,
 			"INSTALL_ADMIN_USERNAME": username,
 			"INSTALL_ADMIN_PASSWORD": password,
-		})
-		output, err := streamInstall(ctx, installExecutor, ch)
-		return shopwareInstallDoneMsg{source: ch, output: output, err: err}
+		}
+		if resume {
+			env[install.ForceReinstallEnv] = "1"
+		}
+		output, err := streamInstall(ctx, e.WithEnv(env), ch)
+		msg := shopwareInstallDoneMsg{source: ch, output: output, err: err}
+		if err == nil {
+			msg.clearErr = install.ClearPending(projectRoot)
+		}
+		return msg
 	}
 
 	return tea.Batch(readFromChan(ch), doneCmd)
