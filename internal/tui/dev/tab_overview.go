@@ -858,7 +858,7 @@ func (m OverviewModel) renderInstallWarning(width int) string {
 	if m.installWarning == "" {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(tui.WarnColor).Width(width).Render(m.installWarning) + "\n\n"
+	return warnStyle.Width(width).Render(m.installWarning) + "\n\n"
 }
 
 // renderStacked is the single-column fallback for narrow terminals, keeping

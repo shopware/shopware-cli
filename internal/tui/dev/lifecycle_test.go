@@ -272,6 +272,22 @@ func TestUpdateLifecycle_ShopwareInstallDone_WarnsWhenMarkerStays(t *testing.T) 
 	assert.Contains(t, final.overview.installWarning, filepath.Join(m.projectRoot, ".shopware-cli", "install", "pending"))
 }
 
+func TestUpdateLifecycle_ShopwareInstallDone_CredentialFailureKeepsMarkerWarning(t *testing.T) {
+	captureDevEvents(t)
+	m := newLifecycleModel(t)
+	m.phase = phaseInstalling
+	m.install = installWizard{CredentialStep: tui.NewCredentialStep(tui.CredentialStepOptions{})}
+	m.installProg = installProgress{progress: newInstallProgress()}
+	m.telemetry = newTelemetryState(false)
+	require.NoError(t, os.WriteFile(filepath.Join(m.projectRoot, ".config"), nil, 0o600))
+
+	updated, _ := m.updateLifecycle(shopwareInstallDoneMsg{clearErr: errors.New("permission denied")})
+	final := updated.(Model)
+
+	assert.NotEqual(t, phaseDashboard, final.phase)
+	assert.Contains(t, strings.Join(final.overlayLines, "\n"), filepath.Join(m.projectRoot, ".shopware-cli", "install", "pending"))
+}
+
 func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsFailedPhase(t *testing.T) {
 	m := Model{
 		phase:       phaseInstalling,

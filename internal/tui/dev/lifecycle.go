@@ -105,6 +105,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 			}
 			m.installProg.showLogs = true
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Shopware was installed, but saving the admin credentials to the project config failed: "+err.Error()))
+			if msg.clearErr != nil {
+				m.overlayLines = append(m.overlayLines, "", warnStyle.Render(install.ClearPendingWarning(m.projectRoot, msg.clearErr)))
+			}
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
 			return m, nil
 		}

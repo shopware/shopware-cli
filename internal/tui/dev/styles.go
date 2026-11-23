@@ -16,6 +16,9 @@ var (
 	secretStyle = lipgloss.NewStyle().
 			Foreground(tui.WarnColor)
 
+	warnStyle = lipgloss.NewStyle().
+			Foreground(tui.WarnColor)
+
 	helpStyle = lipgloss.NewStyle().
 			Foreground(tui.MutedColor)
 
