@@ -97,22 +97,23 @@ func withVersion(label, v string) string {
 // into a project depends on the project's Composer repositories, so a missing
 // plugin points to the docs.
 func (s Status) NextSteps() []string {
-	const console = "Run: shopware-cli project console "
+	const extension = "Run: shopware-cli project extension "
 
 	switch s.State {
 	case StateMissing:
 		return []string{"See " + DocsURL}
 	case StateInactive:
-		// Refreshing and activating in one call is refused by Shopware, so
-		// the refresh is its own step.
-		install := console + "plugin:install --activate " + TechnicalName
+		// Activating also installs a plugin that is not installed yet, but
+		// only one the shop lists; listing refreshes the shop's plugin list.
+		activate := extension + "activate " + TechnicalName
 		if s.Unregistered {
-			return []string{console + "plugin:refresh", install}
+			return []string{extension + "list", activate}
 		}
-		return []string{install}
+		return []string{activate}
 	case StateOutdated:
-		// Composer only downloads the new version; the shop applies it.
-		update := console + "plugin:update --refresh " + TechnicalName
+		// Composer only downloads the new version; the shop applies it. The
+		// update refreshes the shop's plugin list first.
+		update := extension + "update " + TechnicalName
 		switch {
 		case s.Downloaded:
 			return []string{update}

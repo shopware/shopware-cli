@@ -152,11 +152,11 @@ func TestNextStepsOnlyWhenActionIsNeeded(t *testing.T) {
 }
 
 func TestNextStepsCoverTheShopLifecycle(t *testing.T) {
-	// An unregistered plugin needs the plugin list refreshed before installing.
+	// An unregistered plugin needs the plugin list refreshed before activating.
 	registered := Status{State: StateInactive}.NextSteps()
 	unregistered := Status{State: StateInactive, Unregistered: true}.NextSteps()
 	assert.Len(t, unregistered, len(registered)+1)
-	assert.Contains(t, unregistered[0], "plugin:refresh")
+	assert.Contains(t, unregistered[0], "extension list")
 	assert.Equal(t, registered[0], unregistered[1])
 
 	// An outdated Composer package is downloaded first, then applied by the
@@ -166,5 +166,5 @@ func TestNextStepsCoverTheShopLifecycle(t *testing.T) {
 	assert.Len(t, outdated, 2)
 	assert.Contains(t, outdated[0], lockedPackage)
 	assert.Equal(t, []string{outdated[1]}, downloaded)
-	assert.Contains(t, downloaded[0], "plugin:update")
+	assert.Contains(t, downloaded[0], "extension update")
 }
