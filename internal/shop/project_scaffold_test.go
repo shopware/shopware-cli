@@ -406,6 +406,9 @@ func TestSetupCI(t *testing.T) {
 		assert.NoFileExists(t, filepath.Join(tmpDir, ".github", "workflows", "deploy.yml"))
 
 		var workflow struct {
+			Concurrency struct {
+				Group string `yaml:"group"`
+			} `yaml:"concurrency"`
 			Jobs map[string]struct {
 				Needs any `yaml:"needs"`
 				Steps []struct {
@@ -415,6 +418,7 @@ func TestSetupCI(t *testing.T) {
 		}
 		require.NoError(t, yaml.Unmarshal([]byte(readScaffoldFile(t, tmpDir, ".github", "workflows", "ci.yml")), &workflow))
 
+		assert.Equal(t, "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}", workflow.Concurrency.Group)
 		assert.Contains(t, workflow.Jobs, "check")
 		require.Contains(t, workflow.Jobs, "build")
 		build := workflow.Jobs["build"]

@@ -298,24 +298,28 @@ func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod, php
 		}
 
 		ciPath := filepath.Join(".github", "workflows", "ci.yml")
-		if err := writeCITemplate(ctx, projectFolder, ciPath, githubCITemplate, data); err != nil {
+		if err := writeCITemplate(ctx, projectFolder, ciPath, githubCITemplate, data, githubTemplateDelims); err != nil {
 			return err
 		}
 
 		if data.Deployer {
 			deployPath := filepath.Join(".github", "workflows", "deploy.yml")
-			return writeCITemplate(ctx, projectFolder, deployPath, githubDeployTemplate, data)
+			return writeCITemplate(ctx, projectFolder, deployPath, githubDeployTemplate, data, githubTemplateDelims)
 		}
 
 	case CIGitLab:
-		return writeCITemplate(ctx, projectFolder, ".gitlab-ci.yml", gitlabCITemplate, data)
+		return writeCITemplate(ctx, projectFolder, ".gitlab-ci.yml", gitlabCITemplate, data, [2]string{"{{", "}}"})
 	}
 
 	return nil
 }
 
-func writeCITemplate(ctx context.Context, projectFolder, ciPath, content string, data any) error {
-	tmpl, err := template.New(ciPath).Parse(content)
+// githubTemplateDelims keep GitHub's ${{ }} expressions literal, so the raw
+// templates stay valid workflows that jactionlint can lint.
+var githubTemplateDelims = [2]string{"[[", "]]"}
+
+func writeCITemplate(ctx context.Context, projectFolder, ciPath, content string, data any, delims [2]string) error {
+	tmpl, err := template.New(ciPath).Delims(delims[0], delims[1]).Parse(content)
 	if err != nil {
 		return err
 	}
