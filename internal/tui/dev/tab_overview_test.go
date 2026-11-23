@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/securityplugin"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
@@ -353,4 +355,28 @@ func TestProxyHealthChecks_OmittedWhenContextExpired(t *testing.T) {
 	cancel()
 
 	assert.Empty(t, proxyHealthChecks(ctx, dir), "a timed-out check must not report the setup as broken")
+}
+
+func TestRenderSecurityPlugin(t *testing.T) {
+	m := OverviewModel{securityPluginLoading: true}
+	assert.Contains(t, ansi.Strip(m.renderSecurityPlugin()), "checking")
+
+	m, _ = m.Update(securityPluginLoadedMsg{status: securityplugin.Status{State: securityplugin.StateMissing}})
+	missing := ansi.Strip(m.renderSecurityPlugin())
+	assert.Contains(t, missing, securityplugin.Status{State: securityplugin.StateMissing}.Label())
+	assert.Equal(t, 2, strings.Count(missing, "\n"), "a status that needs action is followed by its next step")
+
+	upToDate := securityplugin.Status{State: securityplugin.StateUpToDate, Version: "2.0.27", Latest: "2.0.27"}
+	m, _ = m.Update(securityPluginLoadedMsg{status: upToDate})
+	assert.Equal(t, 1, strings.Count(m.renderSecurityPlugin(), "\n"), "a status without a next step is a single row")
+	assert.Contains(t, ansi.Strip(m.renderShopSection()), upToDate.Label())
+}
+
+func TestShopwareVersionLoadedStartsSecurityPluginCheck(t *testing.T) {
+	m := OverviewModel{ctx: t.Context(), projectRoot: t.TempDir()}
+
+	// Without a detectable version the plugin's presence is still checked.
+	_, cmd := m.Update(shopwareVersionLoadedMsg{})
+
+	require.NotNil(t, cmd)
 }

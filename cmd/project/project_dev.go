@@ -16,6 +16,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/shop/install"
+	"github.com/shopware/shopware-cli/internal/shop/securityplugin"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/dev"
@@ -147,6 +148,7 @@ var projectDevCmd = &cobra.Command{
 				fmt.Println(tui.DimText.Render("  Shopware is not installed yet. Run ") + tui.BoldText.Render("shopware-cli project dev install") + tui.DimText.Render(" to install it."))
 				fmt.Println()
 			}
+			env.printSecurityPluginStatus(cmd.Context())
 			return nil
 		}
 
@@ -452,6 +454,26 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 
 	fmt.Println("  " + tui.FailLine("Development environment is down"))
 	return ErrEnvironmentDown
+}
+
+// securityPluginCheckTimeout bounds the Security Plugin check of the
+// non-interactive start so an unreachable Store cannot hold up the command.
+const securityPluginCheckTimeout = 15 * time.Second
+
+// printSecurityPluginStatus prints the Security Plugin's status as one plain
+// line, followed by the command that resolves it when action is needed. It
+// only reports: the plugin's state is never changed.
+func (e *devEnvironment) printSecurityPluginStatus(parent context.Context) {
+	ctx, cancel := context.WithTimeout(parent, securityPluginCheckTimeout)
+	defer cancel()
+
+	status := securityplugin.NewChecker(e.projectRoot, shop.DetectShopwareVersion(e.projectRoot), e.executor).Check(ctx)
+
+	fmt.Println("  Security Plugin: " + status.Label())
+	if step := status.NextStep(); step != "" {
+		fmt.Println("  " + step)
+	}
+	fmt.Println()
 }
 
 func (e *devEnvironment) runTUI(ctx context.Context) error {
