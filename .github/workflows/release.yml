@@ -27,7 +27,7 @@ jobs:
       attestations: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@v2.23.0
         with:
           egress-policy: audit
 
@@ -40,7 +40,7 @@ jobs:
       - name: Set up Go
         # Keep publishing cache performance; changes to cache policy are deferred.
         # jactionlint ignore=cache-poisoning
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.1.0
         with:
           go-version: '1.27'
           cache: true
