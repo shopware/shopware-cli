@@ -233,6 +233,7 @@ Notes:
 | `composer_security_advisories` | Handling a Composer install blocked by security advisories |
 | `docker_setup` | Preparing the Docker environment from the installed project |
 | `docker_setup_write_compose` | Writing the Docker Compose file |
+| `app_secret` | Generating `APP_SECRET` in `.env.local` and clearing it in `.env` |
 | `write_config` | Writing `.config/shopware-project.yml` |
 | `git_init` | Initializing the Git repository |
 

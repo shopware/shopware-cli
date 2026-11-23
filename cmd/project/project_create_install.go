@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -67,6 +68,10 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		if err := env.WriteCompose(); err != nil {
 			return tracking.FailedAt(createStepDockerSetupWriteCompose, err)
 		}
+	}
+
+	if err := envfile.KeepAppSecretOutOfEnv(opts.projectFolder); err != nil {
+		return tracking.FailedAt(createStepAppSecret, err)
 	}
 
 	shopCfg := newProjectConfig(opts, composerInstallPHP)
