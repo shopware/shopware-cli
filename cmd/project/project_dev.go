@@ -461,7 +461,7 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 const securityPluginCheckTimeout = 15 * time.Second
 
 // printSecurityPluginStatus prints the Security Plugin's status as one plain
-// line, followed by the command that resolves it when action is needed. It
+// line, followed by the steps that resolve it when action is needed. It
 // only reports: the plugin's state is never changed.
 func (e *devEnvironment) printSecurityPluginStatus(parent context.Context) {
 	ctx, cancel := context.WithTimeout(parent, securityPluginCheckTimeout)
@@ -470,7 +470,7 @@ func (e *devEnvironment) printSecurityPluginStatus(parent context.Context) {
 	status := securityplugin.NewChecker(e.projectRoot, shop.DetectShopwareVersion(e.projectRoot), e.executor).Check(ctx)
 
 	fmt.Println("  Security Plugin: " + status.Label())
-	if step := status.NextStep(); step != "" {
+	for _, step := range status.NextSteps() {
 		fmt.Println("  " + step)
 	}
 	fmt.Println()

@@ -1318,7 +1318,7 @@ func loadSecurityPlugin(parent context.Context, projectRoot, shopwareVersion str
 // renderSecurityPlugin renders the Security Plugin row of the Shop section:
 // red when the plugin is missing, yellow when it is inactive or outdated, green
 // when it is active and current, and muted when that cannot be determined. A
-// status that needs action is followed by the command that resolves it.
+// status that needs action is followed by the steps that resolve it.
 func (m OverviewModel) renderSecurityPlugin() string {
 	key := "Security Plugin"
 	if m.securityPluginLoading {
@@ -1338,7 +1338,7 @@ func (m OverviewModel) renderSecurityPlugin() string {
 	}
 
 	row := tui.KVRow(key, lipgloss.NewStyle().Foreground(c).Render(m.securityPlugin.Label()))
-	if step := m.securityPlugin.NextStep(); step != "" {
+	for _, step := range m.securityPlugin.NextSteps() {
 		// The docs URL is too long for the column, so it becomes a short link.
 		text, linked := strings.CutSuffix(step, securityplugin.DocsURL)
 		hint := helpStyle.Render(text)

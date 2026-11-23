@@ -54,12 +54,12 @@ func TestCheck(t *testing.T) {
 		want       Status
 	}{
 		{"missing everywhere", "", pluginList(otherList), "2.0.27", Status{State: StateMissing}},
-		{"missing while the shop cannot be asked", "", failingPluginList, "2.0.27", Status{State: StateMissing}},
-		{"required but unknown to the shop", "2.0.27", pluginList(otherList), "2.0.27", Status{State: StateInactive, Version: "2.0.27", Latest: "2.0.27"}},
+		{"absent from the files while the shop cannot be asked", "", failingPluginList, "2.0.27", Status{State: StateUnknown}},
+		{"required but unknown to the shop", "2.0.27", pluginList(otherList), "2.0.27", Status{State: StateInactive, Version: "2.0.27", Latest: "2.0.27", Unregistered: true}},
 		{"not installed in the shop", "2.0.27", pluginList(uninstalledList), "2.0.27", Status{State: StateInactive, Version: "2.0.27", Latest: "2.0.27"}},
 		{"deactivated", "2.0.27", pluginList(deactivatedList), "2.0.27", Status{State: StateInactive, Version: "2.0.27", Latest: "2.0.27"}},
 		{"outdated", "v2.0.20", pluginList(activeList), "2.0.27", Status{State: StateOutdated, Version: "2.0.20", Latest: "2.0.27"}},
-		{"shop version wins over the lock file", "2.0.27", pluginList(activeList), "2.0.27", Status{State: StateOutdated, Version: "2.0.20", Latest: "2.0.27"}},
+		{"downloaded but not applied by the shop", "2.0.27", pluginList(activeList), "2.0.27", Status{State: StateOutdated, Version: "2.0.20", Latest: "2.0.27", Downloaded: true}},
 		{"up to date", "2.0.20", pluginList(activeList), "2.0.20", Status{State: StateUpToDate, Version: "2.0.20", Latest: "2.0.20"}},
 		{"listed in the shop only", "", pluginList(activeList), "2.0.20", Status{State: StateUpToDate, Version: "2.0.20", Latest: "2.0.20"}},
 		{"notices before the JSON", "2.0.20", pluginList("Deprecated: something\n" + activeList), "2.0.20", Status{State: StateUpToDate, Version: "2.0.20", Latest: "2.0.20"}},
@@ -142,11 +142,29 @@ func TestCheckFindsPluginInCustomPlugins(t *testing.T) {
 	assert.Equal(t, Status{State: StateOutdated, Version: "2.0.20", Latest: "2.0.27"}, c.Check(t.Context()))
 }
 
-func TestNextStepOnlyWhenActionIsNeeded(t *testing.T) {
+func TestNextStepsOnlyWhenActionIsNeeded(t *testing.T) {
 	for _, state := range []State{StateMissing, StateInactive, StateOutdated} {
-		assert.NotEmpty(t, Status{State: state}.NextStep())
+		assert.NotEmpty(t, Status{State: state}.NextSteps())
 	}
 	for _, state := range []State{StateUnknown, StateUpToDate} {
-		assert.Empty(t, Status{State: state}.NextStep())
+		assert.Empty(t, Status{State: state}.NextSteps())
 	}
+}
+
+func TestNextStepsCoverTheShopLifecycle(t *testing.T) {
+	// An unregistered plugin needs the plugin list refreshed before installing.
+	registered := Status{State: StateInactive}.NextSteps()
+	unregistered := Status{State: StateInactive, Unregistered: true}.NextSteps()
+	assert.Len(t, unregistered, len(registered)+1)
+	assert.Contains(t, unregistered[0], "plugin:refresh")
+	assert.Equal(t, registered[0], unregistered[1])
+
+	// An outdated Composer package is downloaded first, then applied by the
+	// shop; a version that is already downloaded is only applied.
+	outdated := Status{State: StateOutdated, Package: lockedPackage}.NextSteps()
+	downloaded := Status{State: StateOutdated, Package: lockedPackage, Downloaded: true}.NextSteps()
+	assert.Len(t, outdated, 2)
+	assert.Contains(t, outdated[0], lockedPackage)
+	assert.Equal(t, []string{outdated[1]}, downloaded)
+	assert.Contains(t, downloaded[0], "plugin:update")
 }

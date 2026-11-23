@@ -60,6 +60,12 @@ type Status struct {
 	Version string
 	Latest  string
 	Package string
+	// Unregistered marks an inactive plugin the shop does not list yet, so its
+	// plugin list has to be refreshed before the plugin can be installed.
+	Unregistered bool
+	// Downloaded marks an outdated plugin whose latest version is already in
+	// the project files, so only the shop has to apply the update.
+	Downloaded bool
 }
 
 // Label describes the status in plain text.
@@ -86,24 +92,38 @@ func withVersion(label, v string) string {
 	return label + " (" + v + ")"
 }
 
-// NextStep says how to resolve the status, empty when there is nothing to do
-// or nothing can be recommended. How the plugin gets into a project depends on
-// the project's Composer repositories, so a missing plugin points to the docs.
-func (s Status) NextStep() string {
+// NextSteps says how to resolve the status, one step per entry; empty when
+// there is nothing to do or nothing can be recommended. How the plugin gets
+// into a project depends on the project's Composer repositories, so a missing
+// plugin points to the docs.
+func (s Status) NextSteps() []string {
+	const console = "Run: shopware-cli project console "
+
 	switch s.State {
 	case StateMissing:
-		return "See " + DocsURL
+		return []string{"See " + DocsURL}
 	case StateInactive:
-		return "Run: shopware-cli project console plugin:install --activate " + TechnicalName
-	case StateOutdated:
-		if s.Package == "" {
-			return "See " + DocsURL
+		// Refreshing and activating in one call is refused by Shopware, so
+		// the refresh is its own step.
+		install := console + "plugin:install --activate " + TechnicalName
+		if s.Unregistered {
+			return []string{console + "plugin:refresh", install}
 		}
-		return "Run: shopware-cli project composer update " + s.Package
+		return []string{install}
+	case StateOutdated:
+		// Composer only downloads the new version; the shop applies it.
+		update := console + "plugin:update --refresh " + TechnicalName
+		switch {
+		case s.Downloaded:
+			return []string{update}
+		case s.Package == "":
+			return []string{"See " + DocsURL}
+		}
+		return []string{"Run: shopware-cli project composer update " + s.Package, update}
 	case StateUnknown, StateUpToDate:
-		return ""
+		return nil
 	}
-	return ""
+	return nil
 }
 
 // Checker gathers the plugin's status. PluginList and StorePlugins are the
@@ -144,25 +164,28 @@ const (
 // Check never changes the plugin's state and never fails: anything that cannot
 // be determined is reported as unknown rather than as a positive status.
 func (c *Checker) Check(ctx context.Context) Status {
-	pkg, installed := projectPlugin(c.ProjectRoot)
+	pkg, onDisk := projectPlugin(c.ProjectRoot)
+	installed := onDisk
 	state := lifecycleUnknown
+	unregistered := false
 
-	if listed, found, ok := c.shopPlugin(ctx); ok {
-		switch {
-		case found && listed.active():
-			state = lifecycleActive
-		case found || installed != "":
-			state = lifecycleInactive
-		}
-		if found && listed.Version != "" {
-			// The shop's record is the version that is actually running.
-			installed = listed.Version
-		}
-		if !found && installed == "" {
-			return Status{State: StateMissing}
-		}
-	} else if installed == "" {
+	listed, found, ok := c.shopPlugin(ctx)
+	switch {
+	case !ok && onDisk == "":
+		// The plugin can be known to the shop alone, so without the shop its
+		// absence from the project files proves nothing.
+		return Status{State: StateUnknown}
+	case ok && !found && onDisk == "":
 		return Status{State: StateMissing}
+	case ok && found && listed.active():
+		state = lifecycleActive
+	case ok:
+		state = lifecycleInactive
+		unregistered = !found
+	}
+	if found && listed.Version != "" {
+		// The shop's record is the version that is actually running.
+		installed = listed.Version
 	}
 
 	status := Status{Version: strings.TrimPrefix(installed, "v"), Latest: c.latestVersion(ctx), Package: pkg}
@@ -170,8 +193,10 @@ func (c *Checker) Check(ctx context.Context) Status {
 	switch {
 	case state == lifecycleInactive:
 		status.State = StateInactive
+		status.Unregistered = unregistered
 	case isOlder(status.Version, status.Latest):
 		status.State = StateOutdated
+		status.Downloaded = isCurrent(strings.TrimPrefix(onDisk, "v"), status.Latest)
 	case state == lifecycleActive && isCurrent(status.Version, status.Latest):
 		status.State = StateUpToDate
 	default:

@@ -364,7 +364,7 @@ func TestRenderSecurityPlugin(t *testing.T) {
 	m, _ = m.Update(securityPluginLoadedMsg{status: securityplugin.Status{State: securityplugin.StateMissing}})
 	missing := ansi.Strip(m.renderSecurityPlugin())
 	assert.Contains(t, missing, securityplugin.Status{State: securityplugin.StateMissing}.Label())
-	assert.Equal(t, 2, strings.Count(missing, "\n"), "a status that needs action is followed by its next step")
+	assert.Equal(t, 1+len(m.securityPlugin.NextSteps()), strings.Count(missing, "\n"), "a status that needs action is followed by its next steps")
 
 	upToDate := securityplugin.Status{State: securityplugin.StateUpToDate, Version: "2.0.27", Latest: "2.0.27"}
 	m, _ = m.Update(securityPluginLoadedMsg{status: upToDate})
