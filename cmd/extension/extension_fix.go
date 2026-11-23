@@ -23,6 +23,10 @@ preserving the extension's vendor/, composer.json and composer.lock.
 A local rector.php takes precedence over the bundled Shopware rules.`,
 	Args: cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := extensionValidationFormat(cmd); err != nil {
+			return err
+		}
+
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
@@ -30,7 +34,9 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		progress := verifier.NewProgress("")
+		// Reporting format was validated in PreRunE.
+		reportingFormat, _ := extensionValidationFormat(cmd)
+		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
@@ -63,17 +69,22 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 				return tool.Fix(cmd.Context(), *toolCfg, execution, dryRun)
 			},
 		)
-		return validation.ReportTools(results, "summary", "Fixers")
+		return validation.ReportTools(results, reportingFormat, "Fixers")
 	},
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
+
+	extensionFixCmd.Flags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	extensionFixCmd.Flags().Bool("dry-run", false, "Report files that would change, without changing them")
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
+
 	_ = extensionFixCmd.Flags().MarkDeprecated("allow-non-git", deprecation.Message("2027-02-10", ""))
+
+	_ = extensionFixCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }
