@@ -1,0 +1,45 @@
+name: Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Project Validate
+        uses: shopware/github-actions/project-validate@main
+        with:
+          phpVersion: '[[ .PHPVersion ]]'
+
+  # Checks that the production Administration and Storefront build succeeds.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '[[ .PHPVersion ]]'
+
+      - name: Install Shopware CLI
+        uses: shopware/shopware-cli-action@v3
+
+      - name: Build Project
+        uses: shopware/build-project-action@v1

@@ -10,9 +10,12 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func notInstalledConsole(ctx context.Context, _ ...string) *executor.Process {
@@ -63,9 +66,12 @@ func TestRunHeadlessInstallsAndPersists(t *testing.T) {
 
 	assert.Equal(t, "en-GB", fake.env["INSTALL_LOCALE"], "defaults are applied to empty fields")
 	assert.Equal(t, "secret123", fake.env["INSTALL_ADMIN_PASSWORD"])
+	assert.NotContains(t, fake.env, ForceReinstallEnv)
+	assert.NoFileExists(t, pendingMarkerPath(dir))
 
 	plain := ansi.Strip(out.String())
 	assert.Contains(t, plain, "▸ Installing Shopware")
+	assert.NotContains(t, plain, ResumeNotice, "a fresh install prints no resume notice")
 	assert.Contains(t, plain, "▸ Creating admin account")
 	assert.Contains(t, plain, "migrated", "raw helper output is echoed")
 	assert.Contains(t, plain, "Shopware installed in")
@@ -77,8 +83,34 @@ func TestRunHeadlessInstallsAndPersists(t *testing.T) {
 	assert.Contains(t, string(written), "password: secret123")
 }
 
+func TestRunHeadlessResumesUnfinishedInstall(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	dir := t.TempDir()
+
+	_, err := MarkPending(dir)
+	require.NoError(t, err)
+
+	helperRan := false
+	fake := &fakeExecutor{
+		php: func(ctx context.Context, _ ...string) *executor.Process {
+			helperRan = true
+			return shellProcess(ctx, "true")
+		},
+	}
+
+	var out bytes.Buffer
+	err = RunHeadless(t.Context(), fake, &shop.Config{}, &shop.EnvironmentConfig{}, dir, HeadlessOptions{Out: &out})
+	require.NoError(t, err)
+
+	assert.Contains(t, ansi.Strip(out.String()), ResumeNotice)
+	assert.True(t, helperRan, "an unfinished install is installed again although system:is-installed succeeds")
+	assert.Equal(t, "1", fake.env[ForceReinstallEnv])
+	assert.NoFileExists(t, pendingMarkerPath(dir))
+}
+
 func TestRunHeadlessFailureNamesStep(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
+	dir := t.TempDir()
 
 	fake := &fakeExecutor{
 		console: notInstalledConsole,
@@ -90,11 +122,12 @@ func TestRunHeadlessFailureNamesStep(t *testing.T) {
 	var out bytes.Buffer
 	cfg := &shop.Config{}
 	envCfg := &shop.EnvironmentConfig{}
-	err := RunHeadless(t.Context(), fake, cfg, envCfg, t.TempDir(), HeadlessOptions{Out: &out})
+	err := RunHeadless(t.Context(), fake, cfg, envCfg, dir, HeadlessOptions{Out: &out})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "installing Shopware")
 	assert.Contains(t, ansi.Strip(out.String()), "failed during user:create")
+	assert.FileExists(t, pendingMarkerPath(dir), "a failed install keeps the marker")
 }
 
 func TestRunHeadlessValidatesOptions(t *testing.T) {
@@ -112,4 +145,48 @@ func TestRunHeadlessValidatesOptions(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown locale")
+}
+
+func TestRunHeadlessStopsWhenMarkerCannotBeWritten(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".shopware-cli"), nil, 0o644))
+
+	helperRan := false
+	fake := &fakeExecutor{
+		console: notInstalledConsole,
+		php: func(ctx context.Context, _ ...string) *executor.Process {
+			helperRan = true
+			return shellProcess(ctx, "true")
+		},
+	}
+	err := RunHeadless(t.Context(), fake, &shop.Config{}, &shop.EnvironmentConfig{}, dir, HeadlessOptions{})
+	require.Error(t, err)
+	assert.False(t, helperRan)
+}
+
+func TestRunHeadlessWarnsWhenMarkerCannotBeRemoved(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	t.Setenv("DO_NOT_TRACK", "1")
+	dir := t.TempDir()
+	markerDir := filepath.Join(dir, ".shopware-cli", "install")
+	t.Cleanup(func() { _ = os.Chmod(markerDir, 0o755) })
+
+	fake := &fakeExecutor{
+		console: notInstalledConsole,
+		php: func(ctx context.Context, _ ...string) *executor.Process {
+			return shellProcess(ctx, "chmod 555 '"+markerDir+"'")
+		},
+	}
+
+	core, logs := observer.New(zap.WarnLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+
+	err := RunHeadless(ctx, fake, &shop.Config{}, &shop.EnvironmentConfig{}, dir, HeadlessOptions{Out: &bytes.Buffer{}})
+	require.NoError(t, err, "a marker that stays does not fail the installation")
+
+	require.Equal(t, 1, logs.Len())
+	assert.Contains(t, logs.All()[0].Message, pendingMarkerPath(dir))
 }

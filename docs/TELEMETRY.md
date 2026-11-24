@@ -158,6 +158,7 @@ overall CLI usage.
 | `is_wsl`       | Whether a Linux run happens inside the Windows Subsystem for Linux                                                                                                                                                                                                                       | `true` / `false`                            |
 | `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider                                                                                                                                                                         | `github` / `gitlab` / `bitbucket` / `other` |
 | `shopware_version` | The installed Shopware version, looked up in the background near command startup from installed packages with `composer.lock` as fallback. Omitted if the lookup is not ready when the command finishes; commands that modify dependencies may affect the observed version. Accepts a release, a release candidate or `dev-trunk`; other development branches are never sent. Only on `project` commands run inside a project, not on `project create` | `6.7.11.0` |
+| `console_command` | Exact Symfony command name for a `project console` or `swx` invocation that matches the CLI recommendation list and is forwarded to Symfony | `plugin:create` |
 | `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` unless `--docker` was passed explicitly | `compose_plugin_missing,docker_not_running` |
 | `qa_timeout_ms` | QA time budget in milliseconds. Defaults to zero, which disables the timeout | `0` |
 | `qa_timeout_phase` | Underscore-separated identifier for the phase interrupted by the QA timeout | `tool_setup` |
@@ -195,10 +196,10 @@ Notes:
   starts cannot be counted.
 - Comparing `cpu_ms` with `duration_ms` shows whether a run kept the CPU busy
   or mostly waited, for example on downloads.
-- The command _name_ is captured (e.g. `project.create`), but **not** its
-  arguments, flags, paths, or any free-text input. The only exception is the
-  `deprecated` tag, which names deprecated flags that were used, never their
-  values. `checked_shopware_version`
+- Command names come from the CLI command tree and the Symfony recommendation
+  list. Command arguments, flag values, paths, and free-text input are excluded.
+  The `deprecated` tag lists deprecated flag names when used.
+  `checked_shopware_version`
   and `check_against` are the version and mode the tools actually used, not
   the flag as typed.
 - The root command alone (running `shopware-cli` with no sub-command) is not
@@ -208,6 +209,10 @@ Notes:
   `command_name` values that start with `extension.add.` — for example
   `extension.add.admin_module` and `extension.add.store_api_route`. Entity
   names and other generator arguments are never sent.
+- Filter the command event to `command_name=project.console` and group by
+  `console_command` to count usage of mapped Symfony commands. Aliases such as
+  `app:update` keep their exact names. Composer dispatch, unmapped commands,
+  and help or version requests omit the tag. Quiet executions still count.
 
 `failed_step` values for `project create`, in the order the steps run:
 
@@ -231,6 +236,7 @@ Notes:
 | `composer_security_advisories` | Handling a Composer install blocked by security advisories |
 | `docker_setup` | Preparing the Docker environment from the installed project |
 | `docker_setup_write_compose` | Writing the Docker Compose file |
+| `app_secret` | Moving `APP_SECRET` from `.env` to `.env.local` |
 | `write_config` | Writing `.config/shopware-project.yml` |
 | `git_init` | Initializing the Git repository |
 

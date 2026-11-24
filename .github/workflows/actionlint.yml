@@ -7,6 +7,7 @@ on:
       - '.github/dependabot.yml'
       - 'mise.toml'
       - 'mise.lock'
+      - 'internal/shop/project_scaffold_static/**'
   push:
     branches: [main]
     paths:
@@ -14,6 +15,7 @@ on:
       - '.github/dependabot.yml'
       - 'mise.toml'
       - 'mise.lock'
+      - 'internal/shop/project_scaffold_static/**'
   workflow_dispatch:
 
 concurrency:
@@ -29,7 +31,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@v2.23.0
         with:
           egress-policy: block
           disable-sudo: true
@@ -49,7 +51,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up workflow tools
-        uses: jdx/mise-action@v5.2.7
+        uses: jdx/mise-action@v5.2.10
         with:
           install_args: --locked jactionlint shellcheck
 

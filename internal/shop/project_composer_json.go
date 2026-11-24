@@ -118,6 +118,9 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 	if opts.IsShopwarePaaS() {
 		require.set("shopware/k8s-meta", "*")
 	}
+	// Older plugin releases declare unbounded Shopware core compatibility.
+	// Exclude them so Composer cannot choose one for an unsupported core.
+	require.set("store.shopware.com/swagplatformsecurity", ">=1.0.26")
 	require.set("symfony/flex", "~2")
 	require.set("symfony/runtime", "*")
 
@@ -169,7 +172,11 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 	repo4.set("type", "composer")
 	repo4.set("url", "https://shopware.github.io/conflicts/")
 
-	composer.set("repositories", []*orderedMap{repo1, repo2, repo3, repo4})
+	storeRepo := newOrderedMap()
+	storeRepo.set("type", "composer")
+	storeRepo.set("url", "https://packages.shopware.com")
+
+	composer.set("repositories", []*orderedMap{repo1, repo2, repo3, repo4, storeRepo})
 	psr4 := newOrderedMap()
 	psr4.set("App\\", "src/")
 	autoload := newOrderedMap()

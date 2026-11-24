@@ -30,6 +30,10 @@ and proposed changes without modifying files. If the command is interrupted, it
 does not undo changes already made.`,
 	Args: cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := extensionValidationFormat(cmd); err != nil {
+			return err
+		}
+
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
@@ -37,6 +41,8 @@ does not undo changes already made.`,
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Reporting format was validated in PreRunE.
+		reportingFormat, _ := extensionValidationFormat(cmd)
 		timeout, _ := cmd.Flags().GetString("timeout")
 		ctx, cancel, err := verifier.WithQATimeout(cmd.Context(), timeout, cmd.Flags().Changed("timeout"))
 		if err != nil {
@@ -44,7 +50,7 @@ does not undo changes already made.`,
 		}
 		defer cancel()
 
-		progress := verifier.NewProgress("")
+		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
@@ -82,13 +88,14 @@ does not undo changes already made.`,
 		cancel()
 
 		results = verifier.EnsureQATimeoutResult(ctx, results)
-		return validation.ReportTools(results, "summary", "Fixers")
+		return validation.ReportTools(results, reportingFormat, "Fixers")
 	},
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
 
+	extensionFixCmd.Flags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	extensionFixCmd.Flags().Bool("dry-run", false, "Report files that would change, without changing them")
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
@@ -97,6 +104,7 @@ func init() {
 
 	_ = extensionFixCmd.Flags().MarkDeprecated("allow-non-git", deprecation.Message("2027-02-10", ""))
 
+	_ = extensionFixCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }

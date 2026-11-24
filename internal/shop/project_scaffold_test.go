@@ -1,14 +1,17 @@
 package shop
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/symfony"
@@ -47,6 +50,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.Contains(t, composerJSON, `"shopware/elasticsearch": "*"`)
 		assert.Contains(t, composerJSON, `"symfony/amqp-messenger": "*"`)
 		assert.Contains(t, composerJSON, `"block-insecure": false`)
+		assertScaffoldSecurityPlugin(t, composerJSON)
 		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env"))
 		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env.local"))
 		assert.Equal(t, "/.idea\n/.shopware-cli\n/vendor", readScaffoldFile(t, projectFolder, ".gitignore"))
@@ -73,6 +77,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.Contains(t, readScaffoldFile(t, projectFolder, "Dockerfile"), "ARG PHP_VERSION=8.4")
 		// The container deployment needs no deployment-specific composer package.
 		composerJSON := readScaffoldFile(t, projectFolder, "composer.json")
+		assertScaffoldSecurityPlugin(t, composerJSON)
 		assert.NotContains(t, composerJSON, "deployer/deployer")
 		assert.NotContains(t, composerJSON, "shopware/paas-meta")
 		assert.NotContains(t, composerJSON, "shopware/k8s-meta")
@@ -312,6 +317,29 @@ func TestWriteComposerJsonDisablesAuditBlocking(t *testing.T) {
 	composerJSON := readScaffoldFile(t, projectFolder, "composer.json")
 	assert.Contains(t, composerJSON, `"block-insecure": false`)
 	assert.Contains(t, composerJSON, `"shopware/core": "6.6.10.0"`)
+	assertScaffoldSecurityPlugin(t, composerJSON)
+}
+
+func assertScaffoldSecurityPlugin(t *testing.T, composerJSON string) {
+	t.Helper()
+
+	type repository struct {
+		Type string `json:"type"`
+		URL  string `json:"url"`
+	}
+	var manifest struct {
+		Require      map[string]string `json:"require"`
+		Repositories []repository      `json:"repositories"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(composerJSON), &manifest))
+	assert.Equal(t, ">=1.0.26", manifest.Require["store.shopware.com/swagplatformsecurity"])
+	assert.Equal(t, []repository{
+		{"path", "custom/plugins/*"},
+		{"path", "custom/plugins/*/packages/*"},
+		{"path", "custom/static-plugins/*"},
+		{"composer", "https://shopware.github.io/conflicts/"},
+		{"composer", "https://packages.shopware.com"},
+	}, manifest.Repositories)
 }
 
 func TestSetupDeployment(t *testing.T) {
@@ -388,7 +416,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupCI(t.Context(), tmpDir, CINone, DeploymentNone))
+		require.NoError(t, setupCI(t.Context(), tmpDir, CINone, DeploymentNone, ""))
 
 		entries, err := os.ReadDir(tmpDir)
 		require.NoError(t, err)
@@ -399,42 +427,190 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitHub, DeploymentNone))
+		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitHub, DeploymentNone, ""))
 
-		assert.FileExists(t, filepath.Join(tmpDir, ".github", "workflows", "ci.yml"))
 		assert.NoFileExists(t, filepath.Join(tmpDir, ".github", "workflows", "deploy.yml"))
+
+		var workflow struct {
+			Concurrency struct {
+				Group string `yaml:"group"`
+			} `yaml:"concurrency"`
+			Jobs map[string]struct {
+				Needs any `yaml:"needs"`
+				Steps []struct {
+					Uses string `yaml:"uses"`
+				} `yaml:"steps"`
+			} `yaml:"jobs"`
+		}
+		require.NoError(t, yaml.Unmarshal([]byte(readScaffoldFile(t, tmpDir, ".github", "workflows", "ci.yml")), &workflow))
+
+		assert.Equal(t, "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}", workflow.Concurrency.Group)
+		assert.Contains(t, workflow.Jobs, "check")
+		require.Contains(t, workflow.Jobs, "build")
+		build := workflow.Jobs["build"]
+		assert.Nil(t, build.Needs)
+
+		uses := make([]string, 0, len(build.Steps))
+		for _, step := range build.Steps {
+			uses = append(uses, strings.Split(step.Uses, "@")[0])
+		}
+		assert.Contains(t, uses, "shopware/build-project-action")
 	})
 
 	t.Run("github with deployer creates the deploy workflow", func(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitHub, DeploymentDeployer))
+		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitHub, DeploymentDeployer, ""))
 
 		assert.FileExists(t, filepath.Join(tmpDir, ".github", "workflows", "ci.yml"))
-		assert.FileExists(t, filepath.Join(tmpDir, ".github", "workflows", "deploy.yml"))
+
+		var workflow struct {
+			Jobs map[string]struct {
+				Steps []struct {
+					With map[string]string `yaml:"with"`
+				} `yaml:"steps"`
+			} `yaml:"jobs"`
+		}
+		require.NoError(t, yaml.Unmarshal([]byte(readScaffoldFile(t, tmpDir, ".github", "workflows", "deploy.yml")), &workflow))
+		require.Contains(t, workflow.Jobs, "deploy")
+		require.Len(t, workflow.Jobs["deploy"].Steps, 1)
+		assert.Equal(t, "${{ secrets.SSH_PRIVATE_KEY }}", workflow.Jobs["deploy"].Steps[0].With["sshPrivateKey"])
+	})
+
+	t.Run("github uses the project PHP version", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitHub, DeploymentDeployer, "8.2"))
+
+		assert.ElementsMatch(t, []string{"8.2", "8.2"}, githubPHPVersions(t, readScaffoldFile(t, tmpDir, ".github", "workflows", "ci.yml")))
+		assert.ElementsMatch(t, []string{"8.2"}, githubPHPVersions(t, readScaffoldFile(t, tmpDir, ".github", "workflows", "deploy.yml")))
+	})
+
+	t.Run("github falls back to PHP 8.4", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitHub, DeploymentDeployer, ""))
+
+		assert.ElementsMatch(t, []string{"8.4", "8.4"}, githubPHPVersions(t, readScaffoldFile(t, tmpDir, ".github", "workflows", "ci.yml")))
+		assert.ElementsMatch(t, []string{"8.4"}, githubPHPVersions(t, readScaffoldFile(t, tmpDir, ".github", "workflows", "deploy.yml")))
 	})
 
 	t.Run("gitlab creates the validation pipeline", func(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitLab, DeploymentNone))
+		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitLab, DeploymentNone, ""))
 
 		content := readScaffoldFile(t, tmpDir, ".gitlab-ci.yml")
 		assert.Contains(t, content, "project-validate")
 		assert.NotContains(t, content, "project-deploy")
+		assertGitLabBuildJob(t, content)
 	})
 
 	t.Run("gitlab with deployer includes the deploy pipeline", func(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitLab, DeploymentDeployer))
+		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitLab, DeploymentDeployer, ""))
 
 		content := readScaffoldFile(t, tmpDir, ".gitlab-ci.yml")
 		assert.Contains(t, content, "project-deploy")
+		assertGitLabBuildJob(t, content)
 	})
+
+	t.Run("gitlab uses the project PHP version", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitLab, DeploymentDeployer, "8.2"))
+
+		inputs, image := gitlabPHPVersions(t, readScaffoldFile(t, tmpDir, ".gitlab-ci.yml"))
+		assert.ElementsMatch(t, []string{"8.2", "8.2"}, inputs)
+		assert.Equal(t, "ghcr.io/shopware/shopware-cli:latest-php-8.2", image)
+	})
+
+	t.Run("gitlab falls back to PHP 8.4", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		require.NoError(t, setupCI(t.Context(), tmpDir, CIGitLab, DeploymentNone, ""))
+
+		inputs, image := gitlabPHPVersions(t, readScaffoldFile(t, tmpDir, ".gitlab-ci.yml"))
+		assert.ElementsMatch(t, []string{"8.4"}, inputs)
+		assert.Equal(t, "ghcr.io/shopware/shopware-cli:latest-php-8.4", image)
+	})
+}
+
+// githubPHPVersions returns every PHP version a GitHub workflow passes to its actions.
+func githubPHPVersions(t *testing.T, content string) []string {
+	t.Helper()
+
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				With map[string]string `yaml:"with"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(content), &workflow))
+
+	var versions []string
+	for _, job := range workflow.Jobs {
+		for _, step := range job.Steps {
+			for _, key := range []string{"phpVersion", "php-version"} {
+				if v, ok := step.With[key]; ok {
+					versions = append(versions, v)
+				}
+			}
+		}
+	}
+
+	return versions
+}
+
+// gitlabPHPVersions returns the php_version inputs of the included components
+// and the image of the build job.
+func gitlabPHPVersions(t *testing.T, content string) ([]string, string) {
+	t.Helper()
+
+	var pipeline struct {
+		Include []struct {
+			Inputs map[string]string `yaml:"inputs"`
+		} `yaml:"include"`
+		Build struct {
+			Image struct {
+				Name string `yaml:"name"`
+			} `yaml:"image"`
+		} `yaml:"build"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(content), &pipeline))
+
+	versions := make([]string, 0, len(pipeline.Include))
+	for _, include := range pipeline.Include {
+		versions = append(versions, include.Inputs["php_version"])
+	}
+
+	return versions, pipeline.Build.Image.Name
+}
+
+func assertGitLabBuildJob(t *testing.T, content string) {
+	t.Helper()
+
+	var pipeline struct {
+		Build struct {
+			Stage  string   `yaml:"stage"`
+			Script []string `yaml:"script"`
+		} `yaml:"build"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(content), &pipeline))
+
+	assert.Equal(t, "check", pipeline.Build.Stage)
+	assert.True(t, slices.ContainsFunc(pipeline.Build.Script, func(line string) bool {
+		return strings.Contains(line, "project ci")
+	}))
 }
 
 func readScaffoldFile(t *testing.T, root string, path ...string) string {

@@ -39,8 +39,9 @@ func GetToolsOf[T Tool]() ToolList[T] {
 }
 
 const (
-	CheckAgainstHighest = "highest"
-	CheckAgainstLowest  = "lowest"
+	CheckAgainstHighest   = "highest"
+	CheckAgainstLowest    = "lowest"
+	CheckAgainstNextMajor = "next-major"
 )
 
 type ToolConfig struct {
@@ -53,7 +54,7 @@ type ToolConfig struct {
 	MinShopwareVersion string
 	// The maximum version of Shopware that is supported
 	MaxShopwareVersion string
-	// The version of Shopware that is checked against
+	// The Shopware compatibility mode for validation
 	CheckAgainst string
 	// The root directory of the extension/project
 	RootDir string

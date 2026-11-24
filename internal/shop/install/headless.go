@@ -12,6 +12,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // HeadlessOptions configure a non-interactive installation run.
@@ -39,11 +40,20 @@ func RunHeadless(ctx context.Context, exec executor.Executor, cfg *shop.Config, 
 		return err
 	}
 
-	if IsInstalled(ctx, exec) {
+	if IsInstalled(ctx, exec, projectRoot) {
 		_, _ = fmt.Fprintln(out, tui.SuccessLine("Shopware is already installed — nothing to do."))
 		_, _ = fmt.Fprintln(out, tui.DimText.Render("Run ")+tui.BoldText.Render("shopware-cli project dev stop --remove-data")+tui.DimText.Render(" first for a clean reinstall."))
 		trackOutcome(tracking.ResultSkipped, install, 0, "")
 		return nil
+	}
+
+	resume, err := MarkPending(projectRoot)
+	if err != nil {
+		return err
+	}
+	install.ForceReinstall = resume
+	if resume {
+		_, _ = fmt.Fprintln(out, tui.DimText.Render(ResumeNotice))
 	}
 
 	_, _ = fmt.Fprintln(out, tui.SectionHeadingStyle.Render("Installing Shopware"))
@@ -65,6 +75,10 @@ func RunHeadless(ctx context.Context, exec executor.Executor, cfg *shop.Config, 
 		_, _ = fmt.Fprintln(out)
 		_, _ = fmt.Fprintln(out, tui.FailLine("Installation failed during "+failedStep+"."))
 		return fmt.Errorf("installing Shopware: %w", runErr)
+	}
+
+	if err := ClearPending(projectRoot); err != nil {
+		logging.FromContext(ctx).Warn(ClearPendingWarning(projectRoot, err))
 	}
 
 	// Persist before recording the outcome, so a failed config write is not

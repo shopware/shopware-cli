@@ -92,7 +92,12 @@ run = "ast-grep scan . --update-all"
 [tasks.lint-workflows]
 description = "Validate GitHub Actions workflows"
 # Require ShellCheck so embedded shell scripts are always validated.
-run = ["shellcheck --version", "jactionlint --color --shellcheck=shellcheck --pyflakes="]
+run = [
+    "shellcheck --version",
+    "jactionlint --color --shellcheck=shellcheck --pyflakes=",
+    # Scaffolded templates track action versions by tag, not by SHA.
+    "jactionlint --color --shellcheck=shellcheck --pyflakes= --ignore=unpinned-uses internal/shop/project_scaffold_static/github-ci.yml.tmpl internal/shop/project_scaffold_static/github-deploy.yml.tmpl",
+]
 
 [tasks.lint-markdown]
 description = "Lint Markdown files"

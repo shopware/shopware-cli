@@ -30,6 +30,10 @@ and proposed changes without modifying files. If the command is interrupted, it
 does not undo changes already made.`,
 	Args: cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := projectValidationFormat(cmd); err != nil {
+			return err
+		}
+
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
@@ -37,6 +41,8 @@ does not undo changes already made.`,
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Reporting format was validated in PreRunE.
+		reportingFormat, _ := projectValidationFormat(cmd)
 		timeout, _ := cmd.Flags().GetString("timeout")
 		ctx, cancel, err := verifier.WithQATimeout(cmd.Context(), timeout, cmd.Flags().Changed("timeout"))
 		if err != nil {
@@ -44,7 +50,7 @@ does not undo changes already made.`,
 		}
 		defer cancel()
 
-		progress := verifier.NewProgress("")
+		progress := verifier.NewProgress(reportingFormat)
 
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -94,13 +100,14 @@ does not undo changes already made.`,
 		cancel()
 
 		results = verifier.EnsureQATimeoutResult(ctx, results)
-		return validation.ReportTools(results, "summary", "Fixers")
+		return validation.ReportTools(results, reportingFormat, "Fixers")
 	},
 }
 
 func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
 
+	projectFixCmd.PersistentFlags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	projectFixCmd.PersistentFlags().Bool("dry-run", false, "Report files that would change, without changing them")
 	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
@@ -109,6 +116,7 @@ func init() {
 
 	_ = projectFixCmd.PersistentFlags().MarkDeprecated("allow-non-git", deprecation.Message("2027-02-10", ""))
 
+	_ = projectFixCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
 	_ = projectFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
 	_ = projectFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }

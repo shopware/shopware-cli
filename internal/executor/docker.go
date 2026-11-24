@@ -3,6 +3,7 @@ package executor
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -155,7 +156,7 @@ func (d *DockerExecutor) ShopConfig() *shop.Config {
 // DatabaseConnection resolves the database credentials as seen inside the
 // compose network and translates the service host to the port published on
 // the host machine.
-func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
+func (d *DockerExecutor) DatabaseConnection(ctx context.Context, endpoints ...DatabaseEndpoint) (*DatabaseConnection, error) {
 	conn := defaultDatabaseConnection()
 	conn.Host = "database"
 
@@ -180,6 +181,13 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 		if err := applyDatabaseURL(conn, databaseURL); err != nil {
 			return nil, err
 		}
+	}
+
+	applyDatabaseEndpoints(conn, endpoints)
+
+	// A path inside the container must never be dialed as a host socket.
+	if conn.UnixSocket != "" {
+		return nil, errors.New("cannot connect to a container MySQL unix socket from the host; use a TCP database URL")
 	}
 
 	// Certificate paths refer to the web container, so read them there.

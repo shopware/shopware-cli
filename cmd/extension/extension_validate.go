@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -35,9 +36,17 @@ Use --check-against to select the lowest or highest supported Shopware version
 for PHPStan. Dependencies for the analysis are installed in
 var/cache/shopware-cli, leaving the extension's vendor/ and composer.lock
 unchanged. A custom PHPStan configuration that loads vendor/autoload.php still
-loads local dependencies.`,
+loads local dependencies.
+
+Use --check-against next-major to check for upcoming breaking changes with PHPStan.
+The rules read breaking-change attributes from the same Shopware version resolved by --check-against highest.
+Shopware introduced these attributes in 6.7.14.0. Older versions may produce few or no next-major findings.
+If your PHPStan config already includes future-compatibility.neon, use that config with the default mode to avoid including the ruleset twice.`,
 	Example: `  # Validate an extension
   shopware-cli extension validate ./my-extension
+
+  # Check for announced breaking changes in the next Shopware major
+  shopware-cli extension validate ./my-extension --check-against next-major --only phpstan
 
   # Apply formatting automatically
   shopware-cli extension format ./my-extension
@@ -167,13 +176,15 @@ func extensionValidationFormat(cmd *cobra.Command) (string, error) {
 }
 
 func init() {
+	checkAgainstModes := []string{verifier.CheckAgainstHighest, verifier.CheckAgainstLowest, verifier.CheckAgainstNextMajor}
+	checkAgainstValues := strings.Join(checkAgainstModes, ", ")
 	extensionRootCmd.AddCommand(extensionValidateCmd)
 
 	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run all validation checks")
 	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Enable Store compliance (deprecated: use validation.store_compliance in the extension configuration)")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
-	extensionValidateCmd.PersistentFlags().String("check-against", verifier.CheckAgainstHighest, "Check against Shopware Version (highest, lowest)")
+	extensionValidateCmd.PersistentFlags().String("check-against", verifier.CheckAgainstHighest, "Check Shopware compatibility ("+checkAgainstValues+")")
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().Bool("exclude-formatters", false, "Exclude validation checks that also support formatting")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
@@ -188,7 +199,7 @@ func init() {
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
-	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{verifier.CheckAgainstHighest, verifier.CheckAgainstLowest}, cobra.ShellCompDirectiveNoFileComp))
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions(checkAgainstModes, cobra.ShellCompDirectiveNoFileComp))
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 
@@ -198,8 +209,8 @@ func init() {
 		}
 
 		mode, _ := cmd.Flags().GetString("check-against")
-		if mode != verifier.CheckAgainstHighest && mode != verifier.CheckAgainstLowest {
-			return fmt.Errorf("invalid --check-against value %q, allowed values: highest, lowest", mode)
+		if !slices.Contains(checkAgainstModes, mode) {
+			return fmt.Errorf("cannot use %q for --check-against, allowed values are %s", mode, checkAgainstValues)
 		}
 
 		only, _ := cmd.Flags().GetString("only")

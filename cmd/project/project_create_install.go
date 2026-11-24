@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -69,6 +70,10 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		}
 	}
 
+	if err := envfile.MoveAppSecretToEnvLocal(opts.projectFolder); err != nil {
+		return tracking.FailedAt(createStepAppSecret, err)
+	}
+
 	shopCfg := newProjectConfig(opts, composerInstallPHP)
 
 	// Serve the shop at a stable hostname through the shared proxy instead of a
@@ -117,8 +122,19 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		}
 	}
 
+	ciTemplate := ""
+	switch opts.selectedCI {
+	case shop.CIGitHub:
+		ciTemplate = ".github/workflows/ci.yml"
+	case shop.CIGitLab:
+		ciTemplate = ".gitlab-ci.yml"
+	}
+
 	if !opts.interactive {
 		logging.FromContext(ctx).Infof("Project created successfully in %s", projectDisplay)
+		// Hints are useful without prompts too. Keep stdout untouched for pipes
+		// and render plain text without querying the terminal for its background.
+		fmt.Fprint(os.Stderr, tui.ProjectWorkflowGuideposts(ciTemplate, opts.useDocker, false))
 		return
 	}
 
@@ -156,6 +172,8 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 			maybePrintWSLWindowsAccess(proxyBrowserHostnames(opts.projectFolder, hostname))
 		}
 	}
+
+	fmt.Print(tui.ProjectWorkflowGuideposts(ciTemplate, opts.useDocker, true))
 
 	if opts.selectedDeployment == shop.DeploymentContainer {
 		fmt.Println()

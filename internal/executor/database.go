@@ -16,6 +16,25 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
+// DatabaseEndpoint overrides the configured endpoint before transport discovery.
+// A non-empty Host replaces any configured Unix socket; Port alone keeps it.
+type DatabaseEndpoint struct {
+	Host string
+	Port string
+}
+
+func applyDatabaseEndpoints(conn *DatabaseConnection, endpoints []DatabaseEndpoint) {
+	for _, endpoint := range endpoints {
+		if endpoint.Host != "" {
+			conn.Host = endpoint.Host
+			conn.UnixSocket = ""
+		}
+		if endpoint.Port != "" {
+			conn.Port = endpoint.Port
+		}
+	}
+}
+
 // DatabaseConnection describes how to reach the project database from the
 // host machine.
 type DatabaseConnection struct {
@@ -24,6 +43,8 @@ type DatabaseConnection struct {
 	Username string
 	Password string
 	Database string
+	// UnixSocket is a local socket path, or a remote path when tunneled over SSH.
+	UnixSocket string
 	// TLS configures transport encryption, see DatabaseTLS.
 	TLS DatabaseTLS
 	// tunneledNet, when set, is a mysql driver network name (registered via
@@ -33,8 +54,11 @@ type DatabaseConnection struct {
 	tunneledNet string
 }
 
-// Addr returns the host:port address of the database.
+// Addr returns the Unix socket path or host:port address of the database.
 func (c *DatabaseConnection) Addr() string {
+	if c.UnixSocket != "" {
+		return c.UnixSocket
+	}
 	return net.JoinHostPort(c.Host, c.Port)
 }
 
@@ -43,9 +67,12 @@ func (c *DatabaseConnection) Addr() string {
 // connection with mysql.NewConnector and sql.OpenDB instead of a DSN.
 func (c *DatabaseConnection) MySQLConfig() (*mysql.Config, error) {
 	cfg := mysql.NewConfig()
-	if c.tunneledNet != "" {
+	switch {
+	case c.tunneledNet != "":
 		cfg.Net = c.tunneledNet
-	} else {
+	case c.UnixSocket != "":
+		cfg.Net = "unix"
+	default:
 		cfg.Net = "tcp"
 	}
 	cfg.Addr = c.Addr()
@@ -115,8 +142,9 @@ func defaultDatabaseConnection() *DatabaseConnection {
 
 // applyDatabaseURL merges a Symfony DATABASE_URL into conn. Parts missing in
 // the URL keep their current value, except the password which is cleared when
-// a user without password is given. A tls query parameter configures
-// transport encryption like in a go-sql-driver DSN.
+// a user without password is given. The unix_socket parameter selects a Unix
+// socket. A tls query parameter configures transport encryption like in a
+// go-sql-driver DSN.
 func applyDatabaseURL(conn *DatabaseConnection, databaseURL string) error {
 	parsed, err := url.Parse(databaseURL)
 	if err != nil {
@@ -150,6 +178,19 @@ func applyDatabaseURL(conn *DatabaseConnection, databaseURL string) error {
 	if dbName := strings.Trim(parsed.Path, "/"); dbName != "" {
 		conn.Database = dbName
 	}
+
+	// URL.Query silently discards malformed escapes. Never silently fall back
+	// to a different transport when the requested socket cannot be decoded.
+	for _, pair := range strings.Split(parsed.RawQuery, "&") {
+		key, value, _ := strings.Cut(pair, "=")
+		key, _ = url.QueryUnescape(key)
+		if key == "unix_socket" {
+			if _, err := url.QueryUnescape(value); err != nil {
+				return fmt.Errorf("cannot parse DATABASE_URL unix_socket: %w", err)
+			}
+		}
+	}
+	conn.UnixSocket = parsed.Query().Get("unix_socket")
 
 	if parsed.Query().Has("tls") {
 		mode, err := tlsModeFromURLParam(parsed.Query().Get("tls"))

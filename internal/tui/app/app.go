@@ -11,7 +11,13 @@
 package app
 
 import (
+	"os"
+
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 // Options configure a new App shell.
@@ -41,6 +47,11 @@ type Options struct {
 	AltScreen *bool
 	// Mouse enables cell-motion mouse when true.
 	Mouse bool
+	// MouseFunc overrides Mouse each frame when set, so content can release
+	// the mouse on screens that have no use for it and leave text selection to
+	// the terminal. While the mouse is captured, the shell selects and copies
+	// text itself (see selection.go). Not part of lattice's shell.
+	MouseFunc func() bool
 	// OnExit runs once the program has ended, with the error Run returns. It
 	// also runs when a signal or a recovered panic ends the program without
 	// another Update, which the content cannot see. Only Run calls it, not a
@@ -62,11 +73,20 @@ type App struct {
 	fullOverlay bool
 	altScreen   bool
 	mouse       bool
+	mouseFn     func() bool
 	onExit      func(error)
+	// watchBackground is set by Run, which also undoes the terminal modes it
+	// implies once the program has ended.
+	watchBackground bool
 
 	overlays OverlayStack
 	keys     KeyMap
 	commands *CommandRegistry
+
+	// selection is the block of cells being dragged over, and frame the last
+	// rendered view it is read from.
+	selection selection
+	frame     string
 
 	// status is an optional one-line status message apps can set.
 	status string
@@ -92,6 +112,7 @@ func New(opts Options) *App {
 		fullOverlay: fullOverlay,
 		altScreen:   alt,
 		mouse:       opts.Mouse,
+		mouseFn:     opts.MouseFunc,
 		onExit:      opts.OnExit,
 		commands:    NewCommandRegistry(),
 	}
@@ -222,10 +243,15 @@ func (a *App) chrome() (header, footer string) {
 
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	if a.content == nil {
-		return nil
+	var cmds []tea.Cmd
+	if a.watchBackground {
+		// Ask the terminal to report light/dark appearance changes.
+		cmds = append(cmds, tea.Raw(ansi.SetModeLightDark))
 	}
-	return a.content.Init()
+	if a.content != nil {
+		cmds = append(cmds, a.content.Init())
+	}
+	return tea.Batch(cmds...)
 }
 
 // Update implements tea.Model.
@@ -239,11 +265,27 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmds []tea.Cmd
 
+	// A long-running program outlives the background it started on: the
+	// terminal theme can follow the system appearance. Re-query on an
+	// appearance report, and on focus for terminals that send none.
+	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		tui.SetDarkBackground(msg.IsDark())
+	case uv.DarkColorSchemeEvent, uv.LightColorSchemeEvent, tea.FocusMsg:
+		if a.watchBackground {
+			cmds = append(cmds, tea.RequestBackgroundColor)
+		}
+	}
+
 	// Quit wins over everything, including open overlays.
 	if key, ok := msg.(tea.KeyPressMsg); ok {
 		if cmdID, matched := a.keys.Match(KeyString(key), true); matched && cmdID == CmdQuit {
 			return a, a.RunCommand(CmdQuit)
 		}
+	}
+
+	if cmd, consumed := a.updateSelection(msg); consumed {
+		return a, cmd
 	}
 
 	// An open overlay captures input messages. Non-input messages are also
@@ -313,8 +355,14 @@ func (a *App) View() tea.View {
 		body = Frame(w, h, header, main, footer)
 	}
 
+	a.frame = body
+	if a.selection.visible {
+		body = highlightSelection(body, a.selection)
+	}
+
 	v := tea.NewView(body)
 	v.AltScreen = a.altScreen
+	v.ReportFocus = a.watchBackground
 	title := a.windowTitle
 	if a.titleFn != nil {
 		if t := a.titleFn(ctx); t != "" {
@@ -324,7 +372,11 @@ func (a *App) View() tea.View {
 	if title != "" {
 		v.WindowTitle = title
 	}
-	if a.mouse {
+	mouse := a.mouse
+	if a.mouseFn != nil {
+		mouse = a.mouseFn()
+	}
+	if mouse {
 		v.MouseMode = tea.MouseModeCellMotion
 	}
 	return v
@@ -333,7 +385,11 @@ func (a *App) View() tea.View {
 // Run is a convenience for tea.NewProgram(a, opts...).Run() that calls OnExit
 // once the program has ended.
 func (a *App) Run(opts ...tea.ProgramOption) (tea.Model, error) {
+	a.watchBackground = true
 	model, err := tea.NewProgram(a, opts...).Run()
+	// Bubble Tea does not know about this mode, so it would stay enabled and
+	// the terminal would keep reporting appearance changes to the shell.
+	_, _ = os.Stdout.WriteString(ansi.ResetModeLightDark)
 	if a.onExit != nil {
 		a.onExit(err)
 	}

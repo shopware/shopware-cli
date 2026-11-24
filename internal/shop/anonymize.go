@@ -235,7 +235,8 @@ func (c *ConfigDump) mergeWhere(table, condition string) {
 
 	for existing, current := range c.Where {
 		if strings.EqualFold(existing, table) {
-			c.Where[existing] = "(" + current + ") AND (" + condition + ")"
+			delete(c.Where, existing)
+			c.Where[strings.ToLower(table)] = "(" + current + ") AND (" + condition + ")"
 			return
 		}
 	}

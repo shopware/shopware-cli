@@ -23,9 +23,17 @@ dependencies, so run composer install first.
 
 PHP-CS-Fixer and Prettier check formatting in dry-run mode without changing
 source files. Formatting differences fail validation. Use --exclude-formatters
-to skip these checks.`,
+to skip these checks.
+
+Use --check-against next-major to add PHPStan checks for announced breaking changes in the installed Shopware release.
+Shopware introduced breaking-change attributes in 6.7.14.0. Older releases may produce few or no next-major findings.
+If your PHPStan config already includes future-compatibility.neon, omit the flag to avoid including the ruleset twice.`,
 	Example: `  # Validate a project
   shopware-cli project validate ./my-project
+
+  # Check for next-major breaking changes announced in your installed Shopware version.
+  # Update to the latest minor release in your current major first for the most complete results.
+  shopware-cli project validate ./my-project --check-against next-major --only phpstan
 
   # Apply formatting automatically
   shopware-cli project format ./my-project
@@ -36,6 +44,12 @@ to skip these checks.`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
 			return err
+		}
+		if cmd.Flags().Changed("check-against") {
+			mode, _ := cmd.Flags().GetString("check-against")
+			if mode != verifier.CheckAgainstNextMajor {
+				return fmt.Errorf("cannot use %q for --check-against, allowed value is %s", mode, verifier.CheckAgainstNextMajor)
+			}
 		}
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -96,6 +110,7 @@ to skip these checks.`,
 			return setupErr
 		}
 		toolCfg.ToolDirectory = verifier.GetToolDirectory()
+		toolCfg.CheckAgainst, _ = cmd.Flags().GetString("check-against")
 
 		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
 			return tool.Check(ctx, *toolCfg, execution)
@@ -125,6 +140,7 @@ func init() {
 
 	projectValidateCmd.PersistentFlags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	projectValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
+	projectValidateCmd.Flags().String("check-against", "", "Check Shopware compatibility ("+verifier.CheckAgainstNextMajor+")")
 	projectValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
 	projectValidateCmd.PersistentFlags().Bool("exclude-formatters", false, "Exclude validation checks that also support formatting")
 	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
@@ -138,6 +154,7 @@ func init() {
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")
 
 	_ = projectValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
+	_ = projectValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{verifier.CheckAgainstNextMajor}, cobra.ShellCompDirectiveNoFileComp))
 	_ = projectValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
 	_ = projectValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 }

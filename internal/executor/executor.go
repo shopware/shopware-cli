@@ -56,7 +56,7 @@ type Executor interface {
 	ShopConfig() *shop.Config
 	// DatabaseConnection returns credentials to reach the project database
 	// from the host machine.
-	DatabaseConnection(ctx context.Context) (*DatabaseConnection, error)
+	DatabaseConnection(ctx context.Context, endpoints ...DatabaseEndpoint) (*DatabaseConnection, error)
 }
 
 func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {
