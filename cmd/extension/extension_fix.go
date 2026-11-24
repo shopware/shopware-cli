@@ -77,7 +77,7 @@ does not undo changes already made.`,
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
+		logging.FromContext(ctx).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
 		results := verifier.RunTools(
 			ctx, tools, statuses, *toolCfg, progress,
