@@ -128,3 +128,27 @@ func TestComposerLockNoDependency(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoComposerFileFound)
 	assert.False(t, val)
 }
+
+func writeCoreLock(t *testing.T, coreVersion string) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	lock := `{"packages":[{"name":"shopware/core","version":"` + coreVersion + `"}]}`
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.lock"), []byte(lock), 0o644))
+
+	return tmpDir
+}
+
+func TestComposerLockTrunkIsNewest(t *testing.T) {
+	val, err := IsShopwareVersion(writeCoreLock(t, "dev-trunk"), ">=6.7.17")
+
+	assert.NoError(t, err)
+	assert.True(t, val)
+}
+
+func TestComposerLockUnparsableVersionReturnsError(t *testing.T) {
+	val, err := IsShopwareVersion(writeCoreLock(t, "dev-6.6.x"), ">=6.7.17")
+
+	assert.Error(t, err)
+	assert.False(t, val)
+}

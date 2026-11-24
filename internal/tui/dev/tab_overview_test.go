@@ -17,6 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/shop/securityplugin"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -379,4 +380,25 @@ func TestShopwareVersionLoadedStartsSecurityPluginCheck(t *testing.T) {
 	_, cmd := m.Update(shopwareVersionLoadedMsg{})
 
 	require.NotNil(t, cmd)
+}
+
+func TestOverviewInstallWarningVisibleInBothLayouts(t *testing.T) {
+	root := "/home/dev/projects/shop"
+	marker := root + "/.shopware-cli/install/pending"
+	warning := install.ClearPendingWarning(root, assert.AnError)
+
+	for _, width := range []int{200, 120} {
+		out := ansi.Strip(OverviewModel{installWarning: warning}.renderContent(width))
+		assert.Contains(t, out, marker, "wide layout, width %d", width)
+	}
+
+	// Stacked layout with a path longer than the column: the text wraps but no
+	// part of the path is dropped.
+	long := "/home/dev/a-rather-long-project-directory-name/with/many/nested/folders/shop"
+	longMarker := long + "/.shopware-cli/install/pending"
+	for _, width := range []int{60, 40} {
+		out := ansi.Strip(OverviewModel{installWarning: install.ClearPendingWarning(long, assert.AnError)}.renderContent(width))
+		flat := strings.Join(strings.Fields(out), "")
+		assert.Contains(t, flat, longMarker, "narrow layout, width %d", width)
+	}
 }

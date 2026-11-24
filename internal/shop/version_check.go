@@ -3,6 +3,7 @@ package shop
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path"
 
@@ -55,11 +56,17 @@ func determineByComposerLock(composerLock, requiredVersion string) (bool, error)
 
 	for _, pkg := range lock.Packages {
 		if pkg.Name == "shopware/core" {
-			if constraint.Check(version.Must(version.NewVersion(pkg.Version))) {
+			// Trunk is ahead of every release, like the shopware/platform check below.
+			if pkg.Version == VersionTrunk {
 				return true, nil
 			}
 
-			return false, nil
+			v, err := version.NewVersion(pkg.Version)
+			if err != nil {
+				return false, fmt.Errorf("cannot parse Shopware version %q: %w", pkg.Version, err)
+			}
+
+			return constraint.Check(v), nil
 		}
 	}
 

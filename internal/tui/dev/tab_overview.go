@@ -106,6 +106,8 @@ type OverviewModel struct {
 	// wheel (and pgup/pgdn/home/end) drive the scroll; the arrow keys stay bound
 	// to watcher focus.
 	scrollY int
+	// installWarning is shown above the report for the rest of the session.
+	installWarning string
 }
 
 // overviewBottomPadding is the blank space kept below the report so the last
@@ -689,6 +691,7 @@ func (m OverviewModel) renderProjectReport(width int) string {
 	divider := tui.SectionDivider(width)
 
 	var s strings.Builder
+	s.WriteString(m.renderInstallWarning(width))
 	s.WriteString(m.renderShopSection())
 	s.WriteString(divider)
 	s.WriteString(m.renderAccess())
@@ -869,12 +872,20 @@ func (m OverviewModel) renderDomains() string {
 	return s.String()
 }
 
+func (m OverviewModel) renderInstallWarning(width int) string {
+	if m.installWarning == "" {
+		return ""
+	}
+	return warnStyle.Width(width).Render(m.installWarning) + "\n\n"
+}
+
 // renderStacked is the single-column fallback for narrow terminals, keeping
 // every section of the two-column layout.
 func (m OverviewModel) renderStacked(width int) string {
 	divider := tui.SectionDivider(width)
 
 	var s strings.Builder
+	s.WriteString(m.renderInstallWarning(width))
 	s.WriteString(m.renderShopSection())
 	s.WriteString(divider)
 	s.WriteString(m.renderAccess())

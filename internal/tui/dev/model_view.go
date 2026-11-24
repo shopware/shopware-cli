@@ -139,12 +139,15 @@ func (m Model) renderDashboard(ctx app.Context) string {
 }
 
 func (m Model) renderDashboardFooter(width int) string {
+	mouse := tui.Shortcut{Key: "drag", Label: "Copy text"}
+
 	switch m.activeTab {
 	case tabInstance:
 		return tui.ShortcutBarFit(width,
 			tui.Shortcut{Key: "↑/↓", Label: "Navigate"},
 			tui.Shortcut{Key: "enter", Label: "Select source"},
 			tui.Shortcut{Key: "pgup/pgdn", Label: "Scroll logs"},
+			mouse,
 			tui.Shortcut{Key: "tab", Label: "Next tab"},
 			tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
 		)
@@ -160,6 +163,7 @@ func (m Model) renderDashboardFooter(width int) string {
 			tui.Shortcut{Key: "↑/↓", Label: "Focus item"},
 			tui.Shortcut{Key: "enter", Label: "Activate"},
 			tui.Shortcut{Key: "ctrl+p", Label: "Commands"},
+			mouse,
 			tui.Shortcut{Key: "tab", Label: "Next tab"},
 			tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
 		)
@@ -216,7 +220,16 @@ func (m Model) renderPhase(ctx app.Context) string {
 			}
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
-		content.WriteString(tui.RenderPhaseCardFit(strings.TrimRight(card.String(), "\n"), cardWidth, cardHeight))
+		body := strings.TrimRight(card.String(), "\n")
+		rendered := tui.RenderPhaseCardFit(body, cardWidth, cardHeight)
+		if m.installProg.resume {
+			// The notice gives way on small terminals rather than cropping the steps.
+			withNotice := tui.RenderPhaseCardFit(tui.DimStyle.Render(install.ResumeNotice)+"\n\n"+body, cardWidth, cardHeight)
+			if lipgloss.Height(withNotice) <= cardHeight {
+				rendered = withNotice
+			}
+		}
+		content.WriteString(rendered)
 	case phaseInstallFailed:
 		if m.installProg.showLogs {
 			// Appended at render time, not when the install failed: output is

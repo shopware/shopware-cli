@@ -125,6 +125,9 @@ type shopwareInstallDoneMsg struct {
 	source <-chan string
 	output []string
 	err    error
+	// clearErr is set when the install succeeded but its pending marker
+	// could not be removed.
+	clearErr error
 }
 
 type configRestartDoneMsg struct {
@@ -264,10 +267,8 @@ func newShell(m Model) *app.App {
 		WindowTitleFunc: func(app.Context) string { return current().windowTitle() },
 		// A signal or a recovered panic ends the program without Update, so the
 		// end of an open session is sent here.
-		OnExit: func(err error) { current().reportExit(err) },
-		// Enable mouse reporting so the overview scrolls with the wheel/trackpad
-		// and the instance-log viewport reacts to the wheel.
-		Mouse: true,
+		OnExit:    func(err error) { current().reportExit(err) },
+		MouseFunc: func() bool { return current().capturesMouse() },
 		// Quit handling is phase-dependent (telemetry, stop-confirm modal) and
 		// stays in the model's key dispatch, so no default quit binding.
 		DisableDefaultKeys: true,
@@ -275,6 +276,14 @@ func newShell(m Model) *app.App {
 	m.host = shell
 	shell.SetContent(m)
 	return shell
+}
+
+// capturesMouse reports whether the dashboard takes mouse input, so the
+// overview and the instance logs scroll with the wheel. A terminal cannot
+// select text while the mouse is captured: the shell selects on drag there,
+// and everything without a wheel target leaves selection to the terminal.
+func (m Model) capturesMouse() bool {
+	return m.phase == phaseDashboard && m.activeTab != tabConfig
 }
 
 func (m Model) Init() tea.Cmd {

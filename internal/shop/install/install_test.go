@@ -2,10 +2,12 @@ package install
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -188,8 +190,10 @@ func TestFailedStep(t *testing.T) {
 }
 
 func TestIsInstalled(t *testing.T) {
+	dir := t.TempDir()
+
 	installed := &fakeExecutor{}
-	assert.True(t, IsInstalled(t.Context(), installed))
+	assert.True(t, IsInstalled(t.Context(), installed, dir))
 
 	notInstalled := &fakeExecutor{
 		console: func(ctx context.Context, args ...string) *executor.Process {
@@ -197,7 +201,66 @@ func TestIsInstalled(t *testing.T) {
 			return shellProcess(ctx, "false")
 		},
 	}
-	assert.False(t, IsInstalled(t.Context(), notInstalled))
+	assert.False(t, IsInstalled(t.Context(), notInstalled, dir))
+
+	_, err := MarkPending(dir)
+	require.NoError(t, err)
+	assert.False(t, IsInstalled(t.Context(), installed, dir), "an unfinished installation counts as not installed")
+}
+
+func TestMarkPending(t *testing.T) {
+	dir := t.TempDir()
+
+	resume, err := MarkPending(dir)
+	require.NoError(t, err)
+	assert.False(t, resume)
+	assert.FileExists(t, pendingMarkerPath(dir))
+
+	gitignore := filepath.Join(dir, ".shopware-cli", "install", ".gitignore")
+	content, err := os.ReadFile(gitignore)
+	require.NoError(t, err)
+	assert.Equal(t, "*\n", string(content))
+
+	require.NoError(t, os.WriteFile(gitignore, []byte("custom\n"), 0o644))
+
+	resume, err = MarkPending(dir)
+	require.NoError(t, err)
+	assert.True(t, resume)
+
+	content, err = os.ReadFile(gitignore)
+	require.NoError(t, err)
+	assert.Equal(t, "custom\n", string(content), "an existing .gitignore is kept")
+}
+
+func TestIsPending(t *testing.T) {
+	dir := t.TempDir()
+	assert.False(t, IsPending(dir))
+
+	_, err := MarkPending(dir)
+	require.NoError(t, err)
+	assert.True(t, IsPending(dir))
+
+	require.NoError(t, ClearPending(dir))
+	assert.False(t, IsPending(dir))
+}
+
+func TestMarkPendingFails(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".shopware-cli"), nil, 0o644))
+
+	_, err := MarkPending(dir)
+	require.Error(t, err)
+}
+
+func TestClearPending(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, ClearPending(dir), "a missing marker is not an error")
+
+	_, err := MarkPending(dir)
+	require.NoError(t, err)
+	require.NoError(t, ClearPending(dir))
+	assert.NoFileExists(t, pendingMarkerPath(dir))
 }
 
 func TestRunPassesEnvAndStreamsLines(t *testing.T) {
@@ -222,8 +285,12 @@ func TestRunPassesEnvAndStreamsLines(t *testing.T) {
 		"INSTALL_CURRENCY":       "CHF",
 		"INSTALL_ADMIN_USERNAME": "boss",
 		"INSTALL_ADMIN_PASSWORD": "secret123",
-	}, fake.env)
+	}, fake.env, "no force reinstall without ForceReinstall")
 	assert.ElementsMatch(t, []string{"one", "two"}, lines, "stdout and stderr are both streamed")
+
+	err = Run(t.Context(), fake, Options{ForceReinstall: true}, func(string) {})
+	require.NoError(t, err)
+	assert.Equal(t, "1", fake.env[ForceReinstallEnv])
 }
 
 func TestRunReturnsHelperError(t *testing.T) {
@@ -273,4 +340,30 @@ func TestPersistCredentialsTopLevelCopy(t *testing.T) {
 	written, err := os.ReadFile(filepath.Join(dir, ".config/shopware-project.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "username: boss")
+}
+
+func TestMarkPendingIsInvisibleToGit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	require.NoError(t, exec.CommandContext(t.Context(), "git", "-C", dir, "init", "-q").Run())
+
+	_, err := MarkPending(dir)
+	require.NoError(t, err)
+	assert.FileExists(t, pendingMarkerPath(dir))
+
+	out, err := exec.CommandContext(t.Context(), "git", "-C", dir, "status", "--porcelain", "--untracked-files=all").Output()
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(string(out)))
+}
+
+func TestClearPendingWarningNamesAbsoluteMarkerPath(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	warning := ClearPendingWarning("project", errors.New("permission denied"))
+
+	abs, err := filepath.Abs(filepath.Join("project", ".shopware-cli", "install", "pending"))
+	require.NoError(t, err)
+	assert.Contains(t, warning, abs)
 }
