@@ -34,7 +34,7 @@ type sshGroup struct {
 
 func newSSHGroup(hosts []sshHost, migrationHost string, parallelism int) (*sshGroup, error) {
 	if len(hosts) == 0 || parallelism < 0 {
-		return nil, errors.New("SSH group requires hosts and nonnegative parallelism")
+		return nil, errors.New("cannot create SSH group: hosts and nonnegative parallelism are required")
 	}
 	if parallelism == 0 {
 		parallelism = 2
@@ -43,14 +43,14 @@ func newSSHGroup(hosts []sshHost, migrationHost string, parallelism int) (*sshGr
 	slices.SortFunc(g.hosts, func(a, b sshHost) int { return strings.Compare(a.name, b.name) })
 	for i, host := range g.hosts {
 		if host.name == "" || host.backend == nil || (i > 0 && g.hosts[i-1].name == host.name) {
-			return nil, errors.New("SSH group requires unique, nonempty host names and backends")
+			return nil, errors.New("cannot create SSH group: host names must be unique and nonempty and each host needs a backend")
 		}
 		if host.name == migrationHost {
 			g.migration = i
 		}
 	}
 	if g.migration < 0 {
-		return nil, fmt.Errorf("SSH migration host %q is not a group member", migrationHost)
+		return nil, fmt.Errorf("cannot use SSH migration host %q: host is not a group member", migrationHost)
 	}
 	return g, nil
 }
@@ -290,7 +290,10 @@ func (s *SSH) openDeploymentSession(ctx context.Context, input sshRolloutInput, 
 	if err != nil {
 		return nil, err
 	}
-	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, phpOpeningTag), "--", string(payload)).Cmd
+	cmd, program, err := s.deploymentCommand(ctx, "deploy", string(payload))
+	if err != nil {
+		return nil, err
+	}
 	cmd.Stderr = output
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -305,6 +308,12 @@ func (s *SSH) openDeploymentSession(ctx context.Context, input sshRolloutInput, 
 		_ = stdin.Close()
 		_ = stdout.Close()
 		return nil, err
+	}
+	if _, err := io.Copy(stdin, program); err != nil {
+		_ = stdin.Close()
+		waitErr := cmd.Wait()
+		_ = stdout.Close()
+		return nil, fmt.Errorf("cannot send deployment PHP archive: %w", errors.Join(err, waitErr))
 	}
 	return &sshDeploymentSession{cmd: cmd, stdin: stdin, stdout: stdout, reader: bufio.NewReader(stdout), input: input, output: output}, nil
 }

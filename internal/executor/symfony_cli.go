@@ -94,8 +94,13 @@ func (s *SymfonyCLIExecutor) ShopConfig() *shop.Config {
 	return s.shopCfg
 }
 
-func (s *SymfonyCLIExecutor) DatabaseConnection(_ context.Context) (*DatabaseConnection, error) {
-	return databaseConnectionFromEnv(s.projectRoot, s.env)
+func (s *SymfonyCLIExecutor) DatabaseConnection(_ context.Context, endpoints ...DatabaseEndpoint) (*DatabaseConnection, error) {
+	conn, err := databaseConnectionFromEnv(s.projectRoot, s.env)
+	if err != nil {
+		return nil, err
+	}
+	applyDatabaseEndpoints(conn, endpoints)
+	return conn, nil
 }
 
 func (s *SymfonyCLIExecutor) StartEnvironment(_ context.Context) error {

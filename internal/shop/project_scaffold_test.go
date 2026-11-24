@@ -1,6 +1,7 @@
 package shop
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -49,6 +50,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.Contains(t, composerJSON, `"shopware/elasticsearch": "*"`)
 		assert.Contains(t, composerJSON, `"symfony/amqp-messenger": "*"`)
 		assert.Contains(t, composerJSON, `"block-insecure": false`)
+		assertScaffoldSecurityPlugin(t, composerJSON)
 		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env"))
 		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env.local"))
 		assert.Equal(t, "/.idea\n/.shopware-cli\n/vendor", readScaffoldFile(t, projectFolder, ".gitignore"))
@@ -75,6 +77,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.Contains(t, readScaffoldFile(t, projectFolder, "Dockerfile"), "ARG PHP_VERSION=8.4")
 		// The container deployment needs no deployment-specific composer package.
 		composerJSON := readScaffoldFile(t, projectFolder, "composer.json")
+		assertScaffoldSecurityPlugin(t, composerJSON)
 		assert.NotContains(t, composerJSON, "deployer/deployer")
 		assert.NotContains(t, composerJSON, "shopware/paas-meta")
 		assert.NotContains(t, composerJSON, "shopware/k8s-meta")
@@ -314,6 +317,29 @@ func TestWriteComposerJsonDisablesAuditBlocking(t *testing.T) {
 	composerJSON := readScaffoldFile(t, projectFolder, "composer.json")
 	assert.Contains(t, composerJSON, `"block-insecure": false`)
 	assert.Contains(t, composerJSON, `"shopware/core": "6.6.10.0"`)
+	assertScaffoldSecurityPlugin(t, composerJSON)
+}
+
+func assertScaffoldSecurityPlugin(t *testing.T, composerJSON string) {
+	t.Helper()
+
+	type repository struct {
+		Type string `json:"type"`
+		URL  string `json:"url"`
+	}
+	var manifest struct {
+		Require      map[string]string `json:"require"`
+		Repositories []repository      `json:"repositories"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(composerJSON), &manifest))
+	assert.Equal(t, ">=1.0.26", manifest.Require["store.shopware.com/swagplatformsecurity"])
+	assert.Equal(t, []repository{
+		{"path", "custom/plugins/*"},
+		{"path", "custom/plugins/*/packages/*"},
+		{"path", "custom/static-plugins/*"},
+		{"composer", "https://shopware.github.io/conflicts/"},
+		{"composer", "https://packages.shopware.com"},
+	}, manifest.Repositories)
 }
 
 func TestSetupDeployment(t *testing.T) {

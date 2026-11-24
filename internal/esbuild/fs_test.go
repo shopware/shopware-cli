@@ -20,7 +20,7 @@ func TestCopyStaticFiles(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(nestedGitFile), 0o755))
 		require.NoError(t, os.WriteFile(nestedGitFile, []byte("git metadata"), 0o640))
 
-		require.NoError(t, copyStaticFiles(sourceDir, targetDir))
+		require.NoError(t, copyStaticFiles(t.Context(), sourceDir, targetDir))
 
 		targetFile := filepath.Join(targetDir, "images", "icon.svg")
 		contents, err := os.ReadFile(targetFile)
@@ -38,7 +38,7 @@ func TestCopyStaticFiles(t *testing.T) {
 	t.Run("ignores missing source directory", func(t *testing.T) {
 		targetDir := filepath.Join(t.TempDir(), "target")
 
-		require.NoError(t, copyStaticFiles(filepath.Join(t.TempDir(), "missing"), targetDir))
+		require.NoError(t, copyStaticFiles(t.Context(), filepath.Join(t.TempDir(), "missing"), targetDir))
 
 		_, err := os.Stat(targetDir)
 		assert.ErrorIs(t, err, os.ErrNotExist)
@@ -49,7 +49,7 @@ func TestCopyStaticFiles(t *testing.T) {
 		targetParent := filepath.Join(t.TempDir(), "target")
 		require.NoError(t, os.WriteFile(targetParent, []byte("file"), 0o644))
 
-		err := copyStaticFiles(sourceDir, filepath.Join(targetParent, "nested"))
+		err := copyStaticFiles(t.Context(), sourceDir, filepath.Join(targetParent, "nested"))
 
 		assert.ErrorContains(t, err, "failed to create target directory")
 	})
@@ -57,7 +57,7 @@ func TestCopyStaticFiles(t *testing.T) {
 
 func TestCopyFileErrors(t *testing.T) {
 	t.Run("missing source", func(t *testing.T) {
-		err := copyFile(filepath.Join(t.TempDir(), "missing"), filepath.Join(t.TempDir(), "target"))
+		err := copyFile(t.Context(), filepath.Join(t.TempDir(), "missing"), filepath.Join(t.TempDir(), "target"))
 
 		assert.ErrorContains(t, err, "failed to open source file")
 	})
@@ -66,7 +66,7 @@ func TestCopyFileErrors(t *testing.T) {
 		sourceFile := filepath.Join(t.TempDir(), "source")
 		require.NoError(t, os.WriteFile(sourceFile, []byte("source"), 0o644))
 
-		err := copyFile(sourceFile, filepath.Join(t.TempDir(), "missing", "target"))
+		err := copyFile(t.Context(), sourceFile, filepath.Join(t.TempDir(), "missing", "target"))
 
 		assert.ErrorContains(t, err, "failed to create target file")
 	})

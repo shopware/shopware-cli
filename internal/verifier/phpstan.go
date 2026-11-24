@@ -23,6 +23,8 @@ var possiblePHPStanConfigs = []string{
 	"phpstan.dist.neon",
 }
 
+const phpstanFutureRuleset = "vendor/shopwarelabs/phpstan-shopware/future-compatibility.neon"
+
 type PhpStanOutput struct {
 	Files map[string]struct {
 		Messages []struct {
@@ -55,6 +57,14 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	if result, applicable := preparePHPTool(config, execution); !applicable {
 		return result
 	}
+	phpDir := path.Join(config.ToolDirectory, "php")
+	nextMajor := config.CheckAgainst == CheckAgainstNextMajor
+	if nextMajor {
+		if _, err := os.Stat(path.Join(phpDir, phpstanFutureRuleset)); err != nil {
+			execution.Fail(&ToolError{Err: fmt.Errorf("cannot load PHPStan's next-major ruleset, refresh the verifier tools: %w", err)})
+			return ToolSummary{}
+		}
+	}
 	autoloadFile, toolErr := prepareComposerAutoload(ctx, config, execution)
 	if toolErr != nil {
 		execution.Fail(toolErr)
@@ -67,9 +77,9 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 			tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
 		}
 		if !config.IsProject {
-			mode := CheckAgainstHighest
-			if config.CheckAgainst == CheckAgainstLowest {
-				mode = CheckAgainstLowest
+			mode := config.CheckAgainst
+			if mode == "" {
+				mode = CheckAgainstHighest
 			}
 			result.Note += " (" + mode + ")"
 			tracking.SetCommandTag(tracking.TagCheckAgainst, mode)
@@ -77,9 +87,9 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	}
 	// All source directories go into one run, so PHPStan knows the classes of
 	// each of them while analysing the others.
-	args := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", "--autoload-file", autoloadFile}
+	args := []string{"-dmemory_limit=2G", path.Join(phpDir, "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", "--autoload-file", autoloadFile}
 	args = append(args, config.SourceDirectories...)
-	env := append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
+	env := append(os.Environ(), "PHP_DIR="+phpDir)
 	// Select the extension's configuration explicitly because PHPStan runs from
 	// the dependency directory so it discovers the matching Composer metadata.
 	configFile := p.configFile(config.RootDir)
@@ -90,8 +100,18 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 			execution.Fail(&ToolError{Err: err})
 			return result
 		}
-		configFile = path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon")
+		configFile = path.Join(phpDir, "configs", "phpstan.neon")
 		env = append(env, "SHOPWARE_CLI_PHPSTAN_TMP_DIR="+path.Join(cacheDir, "phpstan"))
+	}
+	if nextMajor {
+		wrapper, err := phpstanNextMajorConfig()
+		if err != nil {
+			execution.Fail(&ToolError{Err: fmt.Errorf("cannot create PHPStan's next-major configuration: %w", err)})
+			return result
+		}
+		defer func() { _ = os.Remove(wrapper) }()
+		env = append(env, "SHOPWARE_CLI_PHPSTAN_BASE_CONFIG="+configFile)
+		configFile = wrapper
 	}
 	args = append(args, "--configuration", configFile)
 	if logging.IsVerbose(ctx) {
@@ -136,6 +156,22 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 		}
 	}
 	return result
+}
+
+func phpstanNextMajorConfig() (string, error) {
+	file, err := os.CreateTemp("", "shopware-cli-phpstan-*.neon")
+	if err != nil {
+		return "", err
+	}
+	// Let PHPStan expand the paths, so file names do not need NEON escaping.
+	_, writeErr := file.WriteString(`includes:
+    - %env.SHOPWARE_CLI_PHPSTAN_BASE_CONFIG%
+    - %env.PHP_DIR%/` + phpstanFutureRuleset + "\n")
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		_ = os.Remove(file.Name())
+		return "", err
+	}
+	return file.Name(), nil
 }
 
 func isPhpStanNoFilesOutput(output string) bool {

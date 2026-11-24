@@ -1,0 +1,24 @@
+# Reject example headings in Long, e.g. "Examples: build"; use Example instead.
+id: cobra-long-examples
+language: Go
+severity: error
+message: Put command examples in Example instead of Long
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  # Match headings, not prose such as "For example: ...".
+  any:
+    - kind: raw_string_literal
+      regex: '(?im)(^`|\n)[ \t]*examples?:'
+    - kind: interpreted_string_literal
+      regex: '(?i)(^"|[^\\]\\n)[ \t]*examples?:'
+  inside:
+    kind: literal_element
+    inside:
+      pattern:
+        context: 'cobra.Command{Long: $TEXT}'
+        selector: keyed_element
+      inside:
+        kind: literal_value
+        inside:
+          pattern: cobra.Command{$$$FIELDS}

@@ -91,7 +91,7 @@ func TestResolveProjectPHPBinary(t *testing.T) {
 		t.Setenv("PHP_BINARY", "/does/not/exist/php")
 
 		_, err := ResolveProjectPHPBinary(t.Context(), "8.3")
-		assert.ErrorContains(t, err, "PHP_BINARY is set but unusable")
+		assert.ErrorContains(t, err, "cannot use configured PHP_BINARY")
 
 		var binErr *PHPBinaryError
 		assert.ErrorAs(t, err, &binErr)

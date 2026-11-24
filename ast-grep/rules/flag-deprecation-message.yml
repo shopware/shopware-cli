@@ -1,0 +1,46 @@
+# Reject literal flag deprecations, e.g. MarkDeprecated("old", "Use --new").
+id: flag-deprecation-message
+language: Go
+severity: error
+message: Use deprecation.Message for flag deprecations
+note: See docs/COMMAND_CONVENTIONS.md
+
+rule:
+  any:
+    - kind: interpreted_string_literal
+    - kind: raw_string_literal
+  nthChild:
+    position: 2
+    ofRule:
+      not: {kind: comment}
+  inside:
+    kind: argument_list
+    inside:
+      kind: call_expression
+      has:
+        field: function
+        kind: selector_expression
+        all:
+          - has:
+              field: field
+              regex: '^MarkDeprecated$'
+          - has:
+              field: operand
+              matches: cobra-flag-set
+
+# Keep this helper local so the rule needs no utilDirs configuration.
+utils:
+  cobra-flag-set:
+    any:
+      - pattern: $CMD.Flags()
+      - pattern: $CMD.PersistentFlags()
+      - all:
+          - kind: identifier
+          - pattern: $FLAGS
+          - inside:
+              kind: statement_list
+              stopBy: {kind: block}
+              has:
+                any:
+                  - pattern: $FLAGS := $CMD.Flags()
+                  - pattern: $FLAGS := $CMD.PersistentFlags()

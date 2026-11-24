@@ -75,6 +75,11 @@ type EnvironmentSSHConfig struct {
 
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
+	// !append conditions collected from this file and its includes, resolved by ReadConfig
+	pendingWhereAppend []tableCondition
+	// Original project conditions, excluding local overrides and included values.
+	sourceWhere    map[string]any
+	hasSourceWhere bool
 	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is used only when environments.local is absent.
 	URL string `yaml:"url,omitempty" jsonschema:"deprecated=true"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
@@ -409,7 +414,10 @@ type ConfigDump struct {
 	// Ignore these tables from export, supports glob wildcards (e.g. "customer*")
 	Ignore []string `yaml:"ignore,omitempty"`
 	// Add an where condition to that table, schema is table name as key, and where statement as value
+	// A value tagged with !append is combined with AND onto the condition of the same table instead of replacing the one from an included config, e.g. "system_config: !append \"configuration_key NOT LIKE 'my.%'\"" results in (included condition) AND (this condition)
 	Where map[string]string `yaml:"where,omitempty"`
+	// where conditions tagged with !append in this file
+	whereAppend []tableCondition
 	// Limit the amount of exported rows of a table, schema is table name as key. All tables referencing the limited table via foreign keys (also transitively) are filtered automatically, so they only contain rows belonging to the kept rows. A second limit on a table that is already filtered this way is rejected. When the limited table references itself (e.g. product.parent_id), the ancestors of the kept rows are exported too, so the dump stays importable. Requires the CREATE and DROP privileges to freeze the kept rows into staging tables
 	Limit map[string]mysqldump.TableLimit `yaml:"limit,omitempty"`
 }
@@ -875,7 +883,28 @@ func WriteConfig(cfg *Config, dir string) error {
 	// file — keep them out of the committed configuration.
 	cfg = cfg.withoutDockerPorts()
 
-	data, err := yaml.Marshal(cfg)
+	var document yaml.Node
+	if err := document.Encode(cfg); err != nil {
+		return fmt.Errorf("cannot encode shop configuration: %w", err)
+	}
+	if cfg.hasSourceWhere {
+		if dump := mappingValue(&document, "dump"); dump != nil {
+			for i := 0; i+1 < len(dump.Content); i += 2 {
+				if dump.Content[i].Value == "where" {
+					dump.Content = append(dump.Content[:i], dump.Content[i+2:]...)
+					break
+				}
+			}
+			if len(cfg.sourceWhere) > 0 {
+				var where yaml.Node
+				if err := where.Encode(cfg.sourceWhere); err != nil {
+					return fmt.Errorf("cannot encode dump conditions: %w", err)
+				}
+				dump.Content = append(dump.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "where"}, &where)
+			}
+		}
+	}
+	data, err := yaml.Marshal(&document)
 	if err != nil {
 		return fmt.Errorf("failed to marshal shop configuration: %w", err)
 	}
@@ -904,11 +933,73 @@ func WriteConfig(cfg *Config, dir string) error {
 	return nil
 }
 
+type tableCondition struct {
+	table     string
+	condition string
+}
+
+// UnmarshalYAML moves where values tagged with !append out of Where, so
+// merging includes cannot replace the condition of an included config.
+func (c *ConfigDump) UnmarshalYAML(node *yaml.Node) error {
+	var appended []tableCondition
+
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value != "where" || node.Content[i+1].Kind != yaml.MappingNode {
+			continue
+		}
+
+		whereNode := node.Content[i+1]
+		for k := 0; k+1 < len(whereNode.Content); k += 2 {
+			value := whereNode.Content[k+1]
+			if value.Tag != appendTag {
+				continue
+			}
+
+			if condition := strings.TrimSpace(value.Value); condition != "" {
+				appended = append(appended, tableCondition{table: whereNode.Content[k].Value, condition: condition})
+			}
+			value.Tag = "!!str"
+		}
+	}
+
+	type plain ConfigDump
+	if err := node.Decode((*plain)(c)); err != nil {
+		return err
+	}
+
+	for _, entry := range appended {
+		delete(c.Where, entry.table)
+	}
+	if len(c.Where) == 0 && len(appended) > 0 {
+		c.Where = nil
+	}
+	c.whereAppend = appended
+
+	return nil
+}
+
+// applyWhereAppend ANDs all collected !append conditions onto dump.where.
+func (c *Config) applyWhereAppend() {
+	if len(c.pendingWhereAppend) == 0 {
+		return
+	}
+
+	if c.ConfigDump == nil {
+		c.ConfigDump = &ConfigDump{}
+	}
+
+	for _, entry := range c.pendingWhereAppend {
+		c.ConfigDump.mergeWhere(entry.table, entry.condition)
+	}
+	c.pendingWhereAppend = nil
+}
+
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config, err := readConfig(ctx, fileName, allowFallback)
 	if err != nil {
 		return nil, err
 	}
+	config.applyWhereAppend()
 	if err := config.validateSSHCachetool(); err != nil {
 		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 	}
@@ -946,6 +1037,15 @@ func readConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		return nil, err
 	}
 
+	// Retain the project's source conditions before local overrides and includes.
+	source, err := readConfigAsMap(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
+	}
+	dump, _ := source["dump"].(map[string]any)
+	config.sourceWhere, _ = dump["where"].(map[string]any)
+	config.hasSourceWhere = true
+
 	merged, err := applyLocalOverride(ctx, fileName, true, config)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
@@ -971,12 +1071,21 @@ func readConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	config.storageLocation = fileName
 	warnDeprecatedTopLevelShop(ctx, fileName, config)
 
+	// Own conditions come after the ones of the includes.
+	var ownWhereAppend []tableCondition
+	if config.ConfigDump != nil {
+		ownWhereAppend = config.ConfigDump.whereAppend
+	}
+	var includedWhereAppend []tableCondition
+
 	if len(config.AdditionalConfigs) > 0 {
 		for _, additionalConfigFile := range config.AdditionalConfigs {
 			additionalConfig, err := readConfig(ctx, additionalConfigFile, allowFallback)
 			if err != nil {
 				return nil, fmt.Errorf("cannot read included config %s: %w", additionalConfigFile, err)
 			}
+
+			includedWhereAppend = append(includedWhereAppend, additionalConfig.pendingWhereAppend...)
 
 			err = mergo.Merge(config, additionalConfig, mergo.WithOverride, mergo.WithSliceDeepCopy)
 			if err != nil {
@@ -992,6 +1101,8 @@ func readConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 			config.applyIncludedCachetoolEnabled(additionalConfig)
 		}
 	}
+
+	config.pendingWhereAppend = slices.Concat(includedWhereAppend, ownWhereAppend)
 
 	if config.foundConfig && config.CompatibilityDate == "" {
 		logging.FromContext(ctx).Warnf("Config %s is missing compatibility_date, defaulting to %s", fileName, compatibility.DefaultDate())
@@ -1041,6 +1152,16 @@ func applyLocalOverride(ctx context.Context, fileName string, hasBase bool, conf
 		return false, err
 	}
 
+	// Keep local additions pending while includes resolve the base condition.
+	var localAppend []tableCondition
+	dump, _ := mergedMap["dump"].(map[string]any)
+	where, _ := dump["where"].(map[string]any)
+	for table, value := range where {
+		if combined, ok := value.(localWhereAppend); ok {
+			where[table] = combined.base
+			localAppend = append(localAppend, tableCondition{table: table, condition: combined.condition})
+		}
+	}
 	mergedYAML, err := marshalMap(mergedMap)
 	if err != nil {
 		return false, err
@@ -1050,6 +1171,9 @@ func applyLocalOverride(ctx context.Context, fileName string, hasBase bool, conf
 		return false, err
 	}
 
+	if config.ConfigDump != nil {
+		config.ConfigDump.whereAppend = append(config.ConfigDump.whereAppend, localAppend...)
+	}
 	return true, nil
 }
 
@@ -1327,3 +1451,5 @@ func removeConfigMapKey(mapping *yaml.Node, key string) {
 		}
 	}
 }
+
+const appendTag = "!append"

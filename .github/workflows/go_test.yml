@@ -27,7 +27,7 @@ jobs:
       code-quality: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@v2.23.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -47,7 +47,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.1.0
         with:
           go-version: '1.27'
           check-latest: true

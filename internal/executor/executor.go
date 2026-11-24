@@ -56,7 +56,7 @@ type Executor interface {
 	ShopConfig() *shop.Config
 	// DatabaseConnection returns credentials to reach the project database
 	// from the host machine.
-	DatabaseConnection(ctx context.Context) (*DatabaseConnection, error)
+	DatabaseConnection(ctx context.Context, endpoints ...DatabaseEndpoint) (*DatabaseConnection, error)
 }
 
 func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {
@@ -127,7 +127,7 @@ func applyDir(dir string, cmd *exec.Cmd) {
 }
 
 func logCmd(ctx context.Context, cmd *exec.Cmd) {
-	logging.FromContext(ctx).Debugf("exec: %s (dir: %s)", strings.Join(cmd.Args, " "), cmd.Dir)
+	logging.FromContext(ctx).Debugf("Exec: %s (dir: %s)", strings.Join(cmd.Args, " "), cmd.Dir)
 }
 
 func mergeEnv(base, extra map[string]string) map[string]string {

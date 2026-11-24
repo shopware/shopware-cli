@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 )
@@ -26,15 +28,19 @@ func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {
 		return adminSdk.NewPasswordCredentials(username, password, []string{"write"}), nil
 	}
 
-	if config.AdminApi == nil {
+	if config != nil && config.AdminApi != nil {
+		api := config.AdminApi
+		if api.Username != "" {
+			return adminSdk.NewPasswordCredentials(api.Username, api.Password, []string{"write"}), nil
+		}
+		if api.ClientId != "" || api.ClientSecret != "" || api.Password != "" {
+			return adminSdk.NewIntegrationCredentials(api.ClientId, api.ClientSecret, []string{"write"}), nil
+		}
+	}
+	if AdminAPIURL(config) == "" {
 		return nil, ErrNoAdminAPICredentials
 	}
-
-	if config.AdminApi.Username != "" {
-		return adminSdk.NewPasswordCredentials(config.AdminApi.Username, config.AdminApi.Password, []string{"write"}), nil
-	}
-
-	return adminSdk.NewIntegrationCredentials(config.AdminApi.ClientId, config.AdminApi.ClientSecret, []string{"write"}), nil
+	return newBrowserCredentials(config)
 }
 
 // HasAdminAPICredentials reports whether the environment or the config provides Admin API credentials.
@@ -47,7 +53,15 @@ func HasAdminAPICredentials(config *Config) bool {
 		return true
 	}
 
-	return config != nil && config.IsAdminAPIConfigured()
+	if config != nil && config.IsAdminAPIConfigured() {
+		return true
+	}
+	creds, err := newBrowserCredentials(config)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(creds.path)
+	return err == nil
 }
 
 // AdminAPIURL returns the shop URL for Admin API requests, SHOPWARE_CLI_API_URL first.
@@ -86,5 +100,16 @@ func NewShopClient(ctx context.Context, config *Config) (*adminSdk.Client, error
 		return nil, err
 	}
 
-	return adminSdk.NewApiClient(ctx, AdminAPIURL(config), creds, client)
+	shopURL := AdminAPIURL(config)
+	if browser, ok := creds.(*browserCredentials); ok {
+		shopURL = strings.TrimRight(shopURL, "/")
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		api, err := adminSdk.NewApiClient(ctx, shopURL, browser, client)
+		var response *adminSdk.ResponseError
+		if errors.As(err, &response) && response.Response.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("cannot use the saved browser session: remove %q and rerun interactively", browser.path)
+		}
+		return api, err
+	}
+	return adminSdk.NewApiClient(ctx, shopURL, creds, client)
 }

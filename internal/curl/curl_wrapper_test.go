@@ -29,7 +29,7 @@ func TestInitCurlCommand(t *testing.T) {
 		cmd := InitCurlCommand(BearerToken("test-token"))
 		assert.Len(t, cmd.options, 1)
 		assert.Equal(t, "--header", cmd.options[0].flag)
-		assert.Equal(t, "Authorization: test-token", cmd.options[0].value)
+		assert.Equal(t, "Authorization: Bearer test-token", cmd.options[0].value)
 	})
 
 	t.Run("with custom args", func(t *testing.T) {
@@ -72,7 +72,7 @@ func TestInitCurlCommand(t *testing.T) {
 		expectedOptions := []string{
 			"-X", "POST",
 			"--header", "Content-Type: application/json",
-			"--header", "Authorization: test-token",
+			"--header", "Authorization: Bearer test-token",
 			"https://example.com",
 		}
 		assert.Equal(t, expectedOptions, cmdOptions)

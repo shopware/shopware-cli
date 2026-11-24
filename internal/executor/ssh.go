@@ -295,7 +295,7 @@ func (s *SSHExecutor) EnvironmentStatus(_ context.Context) (bool, error) {
 // database host is "localhost", PHP would connect through a unix socket, so
 // the configured socket path is resolved on the remote host and forwarded
 // instead of a TCP port.
-func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
+func (s *SSHExecutor) DatabaseConnection(ctx context.Context, endpoints ...DatabaseEndpoint) (*DatabaseConnection, error) {
 	conn := defaultDatabaseConnection()
 
 	// An explicit DATABASE_URL override skips the remote lookup entirely, the
@@ -324,6 +324,8 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 		}
 	}
 
+	applyDatabaseEndpoints(conn, endpoints)
+
 	// Certificate paths refer to the remote host, so read them over SSH.
 	readFile := func(path string) ([]byte, error) {
 		out, err := s.runRemoteShell(ctx, "cat "+shellQuoteArg(path))
@@ -334,7 +336,7 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 
 	dialTarget := conn.Addr()
 
-	if conn.Host == "localhost" {
+	if conn.UnixSocket == "" && conn.Host == "localhost" {
 		socket, err := s.remoteMySQLSocket(ctx)
 		if err != nil {
 			return nil, err
@@ -401,7 +403,7 @@ func (s *SSHExecutor) remoteMySQLSocket(ctx context.Context) (string, error) {
 
 	socket := strings.TrimSpace(stdout)
 	if socket == "" {
-		return "", errors.New("DATABASE_URL uses localhost, but no MySQL unix socket is configured for PHP on the remote host (pdo_mysql.default_socket and mysqli.default_socket are empty)")
+		return "", errors.New("cannot connect using DATABASE_URL with localhost: no MySQL unix socket is configured for PHP on the remote host (pdo_mysql.default_socket and mysqli.default_socket are empty)")
 	}
 
 	return socket, nil
@@ -435,6 +437,10 @@ func (s *SSHExecutor) registerSSHDialer(dialTarget string) string {
 func dialViaSSH(_ context.Context, sshArgs []string, target, addr string) (net.Conn, error) {
 	args := make([]string, 0, len(sshArgs)+3)
 	args = append(args, sshArgs...)
+	// OpenSSH parses colons and backslashes even in Unix socket addresses.
+	if strings.HasPrefix(addr, "/") {
+		addr = strings.NewReplacer(`\`, `\\`, ":", `\:`).Replace(addr)
+	}
 	args = append(args, "-W", addr, target)
 
 	//nolint:noctx // the process must outlive the dial: database/sql cancels the dial context once the connection is established, which would kill a healthy tunnel; the ssh process dies with the connection's Close instead

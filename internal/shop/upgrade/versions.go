@@ -123,19 +123,19 @@ func loadSupportWindows(ctx context.Context, endOfLifeURL string) map[string]sup
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		logging.FromContext(ctx).Debugf("release cycle lookup failed: %v", err)
+		logging.FromContext(ctx).Debugf("Release cycle lookup failed: %v", err)
 		return nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		logging.FromContext(ctx).Debugf("release cycle lookup returned status %d", resp.StatusCode)
+		logging.FromContext(ctx).Debugf("Release cycle lookup returned status %d", resp.StatusCode)
 		return nil
 	}
 
 	var cycles []releaseCycle
 	if err := json.NewDecoder(resp.Body).Decode(&cycles); err != nil {
-		logging.FromContext(ctx).Debugf("release cycle response invalid: %v", err)
+		logging.FromContext(ctx).Debugf("Release cycle response invalid: %v", err)
 		return nil
 	}
 

@@ -1,0 +1,22 @@
+id: error-hint-backticks
+valid:
+  - 'func run() error { return errors.New("cannot continue: run \"shopware-cli account login\"") }'
+  - 'func run() error { return errors.New("cannot continue (pass --force to overwrite)") }'
+  - 'func run() error { return errors.New("cannot read `config.yml`") }'
+  - 'func run() error { return errors.New("cannot use `name` as a key") }'
+  - 'func run() error { return fmt.Errorf("cannot read %s", ": run `shopware-cli account login`") }'
+  - 'func run() { fmt.Printf("cannot continue: run `shopware-cli account login`") }'
+  - 'func run() error { return errors.New(message) }'
+  - 'func run() error { return errors.New("cannot continue: run " + command) }'
+invalid:
+  - 'func run() error { return errors.New("cannot continue: run `shopware-cli account login`") }'
+  - 'func run() error { return fmt.Errorf("cannot read config, use `shopware-cli project config init`: %w", err) }'
+  - 'func run() error { return errors.New("cannot overwrite (pass `--force` to overwrite)") }'
+  - |
+    func run() error {
+      return fmt.Errorf(
+        // Include the login hint.
+        "cannot continue: run `shopware-cli account login`: %w",
+        err,
+      )
+    }

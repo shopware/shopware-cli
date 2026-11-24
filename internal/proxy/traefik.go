@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"time"
 )
 
 const (
@@ -154,7 +156,7 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 
 	if containerExists(ctx) {
 		_, err := runDocker(ctx, "start", ContainerName)
-		return err
+		return readablePortConflict(err)
 	}
 
 	_, err = runDocker(ctx, "run", "-d",
@@ -182,6 +184,59 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		"--entrypoints.websecure.address=:443",
 		fmt.Sprintf("--entrypoints.sfassets.address=:%d", StorefrontAssetsPort),
 	)
+	// On a name conflict this run created nothing: the container under that
+	// name is a concurrent start's, possibly still on its way up.
+	if err != nil && !strings.Contains(err.Error(), "is already in use by container") {
+		removeUnstartedContainer(ctx)
+	}
+
+	return readablePortConflict(err)
+}
+
+// removeUnstartedContainer removes the container a failed run left behind in
+// the "created" state; without that the next attempt would take the start
+// path and fail differently. Any other state is left alone: the container then
+// belongs to a concurrent start that must keep running. It runs detached from
+// ctx, which may be the very reason the run failed, under its own deadline.
+func removeUnstartedContainer(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+
+	if status, _ := containerStatus(ctx, ContainerName); status == "created" {
+		_, _ = runDocker(ctx, "rm", ContainerName)
+	}
+}
+
+// dockerBusyPort finds the host port in Docker's port-binding failure, such
+// as "Bind for 0.0.0.0:80 failed" or "listen tcp 0.0.0.0:80: bind".
+var dockerBusyPort = regexp.MustCompile(`(?:\d+\.\d+\.\d+\.\d+|\[::\]):(\d+)`)
+
+// readablePortConflict replaces Docker's own port-binding failure, which
+// carries the whole `docker run` line, with a readable message. The proxy has
+// to own exactly these ports for the shop URLs to work, so unlike a project's
+// service ports there is no free port to fall back to. Other errors pass
+// through unchanged.
+func readablePortConflict(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// "ports are not available" alone is no proof: Docker Desktop prefixes
+	// its own forwarding failures with it too. The last marker is the Windows
+	// wording, which reaches WSL through Docker Desktop.
+	for _, marker := range []string{"port is already allocated", "address already in use", "Only one usage of each socket address"} {
+		if !strings.Contains(err.Error(), marker) {
+			continue
+		}
+
+		port := fmt.Sprintf("80, 443 or %d", StorefrontAssetsPort)
+		if match := dockerBusyPort.FindStringSubmatch(err.Error()); match != nil {
+			port = match[1]
+		}
+
+		return fmt.Errorf("cannot start the shared proxy: host port %s already in use by another application, stop it and run the command again", port)
+	}
+
 	return err
 }
 

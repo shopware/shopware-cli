@@ -55,7 +55,9 @@ build, validation, and packaging rules.
 
 ### Configuration Files
 
-- **`.shopware-cli.yaml`** - Global CLI configuration
+- **`<user config dir>/shopware-cli/config.yaml`** - Optional user preferences
+  (`telemetry`, `no_update_hint`), loaded by `internal/userconfig`; path can be
+  overridden with `SHOPWARE_CLI_CONFIG`. Never written by the CLI
 - **`.config/shopware-extension.yml` / `.shopware-extension.yml` /
   `.shopware-extension.yaml`** - Extension-specific settings (schema:
   `internal/extension/config_schema.json`, embedded and exposed via
@@ -73,6 +75,33 @@ build, validation, and packaging rules.
   SSH connection (database connections are tunneled automatically). Only one
   file is loaded and the first is preferred / used for new projects, the others
   are legacy and still supported
+
+### Deployment
+
+- The `deployment` package defines backend capabilities and initialization
+  inputs. `internal/deployment/backend` selects an implementation from project
+  configuration. `internal/deployment/ssh` owns SSH transport, release layout,
+  and multi-host coordination. The experimental `project deploy` commands
+  require the `deployment` build tag.
+- Keep remote entrypoints under `internal/deployment/ssh/php/commands`. Put
+  shared functions in `php/lib` and load them through `php/bootstrap.php` with
+  relative `require_once` paths. Go packages the PHP files with `internal/phar`.
+  Reuse `runDeploymentCommand` for one-shot commands and
+  `openDeploymentSession` for interactive rollouts.
+- Send the PHAR first on stdin. The loader reads exactly the archive length,
+  leaving stdin available for initialization JSON or the rollout's artifact
+  bytes and protocol messages. Pass only non-sensitive JSON in remote command
+  arguments. Keep diagnostics on stderr and command output on stdout. The
+  remote PHP needs the `phar` extension and a writable temporary directory.
+- Validate `project deploy init --init-config` before remote inspection or
+  writes. Keep initialization idempotent and preserve an existing `APP_SECRET`
+  unless an explicit replacement is supplied before initialization completes.
+  For named-host groups, write on the migration host and verify that every
+  host sees the same shared runtime configuration. Use `--init-config -` to
+  supply unattended initialization JSON on stdin.
+- Keep PHP available locally to run the payload tests, which cover
+  initialization, rollout, rollback, and prune. Run deployment checks with
+  `mise run test -- -tags deployment ./cmd/project ./internal/deployment/... ./internal/phar`.
 
 ## Development Patterns
 

@@ -22,6 +22,8 @@ jobs:
     if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      DO_NOT_TRACK: '1'
     strategy:
       fail-fast: false
       matrix:
@@ -36,7 +38,7 @@ jobs:
             store_ref: trunk
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@v2.23.0
         with:
           egress-policy: audit
 
@@ -46,7 +48,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.1.0
         with:
           go-version: '1.27'
           cache: true
@@ -173,13 +175,15 @@ jobs:
     if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      DO_NOT_TRACK: '1'
     strategy:
       fail-fast: false
       matrix:
         line: ['6.6', latest]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@v2.23.0
         with:
           egress-policy: audit
 
@@ -189,7 +193,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.1.0
         with:
           go-version: '1.27'
           cache: true
@@ -244,7 +248,7 @@ jobs:
       actions: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@v2.23.0
         with:
           egress-policy: audit
 

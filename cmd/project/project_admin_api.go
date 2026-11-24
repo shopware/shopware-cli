@@ -20,6 +20,10 @@ var projectAdminApiCmd = &cobra.Command{
 	Args:  cobra.ArbitraryArgs,
 	Short: "Run authenticated curl requests against the Shopware Admin API",
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
+		tokenOnly, _ := cobraCmd.PersistentFlags().GetBool("output-token")
+		if !tokenOnly && len(args) < 2 {
+			return errors.New("cannot run Admin API request: provide a method and path")
+		}
 		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
 			return err
@@ -31,9 +35,6 @@ var projectAdminApiCmd = &cobra.Command{
 		}
 
 		cfg := cmdExecutor.ShopConfig()
-		if cfg == nil || !shop.HasAdminAPICredentials(cfg) {
-			return shop.ErrNoAdminAPICredentials
-		}
 
 		client, err := cmdExecutor.AdminAPIClient(cobraCmd.Context())
 		if err != nil {
@@ -45,18 +46,12 @@ var projectAdminApiCmd = &cobra.Command{
 			return err
 		}
 
-		tokenOnly, _ := cobraCmd.PersistentFlags().GetBool("output-token")
-
 		if tokenOnly {
-			fmt.Println(token)
+			fmt.Println(token.AccessToken)
 			return nil
 		}
 
-		if len(args) < 2 {
-			return errors.New("command needs 2 arguments")
-		}
-
-		shopURL, err := url.Parse(shop.AdminAPIURL(cfg))
+		shopURL, err := url.Parse(strings.TrimRight(shop.AdminAPIURL(cfg), "/") + "/")
 		if err != nil {
 			return err
 		}

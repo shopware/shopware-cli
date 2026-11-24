@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/deployment"
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 type deploymentPruneFakeBackend struct {
@@ -30,7 +31,7 @@ func (f *deploymentPruneFakeBackend) PruneDeployments(_ context.Context, options
 func TestProjectDeploymentPrune(t *testing.T) {
 	for _, dryRun := range []bool{false, true} {
 		cmd := &cobra.Command{}
-		cmd.SetContext(t.Context())
+		cmd.SetContext(system.WithInteraction(t.Context(), false))
 		var output bytes.Buffer
 		cmd.SetOut(&output)
 		target := &deploymentPruneFakeBackend{result: deployment.DeploymentPruneResult{
@@ -54,7 +55,7 @@ func TestProjectDeploymentPrune(t *testing.T) {
 
 func TestProjectDeploymentPruneErrors(t *testing.T) {
 	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
+	cmd.SetContext(system.WithInteraction(t.Context(), false))
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	options := deployment.DeploymentPruneOptions{Keep: 5}
@@ -82,7 +83,7 @@ func TestProjectDeploymentPruneHostResults(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := &cobra.Command{}
-			cmd.SetContext(t.Context())
+			cmd.SetContext(system.WithInteraction(t.Context(), false))
 			var output bytes.Buffer
 			cmd.SetOut(&output)
 			target := &deploymentPruneFakeBackend{
