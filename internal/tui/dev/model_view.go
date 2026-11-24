@@ -139,12 +139,15 @@ func (m Model) renderDashboard(ctx app.Context) string {
 }
 
 func (m Model) renderDashboardFooter(width int) string {
+	mouse := tui.Shortcut{Key: "drag", Label: "Copy text"}
+
 	switch m.activeTab {
 	case tabInstance:
 		return tui.ShortcutBarFit(width,
 			tui.Shortcut{Key: "↑/↓", Label: "Navigate"},
 			tui.Shortcut{Key: "enter", Label: "Select source"},
 			tui.Shortcut{Key: "pgup/pgdn", Label: "Scroll logs"},
+			mouse,
 			tui.Shortcut{Key: "tab", Label: "Next tab"},
 			tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
 		)
@@ -160,6 +163,7 @@ func (m Model) renderDashboardFooter(width int) string {
 			tui.Shortcut{Key: "↑/↓", Label: "Focus item"},
 			tui.Shortcut{Key: "enter", Label: "Activate"},
 			tui.Shortcut{Key: "ctrl+p", Label: "Commands"},
+			mouse,
 			tui.Shortcut{Key: "tab", Label: "Next tab"},
 			tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
 		)

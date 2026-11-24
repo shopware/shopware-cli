@@ -315,6 +315,56 @@ func TestStatusRoundTrip(t *testing.T) {
 	assert.Equal(t, "busy", a.Status())
 }
 
+func TestAppMouseFuncDecidesMouseModePerFrame(t *testing.T) {
+	capture := true
+	a := New(Options{MouseFunc: func() bool { return capture }})
+	a.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+
+	assert.Equal(t, tea.MouseModeCellMotion, a.View().MouseMode)
+
+	capture = false
+	assert.Equal(t, tea.MouseModeNone, a.View().MouseMode)
+}
+
+func TestAppDragSelectsABlockAndCopiesItOnRelease(t *testing.T) {
+	a := New(Options{
+		Mouse:   true,
+		Content: StaticContent{Text: "alpha beta\ngamma delta\nomega"},
+	})
+	a.Update(tea.WindowSizeMsg{Width: 20, Height: 5})
+	a.View()
+
+	_, cmd := a.Update(tea.MouseClickMsg{X: 6, Y: 0, Button: tea.MouseLeft})
+	assert.Nil(t, cmd)
+	a.Update(tea.MouseMotionMsg{X: 10, Y: 1, Button: tea.MouseLeft})
+
+	assert.Equal(t, "beta\ndelta", selectedText(a.frame, a.selection))
+	assert.NotEqual(t, a.frame, a.View().Content, "the selection is highlighted")
+
+	_, cmd = a.Update(tea.MouseReleaseMsg{X: 10, Y: 1, Button: tea.MouseLeft})
+	assert.NotNil(t, cmd, "releasing copies the selection")
+
+	a.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+	assert.Equal(t, a.frame, a.View().Content, "a key press clears the highlight")
+}
+
+func TestAppClickWithoutDragCopiesNothing(t *testing.T) {
+	a := New(Options{Mouse: true, Content: StaticContent{Text: "alpha"}})
+	a.Update(tea.WindowSizeMsg{Width: 20, Height: 5})
+	a.View()
+
+	a.Update(tea.MouseClickMsg{X: 1, Y: 0, Button: tea.MouseLeft})
+	_, cmd := a.Update(tea.MouseReleaseMsg{X: 1, Y: 0, Button: tea.MouseLeft})
+
+	assert.Nil(t, cmd)
+	assert.Equal(t, a.frame, a.View().Content)
+}
+
+func TestAppWheelStillReachesContentWhileSelecting(t *testing.T) {
+	_, consumed := New(Options{Mouse: true}).updateSelection(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	assert.False(t, consumed)
+}
+
 func TestBackgroundColorReportSwitchesAdaptivePalette(t *testing.T) {
 	previous := tui.HasDarkBackground()
 	t.Cleanup(func() { tui.SetDarkBackground(previous) })

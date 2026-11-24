@@ -1173,3 +1173,18 @@ func TestWatcherProbeStopsWithAReasonAfterTheDeadline(t *testing.T) {
 	assert.Contains(t, view, "not responding")
 	assert.Contains(t, view, "connection refused")
 }
+
+func TestCapturesMouse_OnlyWhereTheWheelScrolls(t *testing.T) {
+	m := newTestModel(t)
+	assert.True(t, m.capturesMouse(), "overview scrolls with the wheel")
+
+	m.activeTab = tabInstance
+	assert.True(t, m.capturesMouse(), "instance logs scroll with the wheel")
+
+	m.activeTab = tabConfig
+	assert.False(t, m.capturesMouse(), "config tab has no wheel target")
+
+	m.activeTab = tabOverview
+	m.phase = phaseInstallFailed
+	assert.False(t, m.capturesMouse(), "phase screens leave text selectable")
+}
