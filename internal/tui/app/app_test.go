@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image/color"
 	"io"
 	"strings"
 	"testing"
@@ -8,6 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func keyPress(code rune) tea.KeyPressMsg {
@@ -310,4 +313,17 @@ func TestStatusRoundTrip(t *testing.T) {
 	assert.Empty(t, a.Status())
 	a.SetStatus("busy")
 	assert.Equal(t, "busy", a.Status())
+}
+
+func TestBackgroundColorReportSwitchesAdaptivePalette(t *testing.T) {
+	previous := tui.HasDarkBackground()
+	t.Cleanup(func() { tui.SetDarkBackground(previous) })
+
+	a := New(Options{})
+
+	a.Update(tea.BackgroundColorMsg{Color: color.White})
+	assert.False(t, tui.HasDarkBackground())
+
+	a.Update(tea.BackgroundColorMsg{Color: color.Black})
+	assert.True(t, tui.HasDarkBackground())
 }

@@ -12,6 +12,7 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bep/godartsass/v2 v2.5.0
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4
 	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/dustin/go-humanize v1.1.0
@@ -68,7 +69,6 @@ require (
 	github.com/catppuccin/go v0.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/exp/strings v0.1.0 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
