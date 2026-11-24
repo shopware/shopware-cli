@@ -19,13 +19,8 @@ import (
 )
 
 func TestHostHooksAroundActivation(t *testing.T) {
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP required")
-	}
-	if _, err := exec.LookPath("timeout"); err != nil {
-		t.Skip("GNU timeout required")
-	}
+	php := testhelper.RequireTool(t, "php")
+	testhelper.RequireTool(t, "timeout")
 	for _, tc := range []struct {
 		name        string
 		failPre     bool

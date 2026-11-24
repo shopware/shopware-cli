@@ -95,9 +95,12 @@ gives the agent every skill from the `ai` directory, using SEP-2640.
 
 2. When the agent starts a session, it starts `shopware-cli ai serve` and
    talks to it over stdio. Nothing listens on a network port.
+
 3. The agent asks for the list of skills. The CLI answers with every skill from
    the `ai` directory.
+
 4. When the agent needs a skill, the CLI sends its files.
+
 5. When the session ends, the agent stops the process.
 
 ### The `shopware-skills-mcp` directory entry

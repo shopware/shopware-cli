@@ -13,15 +13,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 const testStub = "<?php require 'phar://' . __FILE__ . '/index.php'; __HALT_COMPILER();"
 
 func TestWriteExecutesWithPHP(t *testing.T) {
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP is required for the compatibility test")
-	}
+	php := testhelper.RequireTool(t, "php")
 
 	files := map[string][]byte{
 		"index.php": []byte(`<?php

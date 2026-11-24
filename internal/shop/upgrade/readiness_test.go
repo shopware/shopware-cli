@@ -278,9 +278,7 @@ func TestNilExecutorChecksFailGracefully(t *testing.T) {
 }
 
 func TestCheckGitClean(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not installed")
-	}
+	testhelper.RequireTool(t, "git")
 
 	dir := t.TempDir()
 

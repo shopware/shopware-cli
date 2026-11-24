@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
@@ -92,11 +93,8 @@ func TestValidationComposerJSONAdvisoryBlocking(t *testing.T) {
 }
 
 func TestValidationComposerClassmapIsolation(t *testing.T) {
-	for _, tool := range []string{"composer", "php"} {
-		if _, err := exec.LookPath(tool); err != nil {
-			t.Skipf("%s is required to check Composer autoloading", tool)
-		}
-	}
+	composer := testhelper.RequireTool(t, "composer")
+	php := testhelper.RequireTool(t, "php")
 	t.Setenv("COMPOSER_HOME", t.TempDir())
 	t.Setenv("COMPOSER_DISABLE_NETWORK", "1")
 	for _, mode := range []string{CheckAgainstLowest, CheckAgainstHighest} {
@@ -128,11 +126,11 @@ func TestValidationComposerClassmapIsolation(t *testing.T) {
 			}`), root, mode)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(filepath.Join(workDir, "composer.json"), manifest, 0o644))
-			cmd := exec.CommandContext(t.Context(), "composer", "dump-autoload", "--no-plugins", "--no-scripts", "--no-interaction")
+			cmd := exec.CommandContext(t.Context(), composer, "dump-autoload", "--no-plugins", "--no-scripts", "--no-interaction")
 			cmd.Dir = workDir
 			output, err := cmd.CombinedOutput()
 			require.NoError(t, err, "%s", output)
-			cmd = exec.CommandContext(t.Context(), "php", "-r", `require $argv[1]; foreach (['ExtensionSource', 'ExtensionTest', 'CachedDependency', 'LocalDependency', 'OtherBaseline', 'ExcludedSource'] as $class) { if (class_exists($class)) { echo $class, "\n"; } }`, filepath.Join(workDir, "vendor/autoload.php"))
+			cmd = exec.CommandContext(t.Context(), php, "-r", `require $argv[1]; foreach (['ExtensionSource', 'ExtensionTest', 'CachedDependency', 'LocalDependency', 'OtherBaseline', 'ExcludedSource'] as $class) { if (class_exists($class)) { echo $class, "\n"; } }`, filepath.Join(workDir, "vendor/autoload.php"))
 			output, err = cmd.CombinedOutput()
 			require.NoError(t, err, "%s", output)
 			assert.ElementsMatch(t, []string{"ExtensionSource", "ExtensionTest", "CachedDependency"}, strings.Fields(string(output)))
