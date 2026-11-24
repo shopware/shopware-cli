@@ -80,6 +80,7 @@ jobs:
 
       - name: Check version bumps and evaluation reports
         env:
+          GOTOOLCHAIN: local
           SKILLS_BASE_REF: origin/${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: go test ./internal/ai/directory -run TestChangedSkillsBumpTheirVersion -v

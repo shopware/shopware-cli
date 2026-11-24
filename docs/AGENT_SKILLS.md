@@ -24,7 +24,9 @@ shopware-cli/
     └── shopware-contribute-start/      (also -submit, -verify)
         ├── SKILL.md
         ├── CHANGELOG.md
-        └── evals/scenarios.json
+        └── evals/
+            ├── scenarios.json
+            └── reports/0.0.1.md
 ```
 
 Each skill is a single `SKILL.md`, optionally with a `scripts/` directory for
@@ -134,7 +136,8 @@ The rules apply to every skill with `metadata.version`:
 - **Versioning:** `metadata.version` is a quoted SemVer string. A new skill
   starts at `0.0.1`. Any change to `SKILL.md`, `references/`, `scripts/` or
   `assets/` needs the next major, minor or patch version (lower parts reset to
-  zero), or the pull request is blocked. Add a `CHANGELOG.md` entry for every
+  zero), or the pull request is blocked. A renamed skill counts as new and
+  restarts at `0.0.1`. Add a `CHANGELOG.md` entry for every
   version.
 - **Evaluation report:** every version has `evals/reports/<version>.md`. It
   compares the skill with the previous version, or a new skill with an agent

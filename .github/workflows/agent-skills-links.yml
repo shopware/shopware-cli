@@ -12,7 +12,7 @@ permissions:
 jobs:
   links:
     # External links in versioned skills (docs/AGENT_SKILLS.md#contributor-skills);
-    # relative links are checked on every pull request by the skills contract test.
+    # relative links are checked on every pull request by the Markdown lint (rumdl MD057).
     if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 10

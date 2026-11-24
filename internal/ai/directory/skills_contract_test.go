@@ -21,7 +21,7 @@ const skillsDir = "../../../skills"
 var (
 	semver      = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
 	reportHash  = regexp.MustCompile(`(?m)^skill_sha256: ([0-9a-f]{64})$`)
-	versionLine = regexp.MustCompile(`(?m)^  version: .*\n`)
+	versionLine = regexp.MustCompile(`(?m)^\s+version:.*\n`)
 	// Files a versioned skill may contain; anything else fails the contract.
 	allowedEntries = []string{"SKILL.md", "CHANGELOG.md", "evals", "references", "scripts", "assets"}
 	// Directories whose files are skill instructions: changing them needs a new
@@ -86,8 +86,14 @@ func instructionHash(t *testing.T, root string) string {
 		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(f)))
 		require.NoError(t, err)
 		if f == "SKILL.md" {
-			// The version line changes with every release; the instructions don't.
-			content = versionLine.ReplaceAll(content, nil)
+			// The version line in the frontmatter changes with every release;
+			// the instructions don't. Only that one line is left out.
+			if parts := strings.SplitN(string(content), "---\n", 3); len(parts) == 3 {
+				if loc := versionLine.FindStringIndex(parts[1]); loc != nil {
+					parts[1] = parts[1][:loc[0]] + parts[1][loc[1]:]
+				}
+				content = []byte(strings.Join(parts, "---\n"))
+			}
 		}
 		h.Write([]byte(f + "\x00"))
 		h.Write(content)
@@ -125,7 +131,7 @@ type evalSuite struct {
 // Skills with metadata.version are shipped as products (see
 // docs/AGENT_SKILLS.md#contributor-skills): these are the deterministic gates.
 // The version bump on change is checked against the pull request's base by
-// scripts/check-skill-versions.sh.
+// TestChangedSkillsBumpTheirVersion (the versions job in agent-skills.yml).
 func TestVersionedSkillsFollowTheProductContract(t *testing.T) {
 	dirs, err := os.ReadDir(skillsDir)
 	require.NoError(t, err)
