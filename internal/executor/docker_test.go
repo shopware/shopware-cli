@@ -122,3 +122,35 @@ func TestDockerStopEnvironment(t *testing.T) {
 		})
 	}
 }
+
+func TestDockerExecutorStopEnvironmentRemovesInstallLockWithData(t *testing.T) {
+	writeRecordingDocker(t, filepath.Join(t.TempDir(), "args"))
+
+	t.Run("removes install.lock with the volumes", func(t *testing.T) {
+		root := t.TempDir()
+		lock := filepath.Join(root, "install.lock")
+		require.NoError(t, os.WriteFile(lock, nil, 0o644))
+
+		err := (&DockerExecutor{projectRoot: root}).StopEnvironment(t.Context(), StopOptions{RemoveVolumes: true})
+
+		require.NoError(t, err)
+		assert.NoFileExists(t, lock)
+	})
+
+	t.Run("keeps install.lock without removing data", func(t *testing.T) {
+		root := t.TempDir()
+		lock := filepath.Join(root, "install.lock")
+		require.NoError(t, os.WriteFile(lock, nil, 0o644))
+
+		err := (&DockerExecutor{projectRoot: root}).StopEnvironment(t.Context(), StopOptions{})
+
+		require.NoError(t, err)
+		assert.FileExists(t, lock)
+	})
+
+	t.Run("succeeds without install.lock", func(t *testing.T) {
+		err := (&DockerExecutor{projectRoot: t.TempDir()}).StopEnvironment(t.Context(), StopOptions{RemoveVolumes: true})
+
+		assert.NoError(t, err)
+	})
+}

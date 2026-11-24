@@ -3,6 +3,7 @@ package docker
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/shyim/go-composer"
@@ -632,6 +633,10 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "--all")
 		assert.Contains(t, compose, "scheduler:")
 		assert.Contains(t, compose, "scheduled-task:run")
+		// Both wait for the installation before starting.
+		assert.Equal(t, 2, strings.Count(compose, "until [ -f install.lock ]"))
+		assert.Contains(t, compose, "Waiting for Shopware to be installed")
+		assert.Contains(t, compose, "Shopware is installed (install.lock found), starting")
 		// The worker reuses the web image and shares its messenger transport env.
 		assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN")
 		assert.Contains(t, compose, "unless-stopped")
