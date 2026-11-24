@@ -75,6 +75,16 @@ build, validation, and packaging rules.
   SSH connection (database connections are tunneled automatically). Only one
   file is loaded and the first is preferred / used for new projects, the others
   are legacy and still supported
+- `project config env` manages `environments`: the guided menu in
+  `cmd/project/project_config_env_wizard.go` asks through plain `huh` forms
+  and prints its results as lines, one environment at a time; `list`, `add`,
+  `edit`, `test` and `remove` cover scripts and ask the same forms when input
+  is missing. `internal/shop/config_environments.go` edits
+  the config file in place through `yaml.Node`, so comments, key order and
+  `${VAR}` references survive. `internal/environment` tests an environment
+  (connection, configuration, capabilities) and remembers the result per
+  machine in the CLI cache directory, never in the project config. An edited
+  environment counts as untested again
 
 ### Deployment
 

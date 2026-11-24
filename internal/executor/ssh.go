@@ -76,15 +76,24 @@ func (s *SSHExecutor) quotedPHP() string {
 // account, without a directory change or a TTY.
 // Callers own stdin, stdout and stderr independently through Process.Cmd.
 func (s *SSHExecutor) RemotePHPCommand(ctx context.Context, args ...string) *Process {
-	command := []string{"exec"}
-	if s.envCfg != nil && s.envCfg.SSH != nil && s.envCfg.SSH.Become != "" {
-		command = append(command, "sudo", "-n", "-H", "-u", shellQuoteArg(s.envCfg.SSH.Become), "--")
+	var become string
+	if s.envCfg != nil && s.envCfg.SSH != nil {
+		become = s.envCfg.SSH.Become
+	}
+	command := "exec " + s.deploymentPHP(become, args...)
+	return newProcess(exec.CommandContext(ctx, "ssh", append(s.sshArgs(), "-T", s.target(), command)...))
+}
+
+func (s *SSHExecutor) deploymentPHP(become string, args ...string) string {
+	var command []string
+	if become != "" {
+		command = append(command, "sudo", "-n", "-H", "-u", shellQuoteArg(become), "--")
 	}
 	command = append(command, s.quotedPHP())
 	for _, arg := range args {
 		command = append(command, shellQuoteArg(arg))
 	}
-	return newProcess(exec.CommandContext(ctx, "ssh", append(s.sshArgs(), "-T", s.target(), strings.Join(command, " "))...))
+	return strings.Join(command, " ")
 }
 
 func (s *SSHExecutor) target() string {

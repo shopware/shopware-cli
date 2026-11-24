@@ -1,6 +1,7 @@
 package shop
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -1410,13 +1411,41 @@ func loadConfigDoc(path string) (*yaml.Node, *yaml.Node, error) {
 	return &doc, doc.Content[0], nil
 }
 
+// writeConfigDoc writes the document back with the indentation the file
+// already uses, so a small edit does not reindent a committed file.
 func writeConfigDoc(path string, doc *yaml.Node) error {
-	out, err := yaml.Marshal(doc)
-	if err != nil {
+	indent := 4
+	if existing, err := os.ReadFile(path); err == nil {
+		indent = detectYAMLIndent(existing, indent)
+	}
+
+	var out bytes.Buffer
+	encoder := yaml.NewEncoder(&out)
+	encoder.SetIndent(indent)
+	if err := encoder.Encode(doc); err != nil {
+		return err
+	}
+	if err := encoder.Close(); err != nil {
 		return err
 	}
 
-	return os.WriteFile(path, out, 0o644)
+	return os.WriteFile(path, out.Bytes(), 0o644)
+}
+
+// detectYAMLIndent returns the width of the first indented key, or fallback
+// when the content has no nested mapping.
+func detectYAMLIndent(content []byte, fallback int) int {
+	for line := range strings.SplitSeq(string(content), "\n") {
+		trimmed := strings.TrimLeft(line, " ")
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "- ") {
+			continue
+		}
+		if width := len(line) - len(trimmed); width > 0 {
+			return width
+		}
+	}
+
+	return fallback
 }
 
 // configMapValue returns the value node for key in a mapping node, or nil.
