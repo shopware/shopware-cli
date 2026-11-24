@@ -43,6 +43,7 @@ const (
 	createStepComposerSecurityAdvisories       = "composer_security_advisories"
 	createStepDockerSetup                      = "docker_setup"
 	createStepDockerSetupWriteCompose          = "docker_setup_write_compose"
+	createStepAppSecret                        = "app_secret"
 	createStepWriteConfig                      = "write_config"
 	createStepGitInit                          = "git_init"
 )
