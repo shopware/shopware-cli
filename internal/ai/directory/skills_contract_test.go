@@ -23,7 +23,7 @@ var (
 	reportHash  = regexp.MustCompile(`(?m)^skill_sha256: ([0-9a-f]{64})$`)
 	versionLine = regexp.MustCompile(`(?m)^\s+version:.*\n`)
 	// Files a versioned skill may contain; anything else fails the contract.
-	allowedEntries = []string{"SKILL.md", "CHANGELOG.md", "evals", "references", "scripts", "assets"}
+	allowedEntries = []string{"SKILL.md", "evals", "references", "scripts", "assets"}
 	// Directories whose files are skill instructions: changing them needs a new
 	// version and a new evaluation report.
 	instructionDirs = []string{"references", "scripts", "assets"}
@@ -169,11 +169,6 @@ func TestVersionedSkillsFollowTheProductContract(t *testing.T) {
 			assert.True(t, inDirectory, "add the skill to internal/ai/directory/integrations.go")
 			assert.Contains(t, string(agentSkillsDoc), "`"+skill.Name+"`", "list the skill in docs/AGENT_SKILLS.md")
 
-			// Changelog entry for the current version.
-			changelog, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
-			require.NoError(t, err)
-			assert.Contains(t, string(changelog), "## "+skill.Version+"\n", "CHANGELOG.md needs an entry for %s", skill.Version)
-
 			// Evaluation suite: atomic, non-duplicated expectations.
 			raw, err := os.ReadFile(filepath.Join(root, "evals", "scenarios.json"))
 			require.NoError(t, err)
@@ -205,6 +200,7 @@ func TestVersionedSkillsFollowTheProductContract(t *testing.T) {
 			require.NotNil(t, m, "the report needs a skill_sha256 line")
 			assert.Equal(t, instructionHash(t, root), string(m[1]),
 				"the skill changed after its evaluation report; re-run the evaluation and update skill_sha256")
+			assert.Contains(t, string(report), "\n## Changes\n", "say what changed in the report's Changes section")
 		})
 	}
 }

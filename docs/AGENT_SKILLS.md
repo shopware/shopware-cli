@@ -23,7 +23,6 @@ shopware-cli/
     │   └── SKILL.md
     └── shopware-contribute-start/      (also -submit, -verify)
         ├── SKILL.md
-        ├── CHANGELOG.md
         └── evals/
             ├── scenarios.json
             └── reports/0.0.1.md
@@ -31,8 +30,8 @@ shopware-cli/
 
 Each skill is a single `SKILL.md`, optionally with a `scripts/` directory for
 helper scripts the agent executes (the Agent Skills layout). Keep reference
-material inside `SKILL.md` itself. Contributor skills add a changelog and an
-evaluation suite (see [Contributor skills](#contributor-skills)).
+material inside `SKILL.md` itself. Contributor skills add an evaluation suite
+and a report per version (see [Contributor skills](#contributor-skills)).
 
 Do not maintain separate Claude, Cursor, Codex, Copilot, or other
 client-specific copies in this repository.
@@ -137,8 +136,8 @@ The rules apply to every skill with `metadata.version`:
   starts at `0.0.1`. Any change to `SKILL.md`, `references/`, `scripts/` or
   `assets/` needs the next major, minor or patch version (lower parts reset to
   zero), or the pull request is blocked. A renamed skill counts as new and
-  restarts at `0.0.1`. Add a `CHANGELOG.md` entry for every
-  version.
+  restarts at `0.0.1`. The version's evaluation report says what changed in its
+  "Changes" section; there is no separate changelog.
 - **Evaluation report:** every version has `evals/reports/<version>.md`. It
   compares the skill with the previous version, or a new skill with an agent
   without the skill, on every scenario in `evals/scenarios.json`, scored per
@@ -150,11 +149,10 @@ The rules apply to every skill with `metadata.version`:
 - **Scenarios:** each criterion checks one thing; split compound ones. No
   duplicate prompts or criteria. Include prompts that must not trigger the
   skill.
-- **Structure:** `SKILL.md` stays under 500 lines; only `SKILL.md`,
-  `CHANGELOG.md`, `evals/`, `references/`, `scripts/` and `assets/` are
-  allowed; the skill is listed in the AI directory and in this document.
-  `skills-ref validate` already checks the name, folder and description
-  length for every skill.
+- **Structure:** `SKILL.md` stays under 500 lines; only `SKILL.md`, `evals/`,
+  `references/`, `scripts/` and `assets/` are allowed; the skill is listed in
+  the AI directory and in this document. `skills-ref validate` already checks
+  the name, folder and description length for every skill.
 - **Links:** the Markdown lint already checks relative links on every pull
   request (MD057). External links are checked every Monday (the `links` job in
   `agent-skills.yml`); nothing else in this repository checks them.
@@ -395,8 +393,9 @@ skills continue to exist.
 ## Versioning
 
 Skills do not have an independent Shopware version. Contributor skills also
-carry their own `metadata.version` and changelog, so a contributor can tell
-which behaviour they installed (see [Contributor skills](#contributor-skills)).
+carry their own `metadata.version` and a report per version, so a contributor
+can tell which behaviour they installed (see
+[Contributor skills](#contributor-skills)).
 
 Because their canonical source lives in the Shopware CLI repository, every Git
 tag and Shopware CLI release records the exact skill source that existed for
