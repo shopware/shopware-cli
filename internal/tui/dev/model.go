@@ -125,6 +125,9 @@ type shopwareInstallDoneMsg struct {
 	source <-chan string
 	output []string
 	err    error
+	// clearErr is set when the install succeeded but its pending marker
+	// could not be removed.
+	clearErr error
 }
 
 type configRestartDoneMsg struct {

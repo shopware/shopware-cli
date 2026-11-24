@@ -71,6 +71,7 @@ type installProgress struct {
 	currentStep int
 	done        bool
 	showLogs    bool
+	resume      bool
 	failure     *installFailure
 	action      installFailureAction
 	spinner     spinner.Model
@@ -169,6 +170,7 @@ func (m Model) startInstall() (app.Content, tea.Cmd) {
 	m.installProg = installProgress{
 		spinner:  tui.NewBrandSpinner(),
 		progress: newInstallProgress(),
+		resume:   install.IsPending(m.projectRoot),
 	}
 	return m, tea.Batch(m.installProg.spinner.Tick, m.runShopwareInstall())
 }
