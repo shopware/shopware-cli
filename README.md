@@ -185,6 +185,8 @@ Available skills:
 - **`shopware-cli-docker`** — For Docker-backed projects. Run commands in the
   correct container, manage development environment lifecycle, and troubleshoot
   Docker execution.
+- **`shopware-cli-deployment`** — Configure SSH deployments with separate
+  deployment and PHP accounts, shared permissions, and release pruning.
 - **`shopware-cli-extension-store`** — Assess an extension's readiness for
   Shopware Store distribution. Read-only: classifies metadata, localization, and
   asset findings against Store requirements and cites a re-checkable source for

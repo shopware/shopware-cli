@@ -1,7 +1,20 @@
-# SSH deployment and PHP users
+---
+name: shopware-cli-deployment
+description: Configure and troubleshoot Shopware CLI SSH deployments, including separate SSH, deployment, and PHP accounts, shared permissions, and release pruning.
+---
+
+# Shopware CLI SSH deployment
+
+Check `shopware-cli project deploy --help` for the available commands. The
+experimental deployment commands require a CLI built with the `deployment`
+build tag. Use `shopware-cli project deploy init -e production` to initialize
+the target and review its preflight checks before rolling out a release.
+
+## Configure deployment and PHP accounts
 
 Set `user` to the SSH login and `http_user` to the account running PHP-FPM or
-the web server in `.config/shopware-project.yml`.
+the web server in `.config/shopware-project.yml`. Set `become` when the SSH
+login needs to switch to a separate deployment account.
 
 ```yaml
 environments:
@@ -9,19 +22,19 @@ environments:
     type: ssh
     ssh:
       host: shop.example.com
-      user: deploy
+      user: ci
+      become: deploy
       http_user: www-data
       directory: /srv/shop/current
 ```
 
 The deployment account owns releases, runs the Shopware Deployment Helper and
-hooks, and manages private deployment state. When the SSH login needs to switch
-to that account, add `become: shop` under `ssh`. The CLI then runs remote
-deployment commands with `sudo -n -H -u shop`. The login needs passwordless
-sudo for that command, and the target account needs access to the deployment
-root. For existing deployments, provision access to the existing files before
-changing the deployment account.
-Each named host can override `user`, `become` and `http_user`.
+hooks, and manages private deployment state. With this configuration the CLI
+runs remote deployment commands with `sudo -n -H -u deploy`. The login needs
+passwordless sudo for that command, and the target account needs access to the
+deployment root. For existing deployments, provision access to the existing
+files before changing the deployment account. Each named host can override
+`user`, `become` and `http_user`.
 
 When the PHP runtime uses a different account, install the Linux `acl` tools
 on the target and use a filesystem that supports POSIX ACLs. The deployment
