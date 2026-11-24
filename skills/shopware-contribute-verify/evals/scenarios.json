@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "purpose": "Public development scenarios for comparing agent behaviour with and without the skill; not proof that the skill works.",
+  "scenarios": [
+    {
+      "id": "core-flaky",
+      "prompt": "My shopware/shopware PR only changes a Storefront Twig template, but the PHPUnit job fails in ElasticsearchProductTest on a term search assertion. What does it mean and what should I do?",
+      "evidence": "https://github.com/shopware/shopware/issues/17445",
+      "criteria": [
+        {
+          "id": "find-issue",
+          "criterion": "The agent finds the related flaky-test issue for ElasticsearchProductTest."
+        },
+        {
+          "id": "issue-closed",
+          "criterion": "The answer notes that the issue is closed as fixed."
+        },
+        {
+          "id": "check-trunk",
+          "criterion": "The agent checks whether the same test fails on trunk now."
+        },
+        {
+          "id": "no-unsupported-known",
+          "criterion": "The answer does not classify the failure as known or flaky without evidence that the test still fails elsewhere."
+        },
+        {
+          "id": "rerun-once",
+          "criterion": "The answer does not recommend more than one re-run."
+        }
+      ]
+    },
+    {
+      "id": "core-infra",
+      "prompt": "A job on my shopware/shopware PR failed with: Error response from daemon: Get \"https://registry-1.docker.io/v2/\": context deadline exceeded. Is it my fault?",
+      "evidence": "https://github.com/shopware/shopware/issues/17446",
+      "criteria": [
+        {
+          "id": "class-infra",
+          "criterion": "The answer classifies the failure as an infrastructure failure not caused by the change."
+        },
+        {
+          "id": "next-infra",
+          "criterion": "The next step is a re-run later or a report to maintainers."
+        }
+      ]
+    },
+    {
+      "id": "core-deterministic-not-mine",
+      "prompt": "The acceptance-update job on my shopware/shopware PR fails every time: Update.spec.ts times out waiting for an Install button. My PR only touches a cart service. Re-running doesn't help. What should I do?",
+      "evidence": "https://github.com/shopware/shopware/issues/21129",
+      "criteria": [
+        {
+          "id": "check-trunk",
+          "criterion": "The agent checks whether the same job fails on trunk or other pull requests."
+        },
+        {
+          "id": "class-known",
+          "criterion": "If trunk fails the same way, the answer classifies the failure as a known failure, not a regression in the pull request."
+        }
+      ]
+    },
+    {
+      "id": "number-is-issue",
+      "prompt": "A check failed on shopware/shopware PR 17446. Is it my fault?",
+      "criteria": [
+        {
+          "id": "detect-issue",
+          "criterion": "The agent notices that 17446 is an issue, not a pull request."
+        },
+        {
+          "id": "ask-pr",
+          "criterion": "The agent asks for the pull request number or link."
+        },
+        {
+          "id": "no-guess",
+          "criterion": "The agent does not classify a failure it has not seen."
+        }
+      ]
+    },
+    {
+      "id": "cli-lint-untouched-file",
+      "prompt": "My shopware-cli PR's lint job fails with a finding in a file I didn't touch. What does it mean and what should I do?",
+      "evidence": "https://github.com/shopware/shopware-cli/pull/1606",
+      "criteria": [
+        {
+          "id": "check-default-branch",
+          "criterion": "The agent checks whether the same job fails on main."
+        },
+        {
+          "id": "pinned-version",
+          "criterion": "The agent uses the linter version pinned in the lint workflow."
+        },
+        {
+          "id": "no-unsupported-flaky",
+          "criterion": "The agent does not call it pre-existing or flaky without evidence."
+        }
+      ]
+    },
+    {
+      "id": "cli-local-checks-report",
+      "prompt": "I changed a Go file and a Markdown file in shopware-cli. Which checks should I run before opening the PR, and how do I report them?",
+      "evidence": "https://github.com/shopware/shopware-cli/pull/1884",
+      "criteria": [
+        {
+          "id": "markdown-lint",
+          "criterion": "The checks include Markdown linting."
+        },
+        {
+          "id": "status-per-check",
+          "criterion": "Each check is reported as passed, failed, skipped or not run."
+        }
+      ]
+    },
+    {
+      "id": "no-trigger-plugin-test",
+      "prompt": "My PHPUnit test fails locally in my own Shopware plugin project. Why?",
+      "should_trigger": false,
+      "criteria": [
+        {
+          "id": "not-loaded",
+          "criterion": "The agent does not load shopware-contribute-verify for a test in the user's own plugin, which is not a contribution to a Shopware repository."
+        }
+      ]
+    }
+  ]
+}

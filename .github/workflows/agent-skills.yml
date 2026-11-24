@@ -5,7 +5,9 @@ on:
     paths:
       - "skills/**"
       - "docs/AGENT_SKILLS.md"
+      - "internal/ai/directory/**"
       - ".github/workflows/agent-skills.yml"
+    types: [opened, synchronize, reopened, edited]
   push:
     branches:
       - main
@@ -43,5 +45,41 @@ jobs:
       - name: Validate shopware-cli-extension-anonymize skill
         run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-cli-extension-anonymize
 
+      - name: Validate shopware-contribute-start skill
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-contribute-start
+
+      - name: Validate shopware-contribute-submit skill
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-contribute-submit
+
+      - name: Validate shopware-contribute-verify skill
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-contribute-verify
+
       - name: Verify skills discovery
         run: npx --yes skills@1.5.18 add . --list
+
+  versions:
+    # A changed versioned skill needs a version bump and a linked evaluation
+    # report (docs/AGENT_SKILLS.md#contributor-skills).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.1.0
+        with:
+          go-version: '1.27'
+          check-latest: true
+          cache: true
+
+      - name: Check version bumps and evaluation reports
+        env:
+          SKILLS_BASE_REF: origin/${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: go test ./internal/ai/directory -run TestChangedSkillsBumpTheirVersion -v

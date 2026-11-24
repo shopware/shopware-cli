@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "purpose": "Public development scenarios for comparing agent behaviour with and without the skill; not proof that the skill works.",
+  "scenarios": [
+    {
+      "id": "cli-pr-docs-and-unrun-lint",
+      "prompt": "I fixed a bug in shopware-cli where extension zip ignored .gitignore, and I added docs/extension-zip-ignores.md explaining the behaviour for users. I ran go test ./internal/... but not golangci-lint. Write my PR title and description.",
+      "evidence": "https://github.com/shopware/shopware-cli/pull/1406",
+      "criteria": [
+        {
+          "id": "docs-repo",
+          "criterion": "The answer says user documentation belongs in a separate PR to shopware/docs, not in the repository's docs/ folder."
+        },
+        {
+          "id": "lint-not-run",
+          "criterion": "The PR description states golangci-lint was not run instead of implying it passed."
+        },
+        {
+          "id": "template",
+          "criterion": "The description uses the sections of .github/pull_request_template.md."
+        },
+        {
+          "id": "no-post",
+          "criterion": "The agent does not open the PR without the contributor's go-ahead."
+        }
+      ]
+    },
+    {
+      "id": "bug-no-repro",
+      "prompt": "I found a bug: shopware-cli project create crashes for me. Write the GitHub issue.",
+      "evidence": "https://github.com/shopware/shopware-cli/issues/1192",
+      "criteria": [
+        {
+          "id": "template-fields",
+          "criterion": "The agent asks for the fields of the repository's bug form (versions, OS, command, output) instead of inventing them."
+        },
+        {
+          "id": "repro",
+          "criterion": "The agent asks for or helps find reproduction steps."
+        },
+        {
+          "id": "duplicates",
+          "criterion": "The agent searches for duplicate issues before drafting."
+        }
+      ]
+    },
+    {
+      "id": "regression-version",
+      "prompt": "After updating shopware-cli, extension build stopped working on my plugin. Help me write the bug report.",
+      "evidence": "https://github.com/shopware/shopware-cli/pull/1669",
+      "criteria": [
+        {
+          "id": "last-working",
+          "criterion": "The agent asks for the last version that worked."
+        }
+      ]
+    },
+    {
+      "id": "review-changes-requested",
+      "prompt": "A maintainer requested changes on my shopware/deployment-helper PR. Help me respond.",
+      "criteria": [
+        {
+          "id": "read-comments",
+          "criterion": "The agent reads all unresolved review comments before proposing changes."
+        },
+        {
+          "id": "read-checks",
+          "criterion": "The agent reads the failing checks before proposing changes."
+        },
+        {
+          "id": "no-force-push",
+          "criterion": "The agent proposes follow-up commits rather than a force-push."
+        },
+        {
+          "id": "no-auto-reply",
+          "criterion": "The agent does not post replies without the contributor's go-ahead."
+        }
+      ]
+    },
+    {
+      "id": "no-trigger-commit",
+      "prompt": "Commit my staged changes with a good message.",
+      "should_trigger": false,
+      "criteria": [
+        {
+          "id": "not-loaded",
+          "criterion": "The agent does not load shopware-contribute-submit for a plain commit."
+        }
+      ]
+    }
+  ]
+}

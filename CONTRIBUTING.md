@@ -36,11 +36,34 @@ When opening a PR, please include:
 
 Please keep PRs focused. Smaller PRs are easier to review and merge.
 
+User guides on
+[developer.shopware.com](https://developer.shopware.com/docs/products/cli/) live
+in [shopware/docs](https://github.com/shopware/docs). If your change needs one,
+open a second pull request there and link it.
+
 Start commit titles that deprecate anything the
 [deprecation policy](docs/adr/2026-11-09-deprecation-policy.md) covers with
 `deprecate:` and titles that remove it with `remove:` (both also with a scope,
 such as `deprecate(extension):`), so the release changelog lists them under
 Deprecations.
+
+## Using AI to contribute
+
+AI coding agents are welcome. They read [AGENTS.md](AGENTS.md), and their work
+follows the same rules as yours: discuss larger changes first, say which checks
+actually ran, and review what you submit.
+
+Three Agent Skills help with contributing to this and other Shopware
+repositories: where to start, writing issues and pull requests, and checks and
+CI. Install them for your agent (replace `claude-code`):
+
+```sh
+shopware-cli ai add shopware-contribute-start --agent claude-code --global
+shopware-cli ai add shopware-contribute-submit --agent claude-code --global
+shopware-cli ai add shopware-contribute-verify --agent claude-code --global
+```
+
+See [Contributor skills](docs/AGENT_SKILLS.md#contributor-skills).
 
 ## Development
 
