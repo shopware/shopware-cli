@@ -7,10 +7,6 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'jdx/mise-action@v5.2.10'
         - 'step-security/harden-runner@v2.23.0'
-    '.github/workflows/agent-skills-links.yml':
-        - 'actions/checkout@v7.0.1'
-        - 'lycheeverse/lychee-action@v2.9.0'
-        - 'step-security/harden-runner@v2.23.0'
     '.github/workflows/agent-skills.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-go@v7.1.0'
@@ -179,11 +175,6 @@ dependencies:
         commit: 'sha1-90f833d396d0cc3674b631d2d225e306476c303a'
         owner_id: 216188
         repo_id: 738284564
-    'lycheeverse/lychee-action@v2.9.0':
-        ref: 'v2.9.0'
-        commit: 'sha1-e7477775783ea5526144ba13e8db5eec57747ce8'
-        owner_id: 74027027
-        repo_id: 320929718
     'octo-sts/action@v1.1.1':
         ref: 'v1.1.1'
         commit: 'sha1-f603d3be9d8dd9871a265776e625a27b00effe05'

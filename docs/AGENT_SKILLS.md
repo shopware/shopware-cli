@@ -156,9 +156,8 @@ The rules apply to every skill with `metadata.version`:
   `skills-ref validate` already checks the name, folder and description
   length for every skill.
 - **Links:** the Markdown lint already checks relative links on every pull
-  request (MD057). External links are checked every Monday
-  (`agent-skills-links.yml`, lychee); nothing else in this repository checks
-  them.
+  request (MD057). External links are checked every Monday (the `links` job in
+  `agent-skills.yml`); nothing else in this repository checks them.
 - **Gates:** `TestVersionedSkillsFollowTheProductContract` runs in the test
   suite on every pull request; the `versions` job in `agent-skills.yml` runs
   `TestChangedSkillsBumpTheirVersion` against the pull request's base and
