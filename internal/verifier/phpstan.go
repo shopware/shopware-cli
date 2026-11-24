@@ -76,7 +76,7 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 		if version := tracking.ReportableShopwareVersion(installed); version != "" {
 			tracking.SetCommandTag(tracking.TagCheckedShopwareVersion, version)
 		}
-		if !config.IsProject {
+		if !config.IsProject || nextMajor {
 			mode := config.CheckAgainst
 			if mode == "" {
 				mode = CheckAgainstHighest
@@ -90,7 +90,7 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	args := []string{"-dmemory_limit=2G", path.Join(phpDir, "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", "--autoload-file", autoloadFile}
 	args = append(args, config.SourceDirectories...)
 	env := append(os.Environ(), "PHP_DIR="+phpDir)
-	// Select the extension's configuration explicitly because PHPStan runs from
+	// Select the source configuration explicitly because PHPStan runs from
 	// the dependency directory so it discovers the matching Composer metadata.
 	configFile := p.configFile(config.RootDir)
 	// A local phpstan.neon brings its own tmpDir.
