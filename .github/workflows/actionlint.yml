@@ -7,6 +7,7 @@ on:
       - '.github/dependabot.yml'
       - 'mise.toml'
       - 'mise.lock'
+      - 'internal/shop/project_scaffold_static/**'
   push:
     branches: [main]
     paths:
@@ -14,6 +15,7 @@ on:
       - '.github/dependabot.yml'
       - 'mise.toml'
       - 'mise.lock'
+      - 'internal/shop/project_scaffold_static/**'
   workflow_dispatch:
 
 concurrency:

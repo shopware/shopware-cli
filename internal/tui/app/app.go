@@ -11,7 +11,13 @@
 package app
 
 import (
+	"os"
+
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 // Options configure a new App shell.
@@ -69,6 +75,9 @@ type App struct {
 	mouse       bool
 	mouseFn     func() bool
 	onExit      func(error)
+	// watchBackground is set by Run, which also undoes the terminal modes it
+	// implies once the program has ended.
+	watchBackground bool
 
 	overlays OverlayStack
 	keys     KeyMap
@@ -234,10 +243,15 @@ func (a *App) chrome() (header, footer string) {
 
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	if a.content == nil {
-		return nil
+	var cmds []tea.Cmd
+	if a.watchBackground {
+		// Ask the terminal to report light/dark appearance changes.
+		cmds = append(cmds, tea.Raw(ansi.SetModeLightDark))
 	}
-	return a.content.Init()
+	if a.content != nil {
+		cmds = append(cmds, a.content.Init())
+	}
+	return tea.Batch(cmds...)
 }
 
 // Update implements tea.Model.
@@ -250,6 +264,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmds []tea.Cmd
+
+	// A long-running program outlives the background it started on: the
+	// terminal theme can follow the system appearance. Re-query on an
+	// appearance report, and on focus for terminals that send none.
+	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		tui.SetDarkBackground(msg.IsDark())
+	case uv.DarkColorSchemeEvent, uv.LightColorSchemeEvent, tea.FocusMsg:
+		if a.watchBackground {
+			cmds = append(cmds, tea.RequestBackgroundColor)
+		}
+	}
 
 	// Quit wins over everything, including open overlays.
 	if key, ok := msg.(tea.KeyPressMsg); ok {
@@ -336,6 +362,7 @@ func (a *App) View() tea.View {
 
 	v := tea.NewView(body)
 	v.AltScreen = a.altScreen
+	v.ReportFocus = a.watchBackground
 	title := a.windowTitle
 	if a.titleFn != nil {
 		if t := a.titleFn(ctx); t != "" {
@@ -358,7 +385,11 @@ func (a *App) View() tea.View {
 // Run is a convenience for tea.NewProgram(a, opts...).Run() that calls OnExit
 // once the program has ended.
 func (a *App) Run(opts ...tea.ProgramOption) (tea.Model, error) {
+	a.watchBackground = true
 	model, err := tea.NewProgram(a, opts...).Run()
+	// Bubble Tea does not know about this mode, so it would stay enabled and
+	// the terminal would keep reporting appearance changes to the shell.
+	_, _ = os.Stdout.WriteString(ansi.ResetModeLightDark)
 	if a.onExit != nil {
 		a.onExit(err)
 	}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
 )
@@ -22,11 +23,26 @@ var hasDarkBackground = sync.OnceValue(func() bool {
 	})
 })
 
+// reportedDark holds the background a running program learned from the
+// terminal after startup, e.g. when the system switches between light and
+// dark appearance. It takes precedence over the startup detection.
+var reportedDark atomic.Pointer[bool]
+
 // HasDarkBackground reports whether the terminal has a dark background. The
 // terminal is queried at most once per process. Call it before starting a
 // Bubble Tea program so the query never competes with the program for stdin.
 func HasDarkBackground() bool {
+	if dark := reportedDark.Load(); dark != nil {
+		return *dark
+	}
 	return hasDarkBackground()
+}
+
+// SetDarkBackground records the background a running Bubble Tea program was
+// told about (tea.BackgroundColorMsg). Adaptive colours resolve on render, so
+// the next frame picks up the new palette.
+func SetDarkBackground(dark bool) {
+	reportedDark.Store(&dark)
 }
 
 // detectDarkBackground decides the background without querying the terminal
