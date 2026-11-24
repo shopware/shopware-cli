@@ -45,6 +45,15 @@ func TestMoveAppSecretToEnvLocal(t *testing.T) {
 		assert.NoFileExists(t, filepath.Join(root, ".env.local"))
 	})
 
+	t.Run("returns an error when .env cannot be read", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(root, ".env"), 0o755))
+
+		assert.Error(t, MoveAppSecretToEnvLocal(root))
+	})
+
 	t.Run("returns an error when .env.local cannot be written", func(t *testing.T) {
 		t.Parallel()
 

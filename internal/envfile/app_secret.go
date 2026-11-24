@@ -1,7 +1,10 @@
 package envfile
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 )
 
@@ -12,7 +15,15 @@ const appSecretEnvKey = "APP_SECRET"
 // its value, and leaves APP_SECRET empty in .env.
 func MoveAppSecretToEnvLocal(projectRoot string) error {
 	envPath := filepath.Join(projectRoot, ".env")
-	secret := ReadEnvVar(envPath, appSecretEnvKey)
+	content, err := os.ReadFile(envPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("cannot read .env: %w", err)
+	}
+
+	secret := ExtractEnvVar(content, appSecretEnvKey)
 	if secret == "" {
 		return nil
 	}
