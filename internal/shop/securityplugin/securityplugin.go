@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -81,8 +82,9 @@ func (s Status) Label() string {
 		return withVersion("active, up to date", s.Version)
 	case StateUnknown:
 		return "unknown"
+	default:
+		return "unknown"
 	}
-	return "unknown"
 }
 
 func withVersion(label, v string) string {
@@ -123,8 +125,9 @@ func (s Status) NextSteps() []string {
 		return []string{"Run: shopware-cli project composer update " + s.Package, update}
 	case StateUnknown, StateUpToDate:
 		return nil
+	default:
+		return nil
 	}
-	return nil
 }
 
 // Checker gathers the plugin's status. PluginList and StorePlugins are the
@@ -154,37 +157,27 @@ func NewChecker(projectRoot, shopwareVersion string, exec executor.Executor) *Ch
 	return c
 }
 
-type lifecycle int
-
-const (
-	lifecycleUnknown lifecycle = iota
-	lifecycleInactive
-	lifecycleActive
-)
-
 // Check never changes the plugin's state and never fails: anything that cannot
 // be determined is reported as unknown rather than as a positive status.
 func (c *Checker) Check(ctx context.Context) Status {
 	pkg, onDisk := projectPlugin(c.ProjectRoot)
-	installed := onDisk
-	state := lifecycleUnknown
-	unregistered := false
 
-	listed, found, ok := c.shopPlugin(ctx)
+	listed, err := c.shopPlugin(ctx)
+	if err != nil {
+		logging.FromContext(ctx).Debugf("Security Plugin check without the shop: %v", err)
+	}
+
 	switch {
-	case !ok && onDisk == "":
+	case err != nil && onDisk == "":
 		// The plugin can be known to the shop alone, so without the shop its
 		// absence from the project files proves nothing.
 		return Status{State: StateUnknown}
-	case ok && !found && onDisk == "":
+	case listed == nil && onDisk == "":
 		return Status{State: StateMissing}
-	case ok && found && listed.active():
-		state = lifecycleActive
-	case ok:
-		state = lifecycleInactive
-		unregistered = !found
 	}
-	if found && listed.Version != "" {
+
+	installed := onDisk
+	if listed != nil && listed.Version != "" {
 		// The shop's record is the version that is actually running.
 		installed = listed.Version
 	}
@@ -192,15 +185,16 @@ func (c *Checker) Check(ctx context.Context) Status {
 	status := Status{Version: strings.TrimPrefix(installed, "v"), Latest: c.latestVersion(ctx), Package: pkg}
 
 	switch {
-	case state == lifecycleInactive:
+	case err == nil && !listed.active():
 		status.State = StateInactive
-		status.Unregistered = unregistered
+		status.Unregistered = listed == nil
 	case isOlder(status.Version, status.Latest):
 		status.State = StateOutdated
 		status.Downloaded = isCurrent(strings.TrimPrefix(onDisk, "v"), status.Latest)
-	case state == lifecycleActive && isCurrent(status.Version, status.Latest):
+	case err == nil && isCurrent(status.Version, status.Latest):
 		status.State = StateUpToDate
 	default:
+		// The shop could not be asked or the versions cannot be compared.
 		status.State = StateUnknown
 	}
 	return status
@@ -213,42 +207,48 @@ type shopPlugin struct {
 	InstalledAt json.RawMessage `json:"installedAt"`
 }
 
-func (p shopPlugin) active() bool {
+// active reports whether the plugin is installed and activated; a plugin the
+// shop does not list (nil) is neither.
+func (p *shopPlugin) active() bool {
+	if p == nil {
+		return false
+	}
 	installed := len(p.InstalledAt) > 0 && string(p.InstalledAt) != "null"
 	return installed && p.Active
 }
 
-// shopPlugin looks the plugin up in the shop's plugin list. ok is false when
+var errShopUnavailable = errors.New("cannot ask the shop for its plugins")
+
+// shopPlugin looks the plugin up in the shop's plugin list. It returns nil
+// without an error when the shop does not list the plugin, and an error when
 // the shop could not be asked (environment down, Shopware not installed).
-func (c *Checker) shopPlugin(ctx context.Context) (plugin shopPlugin, found, ok bool) {
+func (c *Checker) shopPlugin(ctx context.Context) (*shopPlugin, error) {
 	if c.PluginList == nil {
-		return shopPlugin{}, false, false
+		return nil, errShopUnavailable
 	}
 
 	out, err := c.PluginList(ctx)
 	if err != nil {
-		logging.FromContext(ctx).Debugf("Cannot list plugins for the Security Plugin check: %v", err)
-		return shopPlugin{}, false, false
+		return nil, fmt.Errorf("cannot list plugins: %w", err)
 	}
 
 	// Deprecation notices can precede the JSON document.
 	start := bytes.IndexByte(out, '[')
 	if start < 0 {
-		return shopPlugin{}, false, false
+		return nil, errors.New("cannot parse the plugin list: no JSON document")
 	}
 
 	var plugins []shopPlugin
 	if err := json.Unmarshal(out[start:], &plugins); err != nil {
-		logging.FromContext(ctx).Debugf("Cannot parse the plugin list for the Security Plugin check: %v", err)
-		return shopPlugin{}, false, false
+		return nil, fmt.Errorf("cannot parse the plugin list: %w", err)
 	}
 
-	for _, p := range plugins {
-		if p.Name == TechnicalName {
-			return p, true, true
+	for i := range plugins {
+		if plugins[i].Name == TechnicalName {
+			return &plugins[i], nil
 		}
 	}
-	return shopPlugin{}, false, true
+	return nil, nil //nolint:nilnil // nil plugin means the shop does not list it, which is not an error
 }
 
 // latestVersion asks the Store for the newest plugin version compatible with
