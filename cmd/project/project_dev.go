@@ -365,6 +365,7 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	}
 
 	elapsed := time.Since(start).Round(time.Millisecond)
+	waitForAudit := startComposerAudit(cmd.Context(), e.executor)
 
 	fmt.Println("  " + tui.SuccessLine(fmt.Sprintf("Development environment started in %s", elapsed)))
 	fmt.Println()
@@ -404,6 +405,8 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 		}
 		fmt.Println()
 	}
+
+	printComposerAudit(waitForAudit())
 
 	fmt.Println(tui.DimText.Render("  Run ") + tui.BoldText.Render("shopware-cli project dev stop") + tui.DimText.Render(" to stop it."))
 	fmt.Println(tui.DimText.Render("  Run ") + tui.BoldText.Render("shopware-cli project logs") + tui.DimText.Render(" to view application logs."))
@@ -478,4 +481,46 @@ func init() {
 	projectDevStartCmd.Flags().String("on-port-conflict", portConflictModeFail, portConflictUsage)
 	_ = projectDevCmd.RegisterFlagCompletionFunc("on-port-conflict", cobra.FixedCompletions([]string{portConflictModeFail, portConflictModeRandom}, cobra.ShellCompDirectiveNoFileComp))
 	_ = projectDevStartCmd.RegisterFlagCompletionFunc("on-port-conflict", cobra.FixedCompletions([]string{portConflictModeFail, portConflictModeRandom}, cobra.ShellCompDirectiveNoFileComp))
+}
+
+// nonInteractiveAuditTimeout keeps a slow advisory database from holding up
+// the non-interactive start; the dashboard waits longer in the background.
+const nonInteractiveAuditTimeout = 10 * time.Second
+
+// startComposerAudit runs the Composer audit in the background, so it overlaps
+// with the rest of the start, and returns a function that waits for its result.
+func startComposerAudit(ctx context.Context, exec executor.Executor) func() (shop.ComposerAudit, error) {
+	type result struct {
+		audit shop.ComposerAudit
+		err   error
+	}
+
+	done := make(chan result, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(ctx, nonInteractiveAuditTimeout)
+		defer cancel()
+		audit, err := dev.RunComposerAudit(ctx, exec)
+		done <- result{audit: audit, err: err}
+	}()
+
+	return func() (shop.ComposerAudit, error) {
+		r := <-done
+		return r.audit, r.err
+	}
+}
+
+// printComposerAudit prints the Composer security advisory count. A failed
+// audit is reported as unknown and never fails the start.
+func printComposerAudit(audit shop.ComposerAudit, err error) {
+	fmt.Println(tui.SectionTitleStyle.Render("  Composer audit"))
+	switch {
+	case err != nil:
+		fmt.Println("  " + tui.YellowText.Bold(true).Render("? unknown") + tui.DimText.Render(" ("+err.Error()+")"))
+	case audit.Count() == 0:
+		fmt.Println("  " + tui.SuccessLine(dev.ComposerAuditSummary(audit)))
+	default:
+		fmt.Println("  " + tui.RedText.Bold(true).Render("! "+dev.ComposerAuditSummary(audit)))
+		fmt.Println(tui.DimText.Render("  Run ") + tui.BoldText.Render("shopware-cli project composer audit") + tui.DimText.Render(" for details."))
+	}
+	fmt.Println()
 }

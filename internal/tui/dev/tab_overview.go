@@ -86,6 +86,9 @@ type OverviewModel struct {
 	securityEnd     time.Time
 	health          []healthCheck
 	healthLoading   bool
+	audit           shop.ComposerAudit
+	auditErr        error
+	auditLoading    bool
 	// sfWatchProbeURL targets the watcher server. sfWatchURL is the link shown
 	// to users, which is the shop itself when Vite injects its assets there.
 	sfWatchProbeURL string
@@ -320,6 +323,7 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		instancesLoading: registeredHostname(projectRoot) != "",
 		loading:          true,
 		healthLoading:    true,
+		auditLoading:     true,
 	}
 }
 
@@ -404,6 +408,7 @@ func (m OverviewModel) Init() tea.Cmd {
 		discoverServices(m.ctx, m.env),
 		loadShopwareVersion(m.projectRoot),
 		loadSetupHealth(m.ctx, m.projectRoot, m.executor),
+		loadComposerAudit(m.ctx, m.executor),
 	}
 	if m.proxyHost != "" {
 		cmds = append(cmds, loadInstances(m.ctx))
@@ -492,6 +497,10 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	case setupHealthLoadedMsg:
 		m.healthLoading = false
 		m.health = msg.checks
+	case composerAuditLoadedMsg:
+		m.auditLoading = false
+		m.audit = msg.audit
+		m.auditErr = msg.err
 	case instancesLoadedMsg:
 		m.instancesLoading = false
 		m.instances = msg.instances
@@ -685,6 +694,10 @@ func (m OverviewModel) renderProjectReport(width int) string {
 	}
 	s.WriteString(divider)
 	s.WriteString(m.renderSetupHealth())
+	if m.audit.Count() > 0 {
+		s.WriteString(divider)
+		s.WriteString(m.renderComposerAdvisories())
+	}
 	if m.proxyHost != "" {
 		s.WriteString(divider)
 		s.WriteString(m.renderInstances())
@@ -885,6 +898,10 @@ func (m OverviewModel) renderStacked(width int) string {
 	s.WriteString(m.renderWatchers())
 	s.WriteString(divider)
 	s.WriteString(m.renderSetupHealth())
+	if m.audit.Count() > 0 {
+		s.WriteString(divider)
+		s.WriteString(m.renderComposerAdvisories())
+	}
 	if m.proxyHost != "" {
 		s.WriteString(divider)
 		s.WriteString(m.renderInstances())
@@ -902,6 +919,7 @@ func (m OverviewModel) renderShopSection() string {
 	if !m.securityEnd.IsZero() {
 		s.WriteString(tui.KVRow("Security updates", renderSecurityEnd(m.securityEnd, time.Now())))
 	}
+	s.WriteString(m.renderComposerAuditRow())
 	s.WriteString(tui.KVRow("Environment", activeBadgeStyle.Render(m.envType)))
 	s.WriteString(tui.KVRow("Shop URL", linkURL(m.shopURL)))
 	s.WriteString(tui.KVRow("Admin URL", linkURL(m.adminURL)))

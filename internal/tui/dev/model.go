@@ -783,5 +783,6 @@ func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (app.Content, t
 	// APP_ENV), so rediscover services and rerun the setup-health checks.
 	m.overview.loading = true
 	m.overview.healthLoading = true
+	m.overview.auditLoading = true
 	return m, m.overview.Init()
 }
