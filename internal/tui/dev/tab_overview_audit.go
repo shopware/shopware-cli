@@ -99,7 +99,7 @@ func (m OverviewModel) renderComposerAuditRow() string {
 	case m.audit.Count() == 0:
 		value = lipgloss.NewStyle().Foreground(tui.SuccessColor).Render(ComposerAuditSummary(m.audit))
 	default:
-		value = lipgloss.NewStyle().Foreground(tui.ErrorColor).Render(ComposerAuditSummary(m.audit)) + tui.DimStyle.Render(" (see Security advisories)")
+		value = lipgloss.NewStyle().Foreground(tui.ErrorColor).Render(ComposerAuditSummary(m.audit)) + tui.DimStyle.Render(" (see Security advisories section below)")
 	}
 	return tui.KVRow("Composer audit", value)
 }
