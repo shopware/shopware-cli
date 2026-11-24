@@ -70,7 +70,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		}
 	}
 
-	if err := envfile.KeepAppSecretOutOfEnv(opts.projectFolder); err != nil {
+	if err := envfile.MoveAppSecretToEnvLocal(opts.projectFolder); err != nil {
 		return tracking.FailedAt(createStepAppSecret, err)
 	}
 

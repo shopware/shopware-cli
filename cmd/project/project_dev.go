@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
-	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -284,13 +283,6 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 		}
 		if err := env.WriteCompose(); err != nil {
 			return nil, err
-		}
-		generated, err := envfile.EnsureAppSecret(projectRoot)
-		if err != nil {
-			return nil, err
-		}
-		if generated {
-			logging.FromContext(cmd.Context()).Infof("Generated APP_SECRET in .env.local")
 		}
 	}
 
