@@ -167,26 +167,36 @@ printf '{"files":{},"errors":[]}'
 }
 
 func TestPHPStanNextMajor(t *testing.T) {
-	for _, scenario := range []string{"bundled config", "custom config", "missing ruleset"} {
+	for _, scenario := range []string{"bundled config", "custom config", "missing ruleset", "project custom config"} {
 		t.Run(scenario, func(t *testing.T) {
 			root := t.TempDir()
 			tools := filepath.Join(t.TempDir(), "tools with spaces")
+			isProject := scenario == "project custom config"
 			t.Setenv("TEST_ROOT", root)
 			fakeTools(t, map[string]string{
 				"composer": `case " $* " in *' --prefer-lowest '*) exit 99 ;; esac
+: > "$TEST_ROOT/composer-ran"
 /bin/mkdir -p vendor/composer
 printf '{"packages":[{"name":"shopware/core","version":"6.7.14.0"}]}' > vendor/composer/installed.json
 : > vendor/autoload.php
 `,
-				"php": `while [ "$1" != "--configuration" ]; do shift || exit 99; done
+				"php": `printf '%s\n' "$PWD" "$@" > "$TEST_ROOT/php-invocation"
+while [ "$1" != "--configuration" ]; do shift || exit 99; done
 printf '%s\n' "$2" "$SHOPWARE_CLI_PHPSTAN_BASE_CONFIG" "$PHP_DIR" > "$TEST_ROOT/php-config"
 /bin/cat "$2" > "$TEST_ROOT/php-includes" || exit 99
 printf '{"files":{},"errors":[]}'
 `,
 			})
 			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{}`), 0o644))
+			if isProject {
+				installedDir := filepath.Join(root, "vendor", "composer")
+				require.NoError(t, os.MkdirAll(installedDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "vendor", "autoload.php"), nil, 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(installedDir, "installed.json"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.14.0"}]}`), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.12.0"}]}`), 0o644))
+			}
 			baseConfig := filepath.Join(tools, "php", "configs", "phpstan.neon")
-			if scenario == "custom config" {
+			if scenario == "custom config" || isProject {
 				baseConfig = filepath.Join(root, "phpstan.neon.dist")
 			}
 			const baseContents = "parameters:\n    level: 5\n"
@@ -200,6 +210,7 @@ printf '{"files":{},"errors":[]}'
 
 			result := runCheckTool(t, PhpStan{}, ToolConfig{
 				RootDir: root, ToolDirectory: tools, SourceDirectories: []string{root}, CheckAgainst: CheckAgainstNextMajor,
+				IsProject: isProject,
 			})
 
 			if scenario == "missing ruleset" {
@@ -211,7 +222,18 @@ printf '{"files":{},"errors":[]}'
 			require.Empty(t, result.Errors)
 			assert.Equal(t, "Shopware 6.7.14.0 (next-major)", result.Note)
 			assert.Equal(t, CheckAgainstNextMajor, tracking.CommandTags()[tracking.TagCheckAgainst])
-			assert.FileExists(t, filepath.Join(root, "var/cache/shopware-cli/composer-highest/vendor/autoload.php"))
+			if isProject {
+				assert.NoFileExists(t, filepath.Join(root, "composer-ran"))
+				invocation, err := os.ReadFile(filepath.Join(root, "php-invocation"))
+				require.NoError(t, err)
+				workingDir, _, _ := strings.Cut(string(invocation), "\n")
+				expectedDir, err := filepath.EvalSymlinks(root)
+				require.NoError(t, err)
+				assert.Equal(t, expectedDir, workingDir)
+				assert.Contains(t, string(invocation), "--autoload-file\n"+filepath.Join(root, "vendor", "autoload.php")+"\n")
+			} else {
+				assert.FileExists(t, filepath.Join(root, "var/cache/shopware-cli/composer-highest/vendor/autoload.php"))
+			}
 			config, err := os.ReadFile(filepath.Join(root, "php-config"))
 			require.NoError(t, err)
 			wrapper, arguments, _ := strings.Cut(string(config), "\n")
