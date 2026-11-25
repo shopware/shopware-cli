@@ -16,6 +16,7 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 // fakeExecutor satisfies executor.Executor and lets each test decide which
@@ -343,9 +344,7 @@ func TestPersistCredentialsTopLevelCopy(t *testing.T) {
 }
 
 func TestMarkPendingIsInvisibleToGit(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
+	testhelper.RequireTool(t, "git")
 	dir := t.TempDir()
 	require.NoError(t, exec.CommandContext(t.Context(), "git", "-C", dir, "init", "-q").Run())
 

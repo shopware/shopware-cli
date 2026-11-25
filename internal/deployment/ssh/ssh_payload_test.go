@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/phar"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestDeploymentPayloadCommands(t *testing.T) {
@@ -41,10 +42,7 @@ func TestDeploymentPayloadCommands(t *testing.T) {
 }
 
 func TestDeploymentPathJoin(t *testing.T) {
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP required")
-	}
+	php := testhelper.RequireTool(t, "php")
 	helper, err := deploymentPHP.ReadFile("php/lib/filesystem.php")
 	require.NoError(t, err)
 	program, err := phar.Build(fstest.MapFS{
@@ -131,10 +129,7 @@ func TestDeploymentInitMerge(t *testing.T) {
 }
 
 func TestDeploymentInspectRejectsFIFO(t *testing.T) {
-	mkfifo, err := exec.LookPath("mkfifo")
-	if err != nil {
-		t.Skip("mkfifo required")
-	}
+	mkfifo := testhelper.RequireTool(t, "mkfifo")
 	root := t.TempDir()
 	runtime := filepath.Join(root, "shared", ".env.local")
 	require.NoError(t, os.MkdirAll(filepath.Dir(runtime), 0700))

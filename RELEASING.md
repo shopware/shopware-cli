@@ -8,6 +8,7 @@ manually.
 
 1. Ensure the commit to release is on the intended branch and all required CI
    checks have passed.
+
 2. Create an annotated [semantic version](https://semver.org/) tag, for example:
 
    ```sh
@@ -19,6 +20,7 @@ manually.
    The `-s` flag makes the tag "signed", similar to commits it is considered
    best practice. For it to work you might need to refer to
    [GitHub's documentation on the matter](https://docs.github.com/en/authentication/managing-commit-signature-verification/associating-an-email-with-your-gpg-key).
+
 3. Push only the new tag:
 
    ```sh

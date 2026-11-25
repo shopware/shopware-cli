@@ -509,6 +509,7 @@ Key points:
   Content (background work never stalls behind a modal). Push with
   `host.PushOverlay(o)`; an overlay closes by returning `nil` and emitting a
   result: `return nil, app.Emit(myResultMsg{…})`.
+
 - **Quit** is the re-registerable `app.CmdQuit` command (default binding
   ctrl+c). Intercept it to e.g. cancel a running job instead of exiting:
 
@@ -520,10 +521,13 @@ Key points:
 
 - **FullscreenOverlay** (default true) makes the top overlay replace the whole
   view; `app.Ptr(false)` keeps the chrome and swaps only the main region.
+
 - **SwapContent** switches screens (wizard → dashboard) and runs the new
   content's `Init`.
+
 - **Sizing**: content receives `ctx.MainHeight` (terminal minus chrome);
   implement `app.Sizeable`/`app.SizePropagator` for automatic propagation.
+
 - **Testing**: `app.NewHarness(opts, width, height)` drives the shell without
   a TTY — `h.Send(msgs…)`, `h.SendCmd(cmd)`, `h.View()`.
 
