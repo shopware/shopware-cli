@@ -25,6 +25,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/securityplugin"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
@@ -84,8 +85,12 @@ type OverviewModel struct {
 	certTrusted     bool
 	shopwareVersion string
 	securityEnd     time.Time
-	health          []healthCheck
-	healthLoading   bool
+	// securityPlugin is the Security Plugin's status; securityPluginLoading is
+	// set until the first check has finished.
+	securityPlugin        securityplugin.Status
+	securityPluginLoading bool
+	health                []healthCheck
+	healthLoading         bool
 	// sfWatchProbeURL targets the watcher server. sfWatchURL is the link shown
 	// to users, which is the shop itself when Vite injects its assets there.
 	sfWatchProbeURL string
@@ -122,6 +127,10 @@ type shopwareVersionLoadedMsg struct {
 
 type securityEndLoadedMsg struct {
 	securityEnd time.Time
+}
+
+type securityPluginLoadedMsg struct {
+	status securityplugin.Status
 }
 
 // watcherHandle is shared between the goroutine running a watcher's preparation
@@ -320,6 +329,8 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		instancesLoading: registeredHostname(projectRoot) != "",
 		loading:          true,
 		healthLoading:    true,
+
+		securityPluginLoading: true,
 	}
 }
 
@@ -484,11 +495,18 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		}
 	case shopwareVersionLoadedMsg:
 		m.shopwareVersion = msg.version
+		// The plugin check runs without a version too: whether the plugin is
+		// present does not depend on it, only the latest compatible version.
+		cmds := []tea.Cmd{loadSecurityPlugin(m.ctx, m.projectRoot, msg.version, m.executor)}
 		if msg.version != "" {
-			return m, loadSecurityEnd(m.ctx, msg.version)
+			cmds = append(cmds, loadSecurityEnd(m.ctx, msg.version))
 		}
+		return m, tea.Batch(cmds...)
 	case securityEndLoadedMsg:
 		m.securityEnd = msg.securityEnd
+	case securityPluginLoadedMsg:
+		m.securityPluginLoading = false
+		m.securityPlugin = msg.status
 	case setupHealthLoadedMsg:
 		m.healthLoading = false
 		m.health = msg.checks
@@ -902,6 +920,7 @@ func (m OverviewModel) renderShopSection() string {
 	if !m.securityEnd.IsZero() {
 		s.WriteString(tui.KVRow("Security updates", renderSecurityEnd(m.securityEnd, time.Now())))
 	}
+	s.WriteString(m.renderSecurityPlugin())
 	s.WriteString(tui.KVRow("Environment", activeBadgeStyle.Render(m.envType)))
 	s.WriteString(tui.KVRow("Shop URL", linkURL(m.shopURL)))
 	s.WriteString(tui.KVRow("Admin URL", linkURL(m.adminURL)))
@@ -1290,6 +1309,57 @@ func fetchSecurityEnd(ctx context.Context, version string) time.Time {
 		return time.Time{}
 	}
 	return resp.Result.EolFrom.Time
+}
+
+// securityPluginTimeout bounds the console call and the Store lookup of the
+// Security Plugin check so neither a stuck container nor an unreachable Store
+// leaves the row loading forever.
+const securityPluginTimeout = 15 * time.Second
+
+// loadSecurityPlugin checks whether the Security Plugin is present, active and
+// at the latest version compatible with the project's Shopware version.
+func loadSecurityPlugin(parent context.Context, projectRoot, shopwareVersion string, exec executor.Executor) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, securityPluginTimeout)
+		defer cancel()
+		return securityPluginLoadedMsg{status: securityplugin.NewChecker(projectRoot, shopwareVersion, exec).Check(ctx)}
+	}
+}
+
+// renderSecurityPlugin renders the Security Plugin row of the Shop section:
+// red when the plugin is missing, yellow when it is inactive or outdated, green
+// when it is active and current, and muted when that cannot be determined. A
+// status that needs action is followed by the steps that resolve it.
+func (m OverviewModel) renderSecurityPlugin() string {
+	key := "Security Plugin"
+	if m.securityPluginLoading {
+		return tui.KVRow(key, helpStyle.Render("checking"))
+	}
+
+	var c color.Color
+	switch m.securityPlugin.State {
+	case securityplugin.StateMissing:
+		c = tui.ErrorColor
+	case securityplugin.StateInactive, securityplugin.StateOutdated:
+		c = tui.WarnColor
+	case securityplugin.StateUpToDate:
+		c = tui.SuccessColor
+	case securityplugin.StateUnknown:
+		c = tui.MutedColor
+	}
+
+	var row strings.Builder
+	row.WriteString(tui.KVRow(key, lipgloss.NewStyle().Foreground(c).Render(m.securityPlugin.Label())))
+	for _, step := range m.securityPlugin.NextSteps() {
+		// The docs URL is too long for the column, so it becomes a short link.
+		text, linked := strings.CutSuffix(step, securityplugin.DocsURL)
+		hint := helpStyle.Render(text)
+		if linked {
+			hint += tui.StyledLink(securityplugin.DocsURL, "the Security Plugin documentation", tui.LinkStyle)
+		}
+		row.WriteString(strings.Repeat(" ", tui.KVRowIndent) + hint + "\n")
+	}
+	return row.String()
 }
 
 // renderSecurityEnd formats the end-of-life date as "until YYYY-MM-DD (N days
