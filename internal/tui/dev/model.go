@@ -447,6 +447,11 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// loop would stop for the rest of the session.
 		return m.updateChildren(msg)
 
+	case composerAuditLoadedMsg:
+		// The audit can outlast the start of a task; dropping its result would
+		// leave the overview checking for the rest of the session.
+		return m.updateChildren(msg)
+
 	case setupHealthLoadedMsg:
 		if len(msg.checks) > 0 && m.telemetry.healthOnce() {
 			for _, tags := range healthEventTags(msg.checks) {

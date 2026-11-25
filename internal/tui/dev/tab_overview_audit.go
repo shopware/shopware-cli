@@ -16,9 +16,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-// ComposerAuditTimeout bounds `composer audit`, which queries the advisory
+// composerAuditTimeout bounds `composer audit`, which queries the advisory
 // database over the network, so it cannot hold up the dashboard or the start.
-const ComposerAuditTimeout = 30 * time.Second
+const composerAuditTimeout = 30 * time.Second
 
 type composerAuditLoadedMsg struct {
 	audit shop.ComposerAudit
@@ -27,17 +27,17 @@ type composerAuditLoadedMsg struct {
 
 func loadComposerAudit(parent context.Context, exec executor.Executor) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, ComposerAuditTimeout)
+		ctx, cancel := context.WithTimeout(parent, composerAuditTimeout)
 		defer cancel()
-		audit, err := RunComposerAudit(ctx, exec)
+		audit, err := runComposerAudit(ctx, exec)
 		return composerAuditLoadedMsg{audit: audit, err: err}
 	}
 }
 
-// RunComposerAudit runs `composer audit` through the project's executor and
+// runComposerAudit runs `composer audit` through the project's executor and
 // returns the reported security advisories. Composer applies the project's
 // audit configuration (ignored advisories, abandoned handling) itself.
-func RunComposerAudit(ctx context.Context, exec executor.Executor) (shop.ComposerAudit, error) {
+func runComposerAudit(ctx context.Context, exec executor.Executor) (shop.ComposerAudit, error) {
 	if exec == nil {
 		return shop.ComposerAudit{}, errors.New("cannot run composer audit: no executor")
 	}
@@ -71,9 +71,9 @@ func commandFailureReason(err error) string {
 	return err.Error()
 }
 
-// ComposerAuditSummary describes the advisory count. It does not call the
+// composerAuditSummary describes the advisory count. It does not call the
 // advisories vulnerabilities, since the Security Plugin may mitigate some.
-func ComposerAuditSummary(audit shop.ComposerAudit) string {
+func composerAuditSummary(audit shop.ComposerAudit) string {
 	count := audit.Count()
 	if count == 0 {
 		return "no security advisories"
@@ -97,9 +97,9 @@ func (m OverviewModel) renderComposerAuditRow() string {
 	case m.auditErr != nil:
 		value = lipgloss.NewStyle().Foreground(tui.WarnColor).Render("unknown") + tui.DimStyle.Render(" ("+m.auditErr.Error()+")")
 	case m.audit.Count() == 0:
-		value = lipgloss.NewStyle().Foreground(tui.SuccessColor).Render(ComposerAuditSummary(m.audit))
+		value = lipgloss.NewStyle().Foreground(tui.SuccessColor).Render(composerAuditSummary(m.audit))
 	default:
-		value = lipgloss.NewStyle().Foreground(tui.ErrorColor).Render(ComposerAuditSummary(m.audit)) + tui.DimStyle.Render(" (see Security advisories section below)")
+		value = lipgloss.NewStyle().Foreground(tui.ErrorColor).Render(composerAuditSummary(m.audit)) + tui.DimStyle.Render(" (see Security advisories section below)")
 	}
 	return tui.KVRow("Composer audit", value)
 }

@@ -8,20 +8,21 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func TestComposerAuditSummary(t *testing.T) {
-	assert.Equal(t, "no security advisories", ComposerAuditSummary(shop.ComposerAudit{}))
+	assert.Equal(t, "no security advisories", composerAuditSummary(shop.ComposerAudit{}))
 
 	audit := shop.ComposerAudit{Advisories: map[string][]shop.ComposerAdvisory{
 		"a/a": {{Title: "one"}, {Title: "two"}},
 		"b/b": {{Title: "three"}},
 	}}
-	assert.Equal(t, "3 security advisories in 2 packages", ComposerAuditSummary(audit))
+	assert.Equal(t, "3 security advisories in 2 packages", composerAuditSummary(audit))
 }
 
 func TestRunComposerAuditWithoutExecutor(t *testing.T) {
-	_, err := RunComposerAudit(t.Context(), nil)
+	_, err := runComposerAudit(t.Context(), nil)
 
 	assert.Error(t, err)
 }
@@ -46,4 +47,16 @@ func TestOverviewComposerAudit(t *testing.T) {
 	assert.Contains(t, view, "Security advisories")
 	assert.Contains(t, view, "symfony/http-kernel")
 	assert.Contains(t, view, "CVE-2026-1: Request smuggling")
+}
+
+func TestComposerAuditResultReachesOverviewDuringTask(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseTask
+	m.task = tui.NewTask("Building...")
+
+	updated, _ := m.Update(composerAuditLoadedMsg{err: errors.New("composer not found")})
+
+	overview := updated.(Model).overview
+	assert.False(t, overview.auditLoading)
+	assert.Error(t, overview.auditErr)
 }

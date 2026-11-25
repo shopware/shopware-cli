@@ -57,9 +57,43 @@ func ParseComposerAudit(output []byte) (ComposerAudit, error) {
 		return audit, nil
 	}
 
-	if err := json.Unmarshal(raw.Advisories, &audit.Advisories); err != nil {
+	var packages map[string]json.RawMessage
+	if err := json.Unmarshal(raw.Advisories, &packages); err != nil {
 		return ComposerAudit{}, fmt.Errorf("cannot parse composer audit advisories: %w", err)
 	}
 
+	for name, data := range packages {
+		advisories, err := parseAdvisoryList(data)
+		if err != nil {
+			return ComposerAudit{}, fmt.Errorf("cannot parse composer audit advisories for %s: %w", name, err)
+		}
+		audit.Advisories[name] = advisories
+	}
+
 	return audit, nil
+}
+
+// parseAdvisoryList decodes a package's advisories. Composer writes them as a
+// list, or as an object keyed by index when it filtered some of them out.
+func parseAdvisoryList(data json.RawMessage) ([]ComposerAdvisory, error) {
+	var list []ComposerAdvisory
+	if err := json.Unmarshal(data, &list); err == nil {
+		return list, nil
+	}
+
+	var byIndex map[string]ComposerAdvisory
+	if err := json.Unmarshal(data, &byIndex); err != nil {
+		return nil, err
+	}
+
+	keys := make([]string, 0, len(byIndex))
+	for key := range byIndex {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	for _, key := range keys {
+		list = append(list, byIndex[key])
+	}
+	return list, nil
 }
