@@ -3,6 +3,7 @@ package shop
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 )
@@ -34,12 +35,7 @@ func (a ComposerAudit) Count() int {
 
 // Packages returns the names of the affected packages, sorted.
 func (a ComposerAudit) Packages() []string {
-	names := make([]string, 0, len(a.Advisories))
-	for name := range a.Advisories {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	return names
+	return slices.Sorted(maps.Keys(a.Advisories))
 }
 
 // ParseComposerAudit parses the output of `composer audit --format=json`.
@@ -81,18 +77,12 @@ func parseAdvisoryList(data json.RawMessage) ([]ComposerAdvisory, error) {
 		return list, nil
 	}
 
-	var byIndex map[string]ComposerAdvisory
+	var byIndex map[int]ComposerAdvisory
 	if err := json.Unmarshal(data, &byIndex); err != nil {
 		return nil, err
 	}
 
-	keys := make([]string, 0, len(byIndex))
-	for key := range byIndex {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-
-	for _, key := range keys {
+	for _, key := range slices.Sorted(maps.Keys(byIndex)) {
 		list = append(list, byIndex[key])
 	}
 	return list, nil

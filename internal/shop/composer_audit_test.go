@@ -44,6 +44,7 @@ func TestParseComposerAuditAdvisoriesKeyedByIndex(t *testing.T) {
 	audit, err := ParseComposerAudit([]byte(`{
 		"advisories": {
 			"symfony/http-kernel": {
+				"10": {"advisoryId": "k", "title": "Eleventh"},
 				"1": {"advisoryId": "b", "title": "Second"},
 				"3": {"advisoryId": "d", "title": "Fourth"}
 			}
@@ -51,6 +52,9 @@ func TestParseComposerAuditAdvisoriesKeyedByIndex(t *testing.T) {
 	}`))
 
 	require.NoError(t, err)
-	assert.Equal(t, 2, audit.Count())
-	assert.ElementsMatch(t, []string{"b", "d"}, []string{audit.Advisories["symfony/http-kernel"][0].AdvisoryID, audit.Advisories["symfony/http-kernel"][1].AdvisoryID})
+	ids := make([]string, 0, audit.Count())
+	for _, advisory := range audit.Advisories["symfony/http-kernel"] {
+		ids = append(ids, advisory.AdvisoryID)
+	}
+	assert.Equal(t, []string{"b", "d", "k"}, ids)
 }
