@@ -419,7 +419,6 @@ func (m OverviewModel) Init() tea.Cmd {
 		discoverServices(m.ctx, m.env),
 		loadShopwareVersion(m.projectRoot),
 		loadSetupHealth(m.ctx, m.projectRoot, m.executor),
-		loadComposerAudit(m.ctx, m.executor),
 	}
 	if m.proxyHost != "" {
 		cmds = append(cmds, loadInstances(m.ctx))

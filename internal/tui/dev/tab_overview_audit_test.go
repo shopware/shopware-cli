@@ -60,3 +60,15 @@ func TestComposerAuditResultReachesOverviewDuringTask(t *testing.T) {
 	assert.False(t, overview.auditLoading)
 	assert.Error(t, overview.auditErr)
 }
+
+func TestConfigRestartKeepsComposerAuditResult(t *testing.T) {
+	m := newTestModel(t)
+	audit := shop.ComposerAudit{Advisories: map[string][]shop.ComposerAdvisory{"a/a": {{Title: "one"}}}}
+	updated, _ := m.Update(composerAuditLoadedMsg{audit: audit})
+
+	updated, _ = updated.(Model).handleConfigRestartDone(configRestartDoneMsg{})
+
+	overview := updated.(Model).overview
+	assert.False(t, overview.auditLoading)
+	assert.Equal(t, 1, overview.audit.Count())
+}
