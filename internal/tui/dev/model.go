@@ -372,6 +372,10 @@ func (m *Model) startDashboard() tea.Cmd {
 	}
 	return tea.Batch(
 		m.overview.Init(),
+		// The audit runs once per session, not on every config restart: a
+		// restart does not change the dependencies, and a second run could
+		// finish first and be overwritten by the earlier one.
+		loadComposerAudit(m.overview.ctx, m.overview.executor),
 		m.instance.StartStreaming(),
 	)
 }
@@ -445,6 +449,11 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// keeps ticking even during non-dashboard phases (a running task,
 		// starting/stopping); updateFallback would otherwise drop these and the
 		// loop would stop for the rest of the session.
+		return m.updateChildren(msg)
+
+	case composerAuditLoadedMsg:
+		// The audit can outlast the start of a task; dropping its result would
+		// leave the overview checking for the rest of the session.
 		return m.updateChildren(msg)
 
 	case setupHealthLoadedMsg:
