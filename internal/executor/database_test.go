@@ -106,7 +106,7 @@ func TestMySQLSocketDial(t *testing.T) {
 	var config net.ListenConfig
 	listener, err := config.Listen(t.Context(), "unix", socket)
 	if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES) {
-		t.Skipf("sandbox does not permit Unix sockets: %v", err)
+		testhelper.MissingPrerequisitef(t, "cannot listen on a Unix socket: %v", err)
 	}
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
@@ -122,11 +122,17 @@ func TestMySQLSocketDial(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	_, _, err = conn.Open(ctx)
+	// Some sandboxes allow binding a Unix socket but deny connecting to it.
+	var dialErr *net.OpError
+	if errors.As(err, &dialErr) && dialErr.Op == "dial" && dialErr.Net == "unix" &&
+		(errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES)) {
+		testhelper.MissingPrerequisitef(t, "cannot dial a Unix socket: %v", err)
+	}
 	require.Error(t, err, "fake server does not speak MySQL")
 	select {
 	case <-accepted:
 	case <-ctx.Done():
-		t.Fatal("driver did not connect to the Unix socket")
+		t.Fatalf("driver did not connect to the Unix socket: %v", err)
 	}
 }
 

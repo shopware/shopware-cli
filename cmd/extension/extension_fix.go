@@ -17,10 +17,17 @@ var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
 	Short: "Apply code-quality fixes to an extension",
 	Long: `Apply code-quality fixes to an extension.
-Use --dry-run to report findings and proposed changes without applying fixes.
-Rector resolves the lowest compatible dependencies in var/cache/shopware-cli,
-preserving the extension's vendor/, composer.json and composer.lock.
-A local rector.php takes precedence over the bundled Shopware rules.`,
+
+Fixes include PHP refactoring, JavaScript and SCSS corrections, and conversion
+of Symfony service and routing XML in plugins to YAML.
+
+Rector uses the extension's rector.php when present and the bundled Shopware
+rules otherwise. It installs the lowest compatible dependencies in
+var/cache/shopware-cli.
+
+Changes are written directly to source files. Use --dry-run to report findings
+and proposed changes without modifying files. If the command is interrupted, it
+does not undo changes already made.`,
 	Args: cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := extensionValidationFormat(cmd); err != nil {
@@ -36,6 +43,13 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := extensionValidationFormat(cmd)
+		timeout, _ := cmd.Flags().GetString("timeout")
+		ctx, cancel, err := verifier.WithQATimeout(cmd.Context(), timeout, cmd.Flags().Changed("timeout"))
+		if err != nil {
+			return err
+		}
+		defer cancel()
+
 		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -49,26 +63,31 @@ A local rector.php takes precedence over the bundled Shopware rules.`,
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		ext, err := extension.GetExtensionByFolder(cmd.Context(), path)
+		ext, err := extension.GetExtensionByFolder(ctx, path)
+		err = verifier.QAPhaseError(ctx, verifier.QAPhaseExtensionDiscovery, err)
 		if err != nil {
 			return err
 		}
 
 		finishSetup := progress.Start("preparing tools and discovering extension configuration")
-		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
+		toolCfg, err := verifier.SetupExtensionToolConfig(ctx, cmd.Root().Version, ext)
+		err = verifier.QAPhaseError(ctx, verifier.QAPhaseSetupAndDiscovery, err)
 		finishSetup(err)
 		if err != nil {
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
+		logging.FromContext(ctx).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
 		results := verifier.RunTools(
-			cmd.Context(), tools, statuses, *toolCfg, progress,
+			ctx, tools, statuses, *toolCfg, progress,
 			func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
-				return tool.Fix(cmd.Context(), *toolCfg, execution, dryRun)
+				return tool.Fix(ctx, *toolCfg, execution, dryRun)
 			},
 		)
+		cancel()
+
+		results = verifier.EnsureQATimeoutResult(ctx, results)
 		return validation.ReportTools(results, reportingFormat, "Fixers")
 	},
 }
@@ -81,6 +100,7 @@ func init() {
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
+	extensionFixCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Interrupt fixing after e.g. 30s, 5m or 1h30m (no timeout by default, 0 disables, "+verifier.QATimeoutEnv+" sets the default)")
 
 	_ = extensionFixCmd.Flags().MarkDeprecated("allow-non-git", deprecation.Message("2027-02-10", ""))
 

@@ -15,11 +15,15 @@ import (
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Run static analysis and Shopware checks on a project",
-	Long: `Validate the project's own code, such as extensions in custom/ and configured bundles.
-Packages that Composer installs into vendor/ are not validated, but PHPStan needs them, so run composer install first.
+	Long: `Validate project extensions and configured bundles.
 
-Prettier and PHP-CS-Fixer check formatting without changing source files. Formatting violations fail validation.
-Use --exclude-formatters to skip formatting checks.
+Extensions outside vendor/ are checked, including those in custom/. Packages
+installed in vendor/ are not checked. PHPStan uses the project's installed
+dependencies, so run composer install first.
+
+PHP-CS-Fixer and Prettier check formatting in dry-run mode without changing
+source files. Formatting differences fail validation. Use --exclude-formatters
+to skip these checks.
 
 Use --check-against next-major to add PHPStan checks for announced breaking changes in the installed Shopware release.
 Shopware introduced breaking-change attributes in 6.7.14.0. Older releases may produce few or no next-major findings.
@@ -57,7 +61,13 @@ If your PHPStan config already includes future-compatibility.neon, omit the flag
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := projectValidationFormat(cmd)
-		ctx := cmd.Context()
+		timeout, _ := cmd.Flags().GetString("timeout")
+		ctx, cancel, err := verifier.WithQATimeout(cmd.Context(), timeout, cmd.Flags().Changed("timeout"))
+		if err != nil {
+			return err
+		}
+		defer cancel()
+
 		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -67,13 +77,13 @@ If your PHPStan config already includes future-compatibility.neon, omit the flag
 		tools, statuses, _ := selectProjectValidationTools(only, exclude, excludeFormatters)
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
-		var err error
 		projectPath := ""
 
 		if len(args) > 0 {
 			projectPath = args[0]
 		} else {
 			projectPath, err = shop.FindClosestShopwareProject(false)
+			err = verifier.QAPhaseError(ctx, verifier.QAPhaseProjectDiscovery, err)
 			if err != nil {
 				return err
 			}
@@ -86,6 +96,7 @@ If your PHPStan config already includes future-compatibility.neon, omit the flag
 
 		finishConfig := progress.Start("discovering project configuration")
 		toolCfg, err := verifier.GetConfigFromProject(ctx, projectPath, localOnly)
+		err = verifier.QAPhaseError(ctx, verifier.QAPhaseConfigurationDiscovery, err)
 		finishConfig(err)
 		if err != nil {
 			return err
@@ -93,6 +104,7 @@ If your PHPStan config already includes future-compatibility.neon, omit the flag
 
 		finishSetup := progress.Start("preparing tools")
 		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+		setupErr = verifier.QAPhaseError(ctx, verifier.QAPhaseToolSetup, setupErr)
 		finishSetup(setupErr)
 		if setupErr != nil {
 			return setupErr
@@ -103,6 +115,9 @@ If your PHPStan config already includes future-compatibility.neon, omit the flag
 		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
 			return tool.Check(ctx, *toolCfg, execution)
 		})
+		cancel()
+
+		results = verifier.EnsureQATimeoutResult(ctx, results)
 		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
@@ -122,6 +137,7 @@ func projectValidationFormat(cmd *cobra.Command) (string, error) {
 
 func init() {
 	projectRootCmd.AddCommand(projectValidateCmd)
+
 	projectValidateCmd.PersistentFlags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	projectValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	projectValidateCmd.Flags().String("check-against", "", "Check Shopware compatibility ("+verifier.CheckAgainstNextMajor+")")
@@ -130,12 +146,15 @@ func init() {
 	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the project directory itself, not a temporary copy")
 	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Validate only extensions in custom/* folders")
-	_ = projectValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
-	_ = projectValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{verifier.CheckAgainstNextMajor}, cobra.ShellCompDirectiveNoFileComp))
-	_ = projectValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
-	_ = projectValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
+	projectValidateCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Interrupt validation after e.g. 30s, 5m or 1h30m (no timeout by default, 0 disables, "+verifier.QATimeoutEnv+" sets the default)")
+
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", deprecation.Message("2027-02-10", "--format"))
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("no-copy", deprecation.Message("2027-02-10", ""))
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")
+
+	_ = projectValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
+	_ = projectValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{verifier.CheckAgainstNextMajor}, cobra.ShellCompDirectiveNoFileComp))
+	_ = projectValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
+	_ = projectValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 }

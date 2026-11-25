@@ -40,7 +40,7 @@ func GetPHPVersionOfBinary(ctx context.Context, phpPath string) (string, error) 
 	probeCtx, cancel := context.WithTimeout(ctx, phpVersionProbeTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(probeCtx, phpPath, "-v")
+	cmd := CommandContext(probeCtx, phpPath, "-v")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get PHP version: %w, output: %s", err, string(output))

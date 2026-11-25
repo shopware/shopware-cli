@@ -1,0 +1,2 @@
+# Keep this aligned with the Go minor version declared in go.mod.
+go 1.27

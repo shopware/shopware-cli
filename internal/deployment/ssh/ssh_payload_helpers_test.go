@@ -8,16 +8,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 // localDeploymentCommand prepares a packaged command for the local PHP binary
 // in place of a remote host. The returned archive must start the command's stdin.
 func localDeploymentCommand(t *testing.T, command string, options any) (*exec.Cmd, io.Reader) {
 	t.Helper()
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP required")
-	}
+	php := testhelper.RequireTool(t, "php")
 	payload, err := deploymentPayload(command)
 	require.NoError(t, err)
 	var args []string

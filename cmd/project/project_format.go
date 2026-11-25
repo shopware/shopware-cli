@@ -14,8 +14,19 @@ import (
 var projectFormatCmd = &cobra.Command{
 	Use:   "format [path]",
 	Short: "Format a project's code with PHP-CS-Fixer and Prettier",
-	Long:  "Format the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. PHP-CS-Fixer uses the project's .php-cs-fixer.dist.php if present; Prettier always uses the CLI's own config. Use --dry-run to only report files that would change.",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Format project extensions and configured bundles with PHP-CS-Fixer and Prettier.
+
+Extensions outside vendor/ are formatted, including those in custom/. Packages
+installed in vendor/ are not changed.
+
+PHP-CS-Fixer uses the project's .php-cs-fixer.dist.php when present and the
+CLI's bundled configuration otherwise. Prettier uses the CLI's bundled
+configuration.
+
+Changes are written directly to source files. Use --dry-run to report changes
+without modifying files. If the command is interrupted, it does not undo
+changes already made.`,
+	Args: cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
 			return err
@@ -30,7 +41,13 @@ var projectFormatCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := projectValidationFormat(cmd)
-		ctx := cmd.Context()
+		timeout, _ := cmd.Flags().GetString("timeout")
+		ctx, cancel, err := verifier.WithQATimeout(cmd.Context(), timeout, cmd.Flags().Changed("timeout"))
+		if err != nil {
+			return err
+		}
+		defer cancel()
+
 		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -39,19 +56,20 @@ var projectFormatCmd = &cobra.Command{
 		tools, statuses, _ := selectProjectFormattingTools(only, exclude)
 		finishSetup := progress.Start("preparing tools")
 		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+		setupErr = verifier.QAPhaseError(ctx, verifier.QAPhaseToolSetup, setupErr)
 		finishSetup(setupErr)
 		if setupErr != nil {
 			return setupErr
 		}
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-		var err error
 		projectPath := ""
 
 		if len(args) > 0 {
 			projectPath = args[0]
 		} else {
 			projectPath, err = shop.FindClosestShopwareProject(false)
+			err = verifier.QAPhaseError(ctx, verifier.QAPhaseProjectDiscovery, err)
 			if err != nil {
 				return err
 			}
@@ -64,6 +82,7 @@ var projectFormatCmd = &cobra.Command{
 
 		finishConfig := progress.Start("discovering project configuration")
 		toolCfg, err := verifier.GetConfigFromProject(ctx, projectPath, false)
+		err = verifier.QAPhaseError(ctx, verifier.QAPhaseConfigurationDiscovery, err)
 		finishConfig(err)
 		if err != nil {
 			return err
@@ -72,17 +91,23 @@ var projectFormatCmd = &cobra.Command{
 		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.FormatTool, execution *verifier.ToolExecution) verifier.ToolSummary {
 			return tool.Format(ctx, *toolCfg, execution, dryRun)
 		})
+		cancel()
+
+		results = verifier.EnsureQATimeoutResult(ctx, results)
 		return validation.ReportTools(results, reportingFormat, "Formatters")
 	},
 }
 
 func init() {
 	projectRootCmd.AddCommand(projectFormatCmd)
+
 	projectFormatCmd.PersistentFlags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	projectFormatCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
 	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Report files that would change, without changing them")
 	projectFormatCmd.PersistentFlags().String("exclude", "", "Exclude specified formatters from running (comma-separated, e.g. prettier,php-cs-fixer). When combined with --only, exclude formatters from the selected set")
+	projectFormatCmd.Flags().String("timeout", verifier.DefaultQATimeout.String(), "Interrupt formatting after e.g. 30s, 5m or 1h30m (no timeout by default, 0 disables, "+verifier.QATimeoutEnv+" sets the default)")
+
 	_ = projectFormatCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FormatTool])
 	_ = projectFormatCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FormatTool])
 }

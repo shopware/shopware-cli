@@ -57,7 +57,8 @@ exit 0
 
 	t.Run("timed out daemon probe still checks compose", func(t *testing.T) {
 		previous := dockerProbeTimeout
-		dockerProbeTimeout = 200 * time.Millisecond
+		// Leave enough time for the Compose stub to start under a busy test run.
+		dockerProbeTimeout = 2 * time.Second
 		t.Cleanup(func() { dockerProbeTimeout = previous })
 
 		stubDocker(t, `

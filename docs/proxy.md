@@ -348,6 +348,7 @@ needs two things the CLI cannot do from inside the subsystem (it prints them via
   `C:\Users\Public` is world-accessible so the commands carry no username.
   Chrome and Edge use the Windows store; Firefox needs its own import or
   `security.enterprise_roots.enabled = true`. Restart the browser after.
+
 - **Resolve the hostnames.** Windows has no split-DNS to the DNS container, so
   add the shop's hostnames to the Windows hosts file (no wildcards, so every
   subdomain sits on one line), editing it **as Administrator**:

@@ -38,3 +38,29 @@ func TestToolCancellationStopsWorkerProcesses(t *testing.T) {
 	}
 	assert.Error(t, cmd.Wait())
 }
+
+func TestQATimeoutStopsWorkerProcesses(t *testing.T) {
+	ctx, cancel, err := WithQATimeout(t.Context(), "2s", true)
+	require.NoError(t, err)
+	defer cancel()
+	cmd := CommandContext(ctx, "sh", "-c", "sleep 30 & printf ready; wait")
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() { cancel(); _ = cmd.Wait() })
+	ready := make([]byte, len("ready"))
+	_, err = io.ReadFull(stdout, ready)
+	require.NoError(t, err)
+	require.NoError(t, ctx.Err())
+	<-ctx.Done()
+	done := make(chan error, 1)
+	go func() { _, err := io.ReadAll(stdout); done <- err }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker kept stdout open after timeout")
+	}
+	assert.Error(t, cmd.Wait())
+	assert.ErrorIs(t, QAPhaseError(ctx, QAPhaseExecution, ctx.Err()), ErrQATimeout)
+}

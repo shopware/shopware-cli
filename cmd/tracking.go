@@ -17,6 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
 var trackEvent = tracking.Track
@@ -34,7 +35,11 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	result := tracking.ResultSuccess
 	switch {
 	case runErr == nil:
-	case ctx.Err() != nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, huh.ErrUserAborted) || errors.Is(runErr, tui.ErrFilterSelectCancelled) ||
+	case ctx.Err() != nil:
+		result = tracking.ResultCancelled
+	case errors.Is(runErr, verifier.ErrQATimeout):
+		result = tracking.ResultFailure
+	case errors.Is(runErr, context.Canceled) || errors.Is(runErr, huh.ErrUserAborted) || errors.Is(runErr, tui.ErrFilterSelectCancelled) ||
 		errors.As(runErr, &declined):
 		result = tracking.ResultCancelled
 	default:

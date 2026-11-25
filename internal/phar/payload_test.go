@@ -17,16 +17,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 //go:embed testdata/payload
 var payloadFiles embed.FS
 
 func TestPayloadWithPHP(t *testing.T) {
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP is required for the compatibility test")
-	}
+	php := testhelper.RequireTool(t, "php")
 	source, err := fs.Sub(payloadFiles, "testdata/payload")
 	require.NoError(t, err)
 	payload, err := Build(source, "main.php")
@@ -109,10 +108,7 @@ func TestBuild(t *testing.T) {
 }
 
 func TestPayloadPreservesInteractiveStdin(t *testing.T) {
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP required")
-	}
+	php := testhelper.RequireTool(t, "php")
 	payload, err := Build(fstest.MapFS{"main.php": {Data: []byte("<?php echo \"READY\\n\"; fflush(STDOUT); echo fgets(STDIN);")}}, "main.php")
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -140,10 +136,7 @@ func TestPayloadPreservesInteractiveStdin(t *testing.T) {
 }
 
 func TestPayloadRejectsTruncatedArchive(t *testing.T) {
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Skip("PHP required")
-	}
+	php := testhelper.RequireTool(t, "php")
 	payload, err := Build(fstest.MapFS{"main.php": {Data: []byte("<?php echo 'executed';")}}, "main.php")
 	require.NoError(t, err)
 	dir := t.TempDir()
