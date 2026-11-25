@@ -76,6 +76,16 @@ build, validation, and packaging rules.
   file is loaded and the first is preferred / used for new projects, the others
   are legacy and still supported
 
+### Project export / import
+
+- `project export` writes a portable archive (`metadata.json`, `database.sql`,
+  `public.tar.gz`, `private.tar.gz`) and `project import` restores it; the
+  layout is defined in `docs/adr/2026-08-11-project-import-export.md` and
+  implemented in `internal/projectarchive`. The database part reuses
+  `shop.DumpDatabase`; files are transferred with `tar` through
+  `Executor.Command`, so local, Docker, and SSH environments share one path.
+  Only the `local` filesystem adapter is supported.
+
 ### Deployment
 
 - The `deployment` package defines backend capabilities and initialization

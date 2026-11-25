@@ -169,6 +169,10 @@ func (f *logsFakeExecutor) NPMCommand(ctx context.Context, _ ...string) *executo
 	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
 }
 
+func (f *logsFakeExecutor) Command(ctx context.Context, _ string, _ ...string) *executor.Process {
+	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+}
+
 func (f *logsFakeExecutor) NormalizePath(hostPath string) string { return hostPath }
 func (f *logsFakeExecutor) Type() string                         { return executor.TypeLocal }
 func (f *logsFakeExecutor) WithEnv(map[string]string) executor.Executor {

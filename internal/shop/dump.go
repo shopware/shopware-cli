@@ -55,6 +55,12 @@ type DumpDatabaseOptions struct {
 	InsertIntoMaxBytes int
 	// LimitOverrides contains "table=rows" entries limiting the dumped rows per table
 	LimitOverrides []string
+	// SkipPublicFileRows excludes the media rows of files in the public
+	// filesystem, for exports without these files.
+	SkipPublicFileRows bool
+	// SkipPrivateFileRows excludes the media and import/export file rows of
+	// files in the private filesystem, for exports without these files.
+	SkipPrivateFileRows bool
 }
 
 // DumpDatabase dumps the database described by sqlCfg to opts.Output. cfg may
@@ -148,6 +154,9 @@ func configureDumper(dumper *mysqldump.Dumper, cfg *ConfigDump, opts DumpDatabas
 	dumper.NoData = cfg.NoData
 	dumper.Ignore = cfg.Ignore
 	dumper.LimitMap = cfg.Limit
+	if exclusions := fileRowExclusions(opts.SkipPublicFileRows, opts.SkipPrivateFileRows); len(exclusions) > 0 {
+		dumper.ExcludeMap = exclusions
+	}
 	if opts.ResetIdentity {
 		dumper.BuildRowExclusions = resetIdentityExclusions
 	}

@@ -57,6 +57,14 @@ func (s *SymfonyCLIExecutor) NPMCommand(ctx context.Context, args ...string) *Pr
 	return newProcess(cmd)
 }
 
+func (s *SymfonyCLIExecutor) Command(ctx context.Context, name string, args ...string) *Process {
+	cmd := exec.CommandContext(ctx, name, args...)
+	applyLocalEnv(s.projectRoot, s.env, cmd)
+	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
+	logCmd(ctx, cmd)
+	return newProcess(cmd)
+}
+
 func (s *SymfonyCLIExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, error) {
 	return localLogFiles(filepath.Join(s.projectRoot, "var", "log"))
 }

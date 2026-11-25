@@ -124,6 +124,14 @@ func (l *LocalExecutor) NPMCommand(ctx context.Context, args ...string) *Process
 	return newProcess(cmd)
 }
 
+func (l *LocalExecutor) Command(ctx context.Context, name string, args ...string) *Process {
+	cmd := exec.CommandContext(ctx, name, args...)
+	applyLocalEnv(l.projectRoot, l.env, cmd)
+	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
+	logCmd(ctx, cmd)
+	return newProcess(cmd)
+}
+
 func (l *LocalExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, error) {
 	return localLogFiles(filepath.Join(l.projectRoot, "var", "log"))
 }

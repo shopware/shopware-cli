@@ -85,6 +85,17 @@ func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *Proces
 	return d.newProcess(cmd, append([]string{"npm"}, args...))
 }
 
+func (d *DockerExecutor) Command(ctx context.Context, name string, args ...string) *Process {
+	dockerArgs := d.baseArgs(ctx)
+	dockerArgs = append(dockerArgs, name)
+	dockerArgs = append(dockerArgs, args...)
+
+	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+	applyDir(d.projectRoot, cmd)
+	logCmd(ctx, cmd)
+	return d.newProcess(cmd, append([]string{name}, args...))
+}
+
 func (d *DockerExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, error) {
 	logDir := d.NormalizePath(filepath.Join(d.projectRoot, "var", "log"))
 
