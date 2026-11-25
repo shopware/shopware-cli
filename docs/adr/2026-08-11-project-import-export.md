@@ -28,9 +28,10 @@ Portable shop-data packages are a new pair of commands:
 
 Export and import operate on independently selectable components: database,
 public files, and private files. An archive does not have to include public or
-private files. `project import` applies every component that is present.
-Skipping a component is opt-out (`--skip-database`, `--skip-public-files`,
-`--skip-private-files`).
+private files. Skipping a component on export is opt-out (`--skip-database`,
+`--skip-public-files`, `--skip-private-files`). `project import` applies every
+component that is present and has no skip flags, as importing only a part of a
+consistent archive leaves database rows and files out of sync.
 
 The archive is the interchange unit. Its layout should match the format expected
 by Shopware hosting where applicable and practical, so a CLI export can be
@@ -79,9 +80,8 @@ layout:
 Public and private files are optional tar archives of the corresponding Shopware
 filesystems, not of the project source tree. Export includes a filesystem only
 when that component is selected. Import applies `public.tar.gz` and
-`private.tar.gz` when they are present, unless the matching
-`--skip-public-files` or `--skip-private-files` flag is set. A missing file is
-valid and is not an error. When they are applied, export reads them and import
+`private.tar.gz` when they are present. A missing file is valid and is not an
+error. When they are applied, export reads them and import
 writes them through the project's existing Flysystem configuration in
 `config/packages` (`shopware.filesystem.public` and
 `shopware.filesystem.private`). Only the `local` and `amazon-s3` adapters are
@@ -174,8 +174,9 @@ The first implementation narrows this decision:
   directories before moving the extracted files in.
 - Skipping files on export also excludes their database rows: public media for
   `--skip-public-files`, private media and `import_export_file` for
-  `--skip-private-files`. Referencing rows follow their foreign key delete
-  rules.
+  `--skip-private-files`. Referencing rows are unlinked if their foreign key
+  allows it, otherwise excluded too. As the imported database then has no rows
+  for these files, importing its database empties the matching directories.
 - Export writes a gzip compressed tar, by default
   `shopware-export-<YYYY-MM-DD_HH-MM-SS>Z.tar.gz` in UTC, readable only by its
   owner. Import reads

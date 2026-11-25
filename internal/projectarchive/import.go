@@ -17,6 +17,10 @@ type ImportOptions struct {
 	Archive string
 	// Components selects what is applied. Each must be present in the archive.
 	Components Components
+	// EmptyFiles selects file components that are not in the archive but whose
+	// directories are emptied after the database import, as the imported
+	// database has no rows for their files. Database is ignored.
+	EmptyFiles Components
 	// Environment runs the file transfer commands.
 	Environment Environment
 	// Filesystems are the project's filesystems, required for file components.
@@ -28,7 +32,8 @@ type ImportOptions struct {
 // Import replaces the selected components of the project with the archive's:
 // the tables contained in the dump are recreated, and the media and thumbnail
 // directories of the public filesystem and the whole private filesystem are
-// emptied before the archived files are extracted.
+// emptied before the archived files are extracted. Directories selected by
+// EmptyFiles are emptied after the import.
 func Import(ctx context.Context, opts ImportOptions) error {
 	if !opts.Components.Any() {
 		return errors.New("cannot import: every component is skipped")
@@ -37,12 +42,12 @@ func Import(ctx context.Context, opts ImportOptions) error {
 	// Validate the filesystems before the first write.
 	var publicRoot, privateRoot string
 	var err error
-	if opts.Components.PublicFiles {
+	if opts.Components.PublicFiles || opts.EmptyFiles.PublicFiles {
 		if publicRoot, err = localRoot("public", opts.Filesystems.Public); err != nil {
 			return err
 		}
 	}
-	if opts.Components.PrivateFiles {
+	if opts.Components.PrivateFiles || opts.EmptyFiles.PrivateFiles {
 		if privateRoot, err = localRoot("private", opts.Filesystems.Private); err != nil {
 			return err
 		}
@@ -79,6 +84,19 @@ func Import(ctx context.Context, opts ImportOptions) error {
 
 	if missing := missingComponents(opts.Components, applied); len(missing) > 0 {
 		return fmt.Errorf("cannot import archive %s: it does not contain %s", opts.Archive, strings.Join(missing, ", "))
+	}
+
+	if opts.EmptyFiles.PublicFiles {
+		logging.FromContext(ctx).Infof("Removing public files, as the imported database has no rows for them")
+		if err := emptyFiles(ctx, opts.Environment, publicRoot, publicDirectories); err != nil {
+			return fmt.Errorf("cannot remove public files: %w", err)
+		}
+	}
+	if opts.EmptyFiles.PrivateFiles {
+		logging.FromContext(ctx).Infof("Removing private files, as the imported database has no rows for them")
+		if err := emptyFiles(ctx, opts.Environment, privateRoot, privateDirectories); err != nil {
+			return fmt.Errorf("cannot remove private files: %w", err)
+		}
 	}
 
 	return nil

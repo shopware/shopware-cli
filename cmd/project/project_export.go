@@ -36,7 +36,8 @@ filesystem adapter is supported, not S3 or other adapters.
 
 Skipping files also excludes their database rows: --skip-public-files removes
 public media, --skip-private-files private media and import/export files.
-Rows referencing them are removed or unlinked according to their foreign keys.
+Rows referencing them are unlinked if their foreign key allows it, otherwise
+removed.
 
 The dump flags only shape the database. Files are exported as stored and are
 never anonymized. Do not remove or replace media while exporting, the archive
@@ -109,7 +110,7 @@ needs free space for about twice its size.`,
 	},
 }
 
-// selectedComponents reads the skip flags shared by export and import.
+// selectedComponents reads the skip flags of the export.
 func selectedComponents(cmd *cobra.Command) projectarchive.Components {
 	skipDatabase, _ := cmd.Flags().GetBool(skipDatabaseFlag)
 	skipPublicFiles, _ := cmd.Flags().GetBool(skipPublicFilesFlag)
@@ -120,12 +121,6 @@ func selectedComponents(cmd *cobra.Command) projectarchive.Components {
 		PublicFiles:  !skipPublicFiles,
 		PrivateFiles: !skipPrivateFiles,
 	}
-}
-
-func registerSkipComponentFlags(cmd *cobra.Command) {
-	cmd.Flags().Bool(skipDatabaseFlag, false, "Skip the database")
-	cmd.Flags().Bool(skipPublicFilesFlag, false, "Skip the media and thumbnails of the public filesystem")
-	cmd.Flags().Bool(skipPrivateFilesFlag, false, "Skip the files of the private filesystem")
 }
 
 func printExportSummary(w io.Writer, components projectarchive.Components, anonymized bool, output string) {
@@ -169,6 +164,8 @@ func init() {
 	projectRootCmd.AddCommand(projectExportCmd)
 
 	projectExportCmd.Flags().String("output", "", "Path of the archive (default: shopware-export-<YYYY-MM-DD_HH-MM-SS>Z.tar.gz in UTC)")
-	registerSkipComponentFlags(projectExportCmd)
+	projectExportCmd.Flags().Bool(skipDatabaseFlag, false, "Skip the database")
+	projectExportCmd.Flags().Bool(skipPublicFilesFlag, false, "Skip the media and thumbnails of the public filesystem")
+	projectExportCmd.Flags().Bool(skipPrivateFilesFlag, false, "Skip the files of the private filesystem")
 	registerDumpDataFlags(projectExportCmd)
 }

@@ -156,6 +156,8 @@ func configureDumper(dumper *mysqldump.Dumper, cfg *ConfigDump, opts DumpDatabas
 	dumper.LimitMap = cfg.Limit
 	if exclusions := fileRowExclusions(opts.SkipPublicFileRows, opts.SkipPrivateFileRows); len(exclusions) > 0 {
 		dumper.ExcludeMap = exclusions
+		// Rows that require a file left out of the export are left out too.
+		dumper.ExcludeRestrictedReferences = true
 	}
 	if opts.ResetIdentity {
 		dumper.BuildRowExclusions = resetIdentityExclusions

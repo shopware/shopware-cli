@@ -1,6 +1,7 @@
 package projectarchive
 
 import (
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -193,6 +194,21 @@ func unpackFiles(ctx context.Context, env Environment, root string, dirs []strin
 	}
 
 	return nil
+}
+
+// emptyFiles empties the directories below root. It unpacks an empty archive,
+// so it shares the symlink handling of unpackFiles.
+func emptyFiles(ctx context.Context, env Environment, root string, dirs []string) error {
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	if err := tar.NewWriter(gz).Close(); err != nil {
+		return err
+	}
+	if err := gz.Close(); err != nil {
+		return err
+	}
+
+	return unpackFiles(ctx, env, root, dirs, &archive)
 }
 
 // commandError adds the captured stderr of a failed command to its error.

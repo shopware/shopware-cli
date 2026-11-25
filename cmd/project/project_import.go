@@ -25,11 +25,13 @@ var projectImportCmd = &cobra.Command{
 	Short: "Replace the project database and files with an archive",
 	Long: `Replace the database and the files of the public and private Shopware
 filesystems of the current environment with an archive written by
-"project export". Every component in the archive is applied unless skipped.
+"project export". Every component in the archive is applied.
 
 The database import recreates the tables contained in the archive, other tables
 stay untouched. The media and thumbnail directories of the public filesystem and
 the whole private filesystem are emptied before the archived files are copied.
+When the archive contains the database but no files, the imported database has
+no rows for them, so their directories are emptied as well.
 Only the local filesystem adapter is supported, not S3 or other adapters.
 
 The import replaces shop credentials such as the admin password, and live
@@ -38,7 +40,7 @@ and confirmed before anything is written; pass --force to skip the
 confirmation, which is required without an interactive terminal.`,
 	Example: `  shopware-cli project import shop-export.tar.gz
   shopware-cli project import shop-export.tar.gz --dry-run
-  shopware-cli project import shop-export.tar.gz -e staging --skip-private-files --force`,
+  shopware-cli project import shop-export.tar.gz -e staging --force`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		archive := args[0]
@@ -48,14 +50,11 @@ confirmation, which is required without an interactive terminal.`,
 			return err
 		}
 
-		selected := selectedComponents(cmd)
-		components := projectarchive.Components{
-			Database:     contents.Database && selected.Database,
-			PublicFiles:  contents.PublicFiles && selected.PublicFiles,
-			PrivateFiles: contents.PrivateFiles && selected.PrivateFiles,
-		}
-		if !components.Any() {
-			return fmt.Errorf("cannot import archive %s: every component it contains is skipped", archive)
+		components := contents.Components
+		// The database of an archive without files has no rows for them.
+		emptyFiles := projectarchive.Components{
+			PublicFiles:  components.Database && !components.PublicFiles,
+			PrivateFiles: components.Database && !components.PrivateFiles,
 		}
 
 		projectRoot, err := shop.FindClosestShopwareProject(false)
@@ -71,10 +70,11 @@ confirmation, which is required without an interactive terminal.`,
 		opts := projectarchive.ImportOptions{
 			Archive:     archive,
 			Components:  components,
+			EmptyFiles:  emptyFiles,
 			Environment: cmdExecutor,
 		}
 
-		if components.PublicFiles || components.PrivateFiles {
+		if components.PublicFiles || components.PrivateFiles || emptyFiles.Any() {
 			if opts.Filesystems, err = projectarchive.ResolveFilesystems(cmd.Context(), cmdExecutor); err != nil {
 				return err
 			}
@@ -87,7 +87,7 @@ confirmation, which is required without an interactive terminal.`,
 		}
 
 		target := describeTarget(cmdExecutor, envCfg, projectRoot)
-		printImportPlan(cmd.OutOrStdout(), archive, target, targetVersion, contents, components)
+		printImportPlan(cmd.OutOrStdout(), archive, target, targetVersion, contents, emptyFiles)
 
 		if source := contents.Metadata.Source.ShopwareVersion; targetVersion != unknownShopwareVersion && !projectarchive.SameShopwareMinor(source, targetVersion) {
 			printWarning(cmd.OutOrStdout(),
@@ -144,16 +144,17 @@ func describeTarget(cmdExecutor executor.Executor, envCfg *shop.EnvironmentConfi
 	return fmt.Sprintf("environment %q (%s, %s)", name, cmdExecutor.Type(), location)
 }
 
-func printImportPlan(w io.Writer, archive, target, targetVersion string, contents *projectarchive.Contents, components projectarchive.Components) {
+func printImportPlan(w io.Writer, archive, target, targetVersion string, contents *projectarchive.Contents, emptyFiles projectarchive.Components) {
 	lines := []struct {
-		label     string
-		inArchive bool
-		applied   bool
-		action    string
+		label       string
+		inArchive   bool
+		emptied     bool
+		action      string
+		emptyAction string
 	}{
-		{"Database", contents.Database, components.Database, "replace the tables included in the archive"},
-		{"Public files", contents.PublicFiles, components.PublicFiles, "replace media and thumbnails"},
-		{"Private files", contents.PrivateFiles, components.PrivateFiles, "replace all private files"},
+		{"Database", contents.Database, false, "replace the tables included in the archive", ""},
+		{"Public files", contents.PublicFiles, emptyFiles.PublicFiles, "replace media and thumbnails", "not in the archive, remove media and thumbnails"},
+		{"Private files", contents.PrivateFiles, emptyFiles.PrivateFiles, "replace all private files", "not in the archive, remove all private files"},
 	}
 
 	_, _ = fmt.Fprintf(w, "Archive: %s (Shopware %s, created %s)\n", archive, contents.Metadata.Source.ShopwareVersion, contents.Metadata.CreatedAt.Format("2006-01-02 15:04 MST"))
@@ -161,16 +162,16 @@ func printImportPlan(w io.Writer, archive, target, targetVersion string, content
 
 	for _, line := range lines {
 		switch {
-		case line.applied:
-			_, _ = fmt.Fprintf(w, "%s: %s\n", line.label, line.action)
 		case line.inArchive:
-			_, _ = fmt.Fprintln(w, tui.DimText.Render(line.label+": skipped, left untouched"))
+			_, _ = fmt.Fprintf(w, "%s: %s\n", line.label, line.action)
+		case line.emptied:
+			_, _ = fmt.Fprintf(w, "%s: %s\n", line.label, line.emptyAction)
 		default:
 			_, _ = fmt.Fprintln(w, tui.DimText.Render(line.label+": not in the archive, left untouched"))
 		}
 	}
 
-	if components.Database {
+	if contents.Database {
 		printWarning(w, "Import replaces shop credentials such as the admin password",
 			"Review credentials and live integrations (payment, shipping, apps) before using the copy")
 	}
@@ -238,7 +239,6 @@ func printImportNextSteps(w io.Writer, components projectarchive.Components) {
 func init() {
 	projectRootCmd.AddCommand(projectImportCmd)
 
-	registerSkipComponentFlags(projectImportCmd)
 	projectImportCmd.Flags().Bool("dry-run", false, "Show what would be replaced, without changing anything")
 	projectImportCmd.Flags().Bool("force", false, "Replace the data without confirmation")
 }

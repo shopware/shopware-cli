@@ -3,6 +3,9 @@ package projectarchive
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
+	"database/sql"
+	"database/sql/driver"
 	"os"
 	"path/filepath"
 	"testing"
@@ -100,6 +103,42 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 	link, err := os.Lstat(filepath.Join(target, "project/public/media"))
 	require.NoError(t, err)
 	assert.NotZero(t, link.Mode()&os.ModeSymlink, "shared directory symlink must survive the import")
+}
+
+// noopExecer accepts every statement of a database import.
+type noopExecer struct{}
+
+func (noopExecer) ExecContext(context.Context, string, ...any) (sql.Result, error) {
+	return driver.RowsAffected(0), nil
+}
+
+func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
+	archive := filepath.Join(t.TempDir(), "archive.tar.gz")
+	writeTestArchive(t, archive, map[string]string{
+		metadataEntry: `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`,
+		databaseEntry: "SELECT 1;",
+	})
+
+	project := t.TempDir()
+	writeFile(t, filepath.Join(project, "public/media/a/stale.png"), "stale")
+	writeFile(t, filepath.Join(project, "public/thumbnail/a/stale_400x400.png"), "stale")
+	writeFile(t, filepath.Join(project, "public/theme/all.css"), "kept")
+	writeFile(t, filepath.Join(project, "files/documents/invoice.pdf"), "kept")
+
+	require.NoError(t, Import(t.Context(), ImportOptions{
+		Archive:     archive,
+		Components:  Components{Database: true},
+		EmptyFiles:  Components{PublicFiles: true},
+		Environment: executor.NewLocal(project),
+		Filesystems: localFilesystems(project),
+		Database:    noopExecer{},
+	}))
+
+	assert.NoDirExists(t, filepath.Join(project, "public/media/a"))
+	assert.NoDirExists(t, filepath.Join(project, "public/thumbnail/a"))
+	assert.DirExists(t, filepath.Join(project, "public/media"))
+	assert.FileExists(t, filepath.Join(project, "public/theme/all.css"))
+	assert.FileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
 }
 
 func TestImportRejectsUnsupportedFilesystemBeforeWriting(t *testing.T) {
