@@ -24,6 +24,11 @@ import (
 // harmless, the exported database does not reference them.
 const exportFilesLog = "Exporting %s files: do not replace or delete files until the export finishes, otherwise the archive may miss files the exported database references"
 
+// stagedArchive is the name the archive is written to in the staging
+// directory before it is renamed to the output. It must differ from the
+// payload entries staged next to it.
+const stagedArchive = ".archive"
+
 // ExportOptions configures Export.
 type ExportOptions struct {
 	// Output is the path of the written archive.
@@ -36,6 +41,8 @@ type ExportOptions struct {
 	Filesystems Filesystems
 	// ShopwareVersion is recorded as the source version.
 	ShopwareVersion string
+	// CreatedAt is recorded as the creation time, defaults to now.
+	CreatedAt time.Time
 	// Database configures the database component.
 	Database DatabaseExport
 }
@@ -63,9 +70,14 @@ func Export(ctx context.Context, opts ExportOptions) (err error) {
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(staging)) }()
 
+	createdAt := opts.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+
 	metadata := Metadata{
 		FormatVersion: FormatVersion,
-		CreatedAt:     time.Now().UTC().Truncate(time.Second),
+		CreatedAt:     createdAt.UTC().Truncate(time.Second),
 		Source:        Source{ShopwareVersion: opts.ShopwareVersion},
 	}
 
@@ -102,7 +114,7 @@ func Export(ctx context.Context, opts ExportOptions) (err error) {
 		return err
 	}
 
-	archivePath := filepath.Join(staging, filepath.Base(opts.Output))
+	archivePath := filepath.Join(staging, stagedArchive)
 	if err := writeArchive(archivePath, metadataJSON, staging, entries); err != nil {
 		return fmt.Errorf("cannot write archive: %w", err)
 	}
@@ -181,9 +193,10 @@ func exportFiles(ctx context.Context, env Environment, name string, fs Filesyste
 }
 
 // writeArchive writes the outer tar.gz with metadata.json first, so readers
-// learn about the archive before its payloads.
+// learn about the archive before its payloads. Only the owner may read it, as
+// it can contain credentials, customer data, and private documents.
 func writeArchive(path string, metadata []byte, dir string, entries []string) (err error) {
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}

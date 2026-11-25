@@ -176,7 +176,9 @@ The first implementation narrows this decision:
   `--skip-public-files`, private media and `import_export_file` for
   `--skip-private-files`. Referencing rows follow their foreign key delete
   rules.
-- Export writes a gzip compressed tar (`shop-export.tar.gz`). Import reads
+- Export writes a gzip compressed tar, by default
+  `shopware-export-<YYYY-MM-DD_HH-MM-SS>Z.tar.gz` in UTC, readable only by its
+  owner. Import reads
   plain, gzip, or zstd compressed tars. As tar entries need their size upfront,
   export stages the payloads next to the output file.
 - `source.shopware_version` is the `kernel.shopware_version` container

@@ -37,23 +37,34 @@ shift
 mkdir -p "$@"
 exec tar -chf - "$@"`
 
-// unpackScript extracts the tar read from stdin into a staging directory
-// below the root ($1), then replaces the contents of each directory with the
-// extracted one. Extracting first leaves the target untouched when the archive
-// is broken. Moving contents keeps directories that are symlinks into a shared
-// directory in place, which tar would replace with real directories.
+// unpackScript extracts the tar read from stdin into a staging directory, then
+// replaces the contents of each directory below the root ($1) with the
+// extracted one. It does not extract directly into the directories:
+//   - Import replaces the directories, so extracting directly would mean
+//     emptying them first. A truncated or corrupt archive would then lose the
+//     existing files, while a failed extraction into staging leaves them as is.
+//   - Directories may be symlinks into a shared directory, as in SSH
+//     deployments. tar replaces such symlinks with real directories unless GNU
+//     tar's --keep-directory-symlink is used, which bsdtar and BusyBox tar lack.
+//     Moving the extracted contents keeps the symlinks.
+//
+// The staging directory lives in the first directory instead of the root, as
+// the root may be read-only, like the public directory of a sealed SSH
+// release, while the directories themselves link to writable shared ones.
+// find runs commands with "+", so a failing rm or mv fails the script.
 const unpackScript = `set -e
 mkdir -p "$1"
 cd "$1"
 shift
-staging=$(mktemp -d .shopware-import.XXXXXX)
+mkdir -p "$@"
+staging=$(mktemp -d "$1/.shopware-import.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
 tar -xf - -C "$staging"
+staging_name=$(basename "$staging")
 for dir in "$@"; do
-	mkdir -p "$dir"
-	find "$dir/" -mindepth 1 -maxdepth 1 ! -name "$staging" -exec rm -rf {} \;
+	find "$dir/" -mindepth 1 -maxdepth 1 ! -name "$staging_name" -exec rm -rf {} +
 	if [ -d "$staging/$dir" ]; then
-		find "$staging/$dir/" -mindepth 1 -maxdepth 1 -exec mv {} "$dir/" \;
+		find "$staging/$dir/" -mindepth 1 -maxdepth 1 -exec sh -c 'mv "$@" "$0"' "$dir/" {} +
 	fi
 done`
 
@@ -74,7 +85,7 @@ type Filesystems struct {
 // ResolveFilesystems reads the resolved shopware.filesystem configuration of
 // the project.
 func ResolveFilesystems(ctx context.Context, env Environment) (Filesystems, error) {
-	output, err := env.ConsoleCommand(ctx, "debug:config", "shopware", "filesystem", "--no-ansi").Output()
+	output, err := env.ConsoleCommand(ctx, "debug:config", "shopware", "filesystem", "--resolve-env", "--no-ansi").Output()
 	if err != nil {
 		return Filesystems{}, fmt.Errorf("cannot read the filesystem configuration: %w", commandError(err))
 	}
@@ -102,12 +113,17 @@ func parseFilesystems(output []byte) (Filesystems, error) {
 }
 
 // localRoot returns the root of a local filesystem and rejects other adapters.
+// A root with an unresolved parameter like %env(...)% is rejected, as files
+// would be read from or written to a literal directory of that name.
 func localRoot(name string, fs Filesystem) (string, error) {
 	if !strings.EqualFold(fs.Type, localAdapter) {
 		return "", fmt.Errorf("cannot transfer files of the %s filesystem: adapter %q is not supported, only %q", name, fs.Type, localAdapter)
 	}
 	if fs.Config.Root == "" || fs.Config.Root == "/" {
 		return "", fmt.Errorf("cannot transfer files of the %s filesystem: invalid root %q", name, fs.Config.Root)
+	}
+	if strings.Contains(fs.Config.Root, "%") {
+		return "", fmt.Errorf("cannot transfer files of the %s filesystem: root %q contains an unresolved parameter", name, fs.Config.Root)
 	}
 
 	return fs.Config.Root, nil

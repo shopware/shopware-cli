@@ -47,7 +47,8 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 	writeFile(t, filepath.Join(source, "project/public/theme/all.css"), "not exported")
 	writeFile(t, filepath.Join(source, "project/files/documents/invoice.pdf"), "invoice")
 
-	archive := filepath.Join(t.TempDir(), "shop-export.tar.gz")
+	// Named like a payload entry, which must not clash with the staged one.
+	archive := filepath.Join(t.TempDir(), privateFilesEntry)
 	sourceProject := filepath.Join(source, "project")
 	require.NoError(t, Export(t.Context(), ExportOptions{
 		Output:          archive,
@@ -56,6 +57,10 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 		Filesystems:     localFilesystems(sourceProject),
 		ShopwareVersion: "6.7.1.0",
 	}))
+
+	info, err := os.Stat(archive)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "archive may contain sensitive data")
 
 	contents, err := Inspect(archive)
 	require.NoError(t, err)
@@ -66,10 +71,16 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 
 	target := t.TempDir()
 	sharedDir(t, target, "public/media")
+	sharedDir(t, target, "public/thumbnail")
 	sharedDir(t, target, "files")
 	writeFile(t, filepath.Join(target, "shared/public/media/stale.png"), "stale")
 	writeFile(t, filepath.Join(target, "shared/files/.hidden"), "stale")
 	writeFile(t, filepath.Join(target, "project/public/theme/all.css"), "kept")
+
+	// SSH deployments seal the release, only the shared directories are writable.
+	sealed := filepath.Join(target, "project/public")
+	require.NoError(t, os.Chmod(sealed, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(sealed, 0o755) })
 
 	targetProject := filepath.Join(target, "project")
 	require.NoError(t, Import(t.Context(), ImportOptions{
@@ -80,7 +91,7 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 	}))
 
 	assert.FileExists(t, filepath.Join(target, "shared/public/media/a/logo.png"))
-	assert.FileExists(t, filepath.Join(target, "project/public/thumbnail/a/logo_400x400.png"))
+	assert.FileExists(t, filepath.Join(target, "shared/public/thumbnail/a/logo_400x400.png"))
 	assert.FileExists(t, filepath.Join(target, "shared/files/documents/invoice.pdf"))
 	assert.NoFileExists(t, filepath.Join(target, "shared/public/media/stale.png"))
 	assert.NoFileExists(t, filepath.Join(target, "shared/files/.hidden"))
@@ -91,22 +102,35 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 	assert.NotZero(t, link.Mode()&os.ModeSymlink, "shared directory symlink must survive the import")
 }
 
-func TestImportRejectsNonLocalFilesystemBeforeWriting(t *testing.T) {
-	project := t.TempDir()
-	writeFile(t, filepath.Join(project, "public/media/keep.png"), "kept")
+func TestImportRejectsUnsupportedFilesystemBeforeWriting(t *testing.T) {
+	cases := []struct {
+		name    string
+		modify  func(fs *Filesystem)
+		wantErr string
+	}{
+		{name: "non-local adapter", modify: func(fs *Filesystem) { fs.Type = "amazon-s3" }, wantErr: "amazon-s3"},
+		{name: "unresolved root", modify: func(fs *Filesystem) { fs.Config.Root = "%env(PRIVATE_ROOT)%" }, wantErr: "unresolved"},
+	}
 
-	fs := localFilesystems(project)
-	fs.Private.Type = "amazon-s3"
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			project := t.TempDir()
+			writeFile(t, filepath.Join(project, "public/media/keep.png"), "kept")
 
-	err := Import(t.Context(), ImportOptions{
-		Archive:     filepath.Join(t.TempDir(), "missing.tar.gz"),
-		Components:  Components{PublicFiles: true, PrivateFiles: true},
-		Environment: executor.NewLocal(project),
-		Filesystems: fs,
-	})
+			fs := localFilesystems(project)
+			tc.modify(&fs.Private)
 
-	require.ErrorContains(t, err, "amazon-s3")
-	assert.FileExists(t, filepath.Join(project, "public/media/keep.png"))
+			err := Import(t.Context(), ImportOptions{
+				Archive:     filepath.Join(t.TempDir(), "missing.tar.gz"),
+				Components:  Components{PublicFiles: true, PrivateFiles: true},
+				Environment: executor.NewLocal(project),
+				Filesystems: fs,
+			})
+
+			require.ErrorContains(t, err, tc.wantErr)
+			assert.FileExists(t, filepath.Join(project, "public/media/keep.png"))
+		})
+	}
 }
 
 func TestInspectValidatesArchive(t *testing.T) {

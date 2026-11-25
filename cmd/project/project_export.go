@@ -3,6 +3,7 @@ package project
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -10,6 +11,11 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
+
+// exportTimestampLayout formats the start of an export in UTC in the default
+// output name, marked with the ISO 8601 designator Z. It sorts chronologically
+// and avoids characters invalid on Windows.
+const exportTimestampLayout = "2006-01-02_15-04-05Z"
 
 const (
 	skipDatabaseFlag     = "skip-database"
@@ -46,7 +52,11 @@ needs free space for about twice its size.`,
 			return fmt.Errorf("cannot export: every component is skipped, remove one of --%s, --%s, --%s", skipDatabaseFlag, skipPublicFilesFlag, skipPrivateFilesFlag)
 		}
 
+		createdAt := time.Now().UTC()
 		output, _ := cmd.Flags().GetString("output")
+		if output == "" {
+			output = "shopware-export-" + createdAt.Format(exportTimestampLayout) + ".tar.gz"
+		}
 
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
@@ -62,6 +72,7 @@ needs free space for about twice its size.`,
 			Output:      output,
 			Components:  components,
 			Environment: cmdExecutor,
+			CreatedAt:   createdAt,
 		}
 
 		if components.PublicFiles || components.PrivateFiles {
@@ -157,7 +168,7 @@ func printExportSummary(w io.Writer, components projectarchive.Components, anony
 func init() {
 	projectRootCmd.AddCommand(projectExportCmd)
 
-	projectExportCmd.Flags().String("output", "shop-export.tar.gz", "Path of the archive")
+	projectExportCmd.Flags().String("output", "", "Path of the archive (default: shopware-export-<YYYY-MM-DD_HH-MM-SS>Z.tar.gz in UTC)")
 	registerSkipComponentFlags(projectExportCmd)
 	registerDumpDataFlags(projectExportCmd)
 }
