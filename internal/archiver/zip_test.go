@@ -3,7 +3,9 @@ package archiver
 import (
 	"archive/zip"
 	"bytes"
+	"compress/flate"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +13,44 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type cancellingZipReader struct {
+	reader io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (r *cancellingZipReader) Read(p []byte) (int, error) {
+	if len(p) > 128 {
+		p = p[:128]
+	}
+	n, err := r.reader.Read(p)
+	r.cancel()
+	return n, err
+}
+
+func (r *cancellingZipReader) Close() error { return r.reader.Close() }
+
+func TestUnzipStopsDuringEntry(t *testing.T) {
+	var archive bytes.Buffer
+	w := zip.NewWriter(&archive)
+	f, err := w.Create("large.txt")
+	require.NoError(t, err)
+	_, err = f.Write(bytes.Repeat([]byte("content"), 10000))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	r, err := zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	r.RegisterDecompressor(zip.Deflate, func(source io.Reader) io.ReadCloser {
+		return &cancellingZipReader{reader: flate.NewReader(source), cancel: cancel}
+	})
+
+	err = Unzip(ctx, r, t.TempDir())
+	assert.ErrorIs(t, err, context.Canceled)
+}
 
 func TestUnzipDoesNotWriteAfterCancellation(t *testing.T) {
 	var archive bytes.Buffer
@@ -20,10 +60,13 @@ func TestUnzipDoesNotWriteAfterCancellation(t *testing.T) {
 	_, err = file.Write([]byte("contents"))
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
+
 	r, err := zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))
 	require.NoError(t, err)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	dest := t.TempDir()
 	assert.ErrorIs(t, Unzip(ctx, r, dest), context.Canceled)
 	assert.NoFileExists(t, filepath.Join(dest, "file.txt"))

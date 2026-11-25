@@ -149,16 +149,23 @@ func (e *ToolExecution) Fail(err *ToolError) {
 	e.result.Errors = append(e.result.Errors, *err)
 }
 
-// finalize transfers the result to the runner after tool cleanup and records
-// cancellation unless it was already reported. Further reporting is a programmer error.
+// finalize transfers the result after tool cleanup and prioritizes cancellation.
+// Further reporting is a programmer error.
 func (e *ToolExecution) finalize(cancellation error) ToolResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.assertOpen()
-	if cancellation != nil && !slices.ContainsFunc(e.result.Errors, func(failure ToolError) bool {
-		return errors.Is(failure, cancellation)
-	}) {
-		e.result.Errors = append(e.result.Errors, ToolError{Err: cancellation})
+	if cancellation != nil {
+		index := slices.IndexFunc(e.result.Errors, func(failure ToolError) bool {
+			return errors.Is(failure, cancellation)
+		})
+		if index < 0 {
+			e.result.Errors = append([]ToolError{{Err: cancellation}}, e.result.Errors...)
+		} else if index > 0 {
+			failure := e.result.Errors[index]
+			copy(e.result.Errors[1:index+1], e.result.Errors[:index])
+			e.result.Errors[0] = failure
+		}
 	}
 	e.finalized = true
 	return e.result

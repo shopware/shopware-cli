@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/shopware/shopware-cli/internal/deprecation"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -299,14 +299,10 @@ func (tl ToolList[T]) CompleteNames(toComplete string) []string {
 	return completions
 }
 
-// CommandContext logs the command before creating it with exec.CommandContext.
+// CommandContext logs the command and applies system process cancellation behavior.
 func CommandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
 	logging.FromContext(ctx).Debugf("Executing command: %s %s", name, strings.Join(arg, " "))
-	cmd := exec.CommandContext(ctx, name, arg...)
-	// Bound output draining if a descendant keeps a pipe open after cancellation.
-	cmd.WaitDelay = time.Second
-	configureToolCancellation(cmd)
-	return cmd
+	return system.CommandContext(ctx, name, arg...)
 }
 
 func expectedExit(err error, codes ...int) bool {

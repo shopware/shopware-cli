@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Unzip extracts an archive, checking cancellation between entries.
+// Unzip extracts an archive, checking cancellation between reads.
 func Unzip(ctx context.Context, r *zip.Reader, dest string) error {
 	errorFormat := "unzip: %w"
 
@@ -44,10 +44,11 @@ func Unzip(ctx context.Context, r *zip.Reader, dest string) error {
 
 		rc, err := f.Open()
 		if err != nil {
+			_ = outFile.Close()
 			return fmt.Errorf(errorFormat, err)
 		}
 
-		_, err = io.Copy(outFile, rc) //nolint:gosec
+		_, err = io.Copy(outFile, ContextReader(ctx, rc)) //nolint:gosec
 
 		// Close the file without defer to close before next iteration of loop
 		_ = outFile.Close()

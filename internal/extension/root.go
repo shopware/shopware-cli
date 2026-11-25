@@ -2,11 +2,12 @@ package extension
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/shyim/go-version"
@@ -55,23 +56,66 @@ func GetExtensionByFolder(ctx context.Context, path string) (Extension, error) {
 	return ext, err
 }
 
+// GetExtensionByZip extracts an extension into a temporary directory. The caller
+// must remove filepath.Dir(ext.GetPath()) when the returned extension is no longer needed.
+// The extension must be in an immediate child folder of the extraction directory.
 func GetExtensionByZip(ctx context.Context, filePath string) (Extension, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("cannot open extension archive: %s is not a regular file", filePath)
+	}
+
+	archive, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = archive.Close() }()
+
+	info, err = archive.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("cannot open extension archive: %s is not a regular file", filePath)
+	}
+
+	file, err := zip.NewReader(contextReaderAt{ctx: ctx, reader: archive}, info.Size())
+	if err != nil {
+		return nil, err
+	}
+	if len(file.File) == 0 {
+		return nil, errors.New("cannot extract empty extension archive")
+	}
+
+	fileName := file.File[0].Name
+	if strings.Contains(fileName, "..") {
+		return nil, errors.New("invalid zip file")
+	}
+
+	extName := strings.Split(fileName, "/")[0]
+
 	dir, err := os.MkdirTemp("", "extension")
 	if err != nil {
 		return nil, err
 	}
 
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
+	keep := false
+	defer func() {
+		if !keep {
+			_ = os.RemoveAll(dir)
+		}
+	}()
 
-	file, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
-	if err != nil {
-		return nil, err
+	extPath := filepath.Join(dir, extName)
+	if filepath.Dir(extPath) != filepath.Clean(dir) {
+		return nil, errors.New("cannot extract extension archive without a top-level extension folder")
 	}
 
 	err = archiver.Unzip(ctx, file, dir)
@@ -79,14 +123,26 @@ func GetExtensionByZip(ctx context.Context, filePath string) (Extension, error) 
 		return nil, err
 	}
 
-	fileName := file.File[0].Name
-
-	if strings.Contains(fileName, "..") {
-		return nil, errors.New("invalid zip file")
+	ext, err := GetExtensionByFolder(ctx, extPath)
+	if err != nil {
+		return nil, err
 	}
 
-	extName := strings.Split(fileName, "/")[0]
-	return GetExtensionByFolder(ctx, fmt.Sprintf("%s/%s", dir, extName))
+	keep = true
+	return ext, nil
+}
+
+// The reader is confined to the lifetime of GetExtensionByZip.
+type contextReaderAt struct {
+	ctx    context.Context //nolint:containedctx
+	reader io.ReaderAt
+}
+
+func (r contextReaderAt) ReadAt(p []byte, offset int64) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.ReadAt(p, offset)
 }
 
 type ExtensionTranslated struct {

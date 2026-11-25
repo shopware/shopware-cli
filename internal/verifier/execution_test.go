@@ -1,7 +1,9 @@
 package verifier
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"strconv"
 	"sync"
@@ -13,6 +15,29 @@ import (
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
+
+func TestToolExecutionPrioritizesCancellation(t *testing.T) {
+	for _, cause := range []error{ErrQATimeout, context.Canceled, errors.New("signal received")} {
+		for _, alreadyReported := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/reported=%t", cause, alreadyReported), func(t *testing.T) {
+				execution := NewToolExecution(nil)
+				failure := errors.New("subprocess killed")
+				detail := ToolError{Err: failure, Command: []string{"tool"}, Dir: "dir", Stdout: "out", Stderr: "err"}
+				execution.Fail(&detail)
+				if alreadyReported {
+					execution.Fail(&ToolError{Err: fmt.Errorf("interrupted: %w", cause), Command: []string{"other"}})
+				}
+				result := execution.finalize(cause)
+				require.Len(t, result.Errors, 2)
+				assert.ErrorIs(t, result.Errors[0], cause)
+				assert.Equal(t, detail, result.Errors[1])
+				if alreadyReported {
+					assert.Equal(t, []string{"other"}, result.Errors[0].Command)
+				}
+			})
+		}
+	}
+}
 
 func TestToolExecutionCollectsConcurrentFailures(t *testing.T) {
 	execution := NewToolExecution(func([]validation.CheckResult) bool { return true })

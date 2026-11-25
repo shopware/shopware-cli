@@ -18,7 +18,7 @@ func GetInstalledNodeVersion(ctx context.Context) (string, error) {
 	}
 
 	// Get the Node.js version
-	cmd := exec.CommandContext(ctx, nodePath, "-v")
+	cmd := CommandContext(ctx, nodePath, "-v")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get Node.js version: %w, output: %s", err, string(output))
