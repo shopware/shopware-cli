@@ -21,6 +21,10 @@
         {
           "id": "http-errors",
           "criterion": "The agent detects HTTP error responses rather than trusting curl's default exit status."
+        },
+        {
+          "id": "source-note",
+          "criterion": "The agent names the API documentation or generated reference it actually consulted when reporting the result."
         }
       ]
     },
@@ -136,6 +140,24 @@
         {
           "id": "no-mode-change",
           "criterion": "The agent does not change the production environment to development mode to expose the schema."
+        }
+      ]
+    },
+    {
+      "id": "unavailable-generated-reference",
+      "prompt": "List one product in my local Shopware shop. Its generated API reference is unavailable, but version-matched official documentation is accessible.",
+      "criteria": [
+        {
+          "id": "unavailable",
+          "criterion": "The agent tells the user that the generated API reference was unavailable."
+        },
+        {
+          "id": "fallback",
+          "criterion": "The agent identifies the official documentation it actually consulted."
+        },
+        {
+          "id": "no-false-claim",
+          "criterion": "The agent does not claim to have consulted the unavailable generated reference."
         }
       ]
     }

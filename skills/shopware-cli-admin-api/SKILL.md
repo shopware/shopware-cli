@@ -52,6 +52,14 @@ an API reference. Do not infer an endpoint or payload from an example here.
    schema is unavailable or conflicts, say what is uncertain and investigate
    the version-specific source or ask the user; do not invent API details.
 
+When reporting an API operation, briefly name the documentation or generated
+reference actually consulted, such as the selected shop's generated Admin API
+reference, unless the user requests a different output format. If a source was
+unavailable, say so and name any fallback actually used. Give the specific URL
+or schema path when requested or needed to explain a decision. Never claim to
+have checked a source you could not access, and redact credentials and
+sensitive values from references and output.
+
 ## Make a request
 
 Consult those sources for the endpoint, method, payload and required
