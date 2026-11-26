@@ -108,3 +108,12 @@ func TestListMCPTypeFromRealDirectory(t *testing.T) {
 		assert.Equal(t, TypeMCP, e.Type)
 	}
 }
+
+func TestAdminAPISkillEntry(t *testing.T) {
+	e, ok := Load().Get("shopware-cli-admin-api")
+	require.True(t, ok)
+
+	assert.Equal(t, TypeSkill, e.Type)
+	assert.Equal(t, DeliveryGit, e.Delivery.Kind)
+	assert.Equal(t, "shopware/shopware-cli", e.Delivery.Repository)
+}

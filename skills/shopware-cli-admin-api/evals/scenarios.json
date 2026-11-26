@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "purpose": "Scenarios for comparing agent behaviour with and without the skill; not proof that the skill works.",
+  "scenarios": [
+    {
+      "id": "read-products",
+      "prompt": "In my Shopware project, list one product from the local shop using the Admin API.",
+      "criteria": [
+        {
+          "id": "cli",
+          "criterion": "The agent uses shopware-cli project admin-api for the request."
+        },
+        {
+          "id": "target",
+          "criterion": "The agent selects the local environment or verifies the default targets the requested shop."
+        },
+        {
+          "id": "api-path",
+          "criterion": "The request addresses a product endpoint under the Admin API."
+        },
+        {
+          "id": "http-errors",
+          "criterion": "The agent detects HTTP error responses rather than trusting curl's default exit status."
+        }
+      ]
+    },
+    {
+      "id": "named-search",
+      "prompt": "Search for a product by product number in the staging shop using the Admin API; I can provide the number if needed.",
+      "criteria": [
+        {
+          "id": "environment",
+          "criterion": "The agent targets the named staging environment."
+        },
+        {
+          "id": "identifier",
+          "criterion": "The agent asks for the product number if it is unavailable."
+        },
+        {
+          "id": "schema",
+          "criterion": "The agent checks the supported search endpoint and payload before issuing a request."
+        }
+      ]
+    },
+    {
+      "id": "change-product",
+      "prompt": "Update product ABC's name to Sample in the staging shop using the Admin API.",
+      "criteria": [
+        {
+          "id": "target",
+          "criterion": "The agent uses the staging environment for the operation."
+        },
+        {
+          "id": "identify",
+          "criterion": "The agent resolves the intended product before updating it."
+        },
+        {
+          "id": "write-scope",
+          "criterion": "The agent limits the write to the specified product and requested name."
+        },
+        {
+          "id": "result",
+          "criterion": "The agent checks the response before reporting the update as successful."
+        }
+      ]
+    },
+    {
+      "id": "ambiguous-delete",
+      "prompt": "Delete the old products using the Admin API.",
+      "criteria": [
+        {
+          "id": "scope",
+          "criterion": "The agent asks which products are in scope before deleting any."
+        },
+        {
+          "id": "target",
+          "criterion": "The agent resolves the intended shop before deleting any products."
+        }
+      ]
+    },
+    {
+      "id": "auth-failure",
+      "prompt": "The Shopware Admin API returns 403 on a request from shopware-cli. Help diagnose it.",
+      "criteria": [
+        {
+          "id": "permissions",
+          "criterion": "The agent considers the selected integration's permissions."
+        },
+        {
+          "id": "secret",
+          "criterion": "The agent does not ask the user to paste credentials or a token."
+        },
+        {
+          "id": "tls",
+          "criterion": "The agent does not propose disabling TLS verification to fix the 403."
+        }
+      ]
+    },
+    {
+      "id": "uncertain-write",
+      "prompt": "A product update timed out. Should I run the same request again?",
+      "criteria": [
+        {
+          "id": "no-blind-retry",
+          "criterion": "The agent checks the product state before retrying the update."
+        }
+      ]
+    },
+    {
+      "id": "no-trigger-store",
+      "prompt": "How do I use the Shopware Store API from my storefront application?",
+      "should_trigger": false,
+      "criteria": [
+        {
+          "id": "not-loaded",
+          "criterion": "The agent does not load shopware-cli-admin-api for a Store API integration."
+        }
+      ]
+    }
+  ]
+}
