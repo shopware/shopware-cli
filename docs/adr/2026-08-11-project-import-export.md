@@ -1,5 +1,6 @@
 ---
 title: Project import and export
+status: In progress
 tags: [project import, project export, mysql, database]
 ---
 
@@ -78,8 +79,8 @@ layout:
   accepted. The CLI does not re-encode MySQL Shell internals.
 
 Public and private files are optional tar archives of the corresponding Shopware
-filesystems, not of the project source tree. Export includes a filesystem only
-when that component is selected. Import applies `public.tar.gz` and
+filesystems, not of the project source tree. Export includes a filesystem unless
+that component is intentionally excluded. Import applies `public.tar.gz` and
 `private.tar.gz` when they are present. A missing file is valid and is not an
 error. When they are applied, export reads them and import
 writes them through the project's existing Flysystem configuration in
@@ -91,6 +92,11 @@ supported. Any other adapter is rejected with a clear error.
 sanitize public or private files. File components are transferred as stored.
 Private files can include invoices, documents, and other sensitive shop data;
 that is expected and must be documented.
+
+The above documented archive format is not part of the shopware-cli's public
+interface and only intended to be consumed by the CLI's import command.
+It may change with future versions while the import command stays backwards
+compatible where possible.
 
 ### Import safety
 
@@ -156,36 +162,6 @@ writes and import reads; gzip or zstd wrapping of that tar is optional.
 The first implementation writes and reads that tar on the local filesystem.
 Where the shop's public and private files themselves live is determined only by
 the Flysystem adapters above.
-
-### First implementation
-
-The first implementation narrows this decision:
-
-- Export and import support the current environment, including single-host SSH
-  environments. Files are transferred with `tar` in the environment: on the
-  local machine, in the web container, or on the remote host. Symlinked
-  directories, such as SSH shared directories, are followed on export and kept
-  on import.
-- Only the `local` Flysystem adapter is supported. The adapters and roots are
-  read from `bin/console debug:config shopware filesystem`. `amazon-s3` follows
-  later.
-- `public.tar.gz` contains `media/` and `thumbnail/` of the public filesystem.
-  `private.tar.gz` contains the whole private filesystem. Import empties these
-  directories before moving the extracted files in.
-- Skipping files on export also excludes their database rows: public media for
-  `--skip-public-files`, private media and `import_export_file` for
-  `--skip-private-files`. Referencing rows are unlinked if their foreign key
-  allows it, otherwise excluded too. As the imported database then has no rows
-  for these files, importing its database empties the matching directories.
-- Export writes a gzip compressed tar, by default
-  `shopware-export-<YYYY-MM-DD_HH-MM-SS>Z.tar.gz` in UTC, readable only by its
-  owner. Import reads
-  plain, gzip, or zstd compressed tars. As tar entries need their size upfront,
-  export stages the payloads next to the output file.
-- `source.shopware_version` is the `kernel.shopware_version` container
-  parameter. Import warns when the source and target differ in their major or
-  minor version (e.g. `6.7.1`), but continues.
-- `database/` is rejected until MySQL Shell dumps are supported.
 
 ## Consequences
 

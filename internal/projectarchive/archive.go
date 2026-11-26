@@ -5,8 +5,6 @@ package projectarchive
 
 import (
 	"archive/tar"
-	"bufio"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -16,8 +14,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/klauspost/compress/zstd"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 )
@@ -123,8 +119,8 @@ func Inspect(path string) (*Contents, error) {
 	return &contents, nil
 }
 
-// walkArchive calls fn for every regular file of the outer archive, which may
-// be a plain, gzip or zstd compressed tar. Names are normalized without "./".
+// walkArchive calls fn for every regular file of the outer tar.gz archive.
+// Names are normalized without "./".
 func walkArchive(path string, fn func(name string, r io.Reader) error) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -132,13 +128,13 @@ func walkArchive(path string, fn func(name string, r io.Reader) error) error {
 	}
 	defer func() { _ = file.Close() }()
 
-	r, closeReader, err := decompress(bufio.NewReader(file))
+	gz, err := gzip.NewReader(file)
 	if err != nil {
 		return err
 	}
-	defer closeReader()
+	defer func() { _ = gz.Close() }()
 
-	tr := tar.NewReader(r)
+	tr := tar.NewReader(gz)
 	for {
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -158,36 +154,6 @@ func walkArchive(path string, fn func(name string, r io.Reader) error) error {
 		if err := fn(name, tr); err != nil {
 			return err
 		}
-	}
-}
-
-var (
-	gzipMagic = []byte{0x1f, 0x8b}
-	zstdMagic = []byte{0x28, 0xb5, 0x2f, 0xfd}
-)
-
-// decompress detects the compression of the outer archive by its magic bytes.
-func decompress(r *bufio.Reader) (io.Reader, func(), error) {
-	magic, err := r.Peek(len(zstdMagic))
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, nil, err
-	}
-
-	switch {
-	case bytes.HasPrefix(magic, gzipMagic):
-		gz, err := gzip.NewReader(r)
-		if err != nil {
-			return nil, nil, err
-		}
-		return gz, func() { _ = gz.Close() }, nil
-	case bytes.HasPrefix(magic, zstdMagic):
-		zr, err := zstd.NewReader(r)
-		if err != nil {
-			return nil, nil, err
-		}
-		return zr, zr.Close, nil
-	default:
-		return r, func() {}, nil
 	}
 }
 

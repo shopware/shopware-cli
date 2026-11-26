@@ -25,18 +25,18 @@ const (
 
 var projectExportCmd = &cobra.Command{
 	Use:   "export",
-	Short: "Export the project database and files into an archive",
+	Short: "Export the project database and Shopware managed files into an archive",
 	Long: `Export the database and the files of the public and private Shopware
 filesystems of the current environment into one archive, which "project import"
 restores. Code and extensions are not part of the archive.
 
 From the public filesystem only media and thumbnails are exported, from the
-private filesystem everything, e.g. invoices and documents. Only the local
+private filesystem everything, e.g. invoices and documents. For now only the local
 filesystem adapter is supported, not S3 or other adapters.
 
 Skipping files also excludes their database rows: --skip-public-files removes
-public media, --skip-private-files private media and import/export files.
-Rows referencing them are unlinked if their foreign key allows it, otherwise
+public media like product images, --skip-private-files private media like order documents.
+DB rows referencing them are unlinked if their foreign key allows it, otherwise
 removed.
 
 The dump flags only shape the database. Files are exported as stored and are
@@ -45,7 +45,7 @@ may miss files otherwise. The archive is staged next to the output file, which
 needs free space for about twice its size.`,
 	Example: `  shopware-cli project export
   shopware-cli project export --anonymize --output anonymized.tar.gz
-  shopware-cli project export -e production --skip-private-files`,
+  shopware-cli project export -e production --clean --skip-private-files`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		components := selectedComponents(cmd)
@@ -156,7 +156,6 @@ func printExportSummary(w io.Writer, components projectarchive.Components, anony
 	if components.PublicFiles || components.PrivateFiles {
 		_, _ = fmt.Fprintln(w)
 		_, _ = fmt.Fprintln(w, tui.YellowText.Render("⚠ Files are not anonymized and may contain sensitive data"))
-		_, _ = fmt.Fprintln(w, "  Review the archive before sharing it")
 	}
 }
 

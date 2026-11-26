@@ -22,7 +22,7 @@ const unknownShopwareVersion = "unknown"
 
 var projectImportCmd = &cobra.Command{
 	Use:   "import archive",
-	Short: "Replace the project database and files with an archive",
+	Short: "Replace the project database and Shopware managed files with an archive",
 	Long: `Replace the database and the files of the public and private Shopware
 filesystems of the current environment with an archive written by
 "project export". Every component in the archive is applied.
@@ -32,7 +32,7 @@ stay untouched. The media and thumbnail directories of the public filesystem and
 the whole private filesystem are emptied before the archived files are copied.
 When the archive contains the database but no files, the imported database has
 no rows for them, so their directories are emptied as well.
-Only the local filesystem adapter is supported, not S3 or other adapters.
+For now only the local filesystem adapter is supported, not S3 or other adapters.
 
 The import replaces shop credentials such as the admin password, and live
 integrations of the source shop become active on the target. A summary is shown
@@ -220,7 +220,6 @@ func printImportNextSteps(w io.Writer, components projectarchive.Components) {
 	steps := []string{command + " cache:clear"}
 	if components.Database {
 		steps = append(steps,
-			command+" dal:refresh:index",
 			command+" theme:compile",
 			command+" es:index (when Elasticsearch or OpenSearch is used)",
 		)
