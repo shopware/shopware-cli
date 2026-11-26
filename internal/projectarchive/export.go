@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
-
+	"github.com/shopware/shopware-cli/internal/archiver"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -37,8 +36,9 @@ type ExportOptions struct {
 	Components Components
 	// Environment runs the file transfer commands.
 	Environment Environment
-	// Filesystems are the project's filesystems, required for file components.
-	Filesystems Filesystems
+	// FileRoots are the roots of the selected file components, as returned by
+	// ResolveFileRoots.
+	FileRoots FileRoots
 	// ShopwareVersion is recorded as the source version.
 	ShopwareVersion string
 	// CreatedAt is recorded as the creation time, defaults to now.
@@ -49,7 +49,7 @@ type ExportOptions struct {
 
 // DatabaseExport configures the database dump of an export.
 type DatabaseExport struct {
-	Connection *mysql.Config
+	Connection *executor.DatabaseConnection
 	Config     *shop.ConfigDump
 	// Options shape the dumped data. Output, compression and the exclusion of
 	// rows for files missing in the archive are set by Export.
@@ -93,20 +93,15 @@ func Export(ctx context.Context, opts ExportOptions) (err error) {
 		entries = append(entries, databaseEntry)
 	}
 
-	if opts.Components.PublicFiles {
-		logging.FromContext(ctx).Infof(exportFilesLog, "public")
-		if err := exportFiles(ctx, opts.Environment, "public", opts.Filesystems.Public, publicDirectories, filepath.Join(staging, publicFilesEntry)); err != nil {
+	for _, fc := range fileComponents {
+		if !fc.selected(opts.Components) {
+			continue
+		}
+		logging.FromContext(ctx).Infof(exportFilesLog, fc.name)
+		if err := exportFiles(ctx, opts.Environment, fc, opts.FileRoots, filepath.Join(staging, fc.entry)); err != nil {
 			return err
 		}
-		entries = append(entries, publicFilesEntry)
-	}
-
-	if opts.Components.PrivateFiles {
-		logging.FromContext(ctx).Infof(exportFilesLog, "private")
-		if err := exportFiles(ctx, opts.Environment, "private", opts.Filesystems.Private, privateDirectories, filepath.Join(staging, privateFilesEntry)); err != nil {
-			return err
-		}
-		entries = append(entries, privateFilesEntry)
+		entries = append(entries, fc.entry)
 	}
 
 	metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
@@ -115,7 +110,7 @@ func Export(ctx context.Context, opts ExportOptions) (err error) {
 	}
 
 	archivePath := filepath.Join(staging, stagedArchive)
-	if err := writeArchive(archivePath, metadataJSON, staging, entries); err != nil {
+	if err := writeArchive(ctx, archivePath, metadataJSON, staging, entries); err != nil {
 		return fmt.Errorf("cannot write archive: %w", err)
 	}
 
@@ -133,7 +128,12 @@ func exportDatabase(ctx context.Context, opts ExportOptions, output string) (*Da
 	dumpOpts.SkipPublicFileRows = !opts.Components.PublicFiles
 	dumpOpts.SkipPrivateFileRows = !opts.Components.PrivateFiles
 
-	if err := shop.DumpDatabase(ctx, opts.Database.Connection, opts.Database.Config, dumpOpts); err != nil {
+	cfg, err := opts.Database.Connection.MySQLConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := shop.DumpDatabase(ctx, cfg, opts.Database.Config, dumpOpts); err != nil {
 		return nil, err
 	}
 
@@ -141,16 +141,15 @@ func exportDatabase(ctx context.Context, opts ExportOptions, output string) (*Da
 }
 
 // databaseSource reads vendor and version of the database server.
-func databaseSource(ctx context.Context, cfg *mysql.Config) (*DatabaseSource, error) {
-	connector, err := mysql.NewConnector(cfg)
+func databaseSource(ctx context.Context, dbConn *executor.DatabaseConnection) (*DatabaseSource, error) {
+	conn, cleanup, err := dbConn.Open(ctx)
 	if err != nil {
 		return nil, err
 	}
-	db := sql.OpenDB(connector)
-	defer func() { _ = db.Close() }()
+	defer cleanup()
 
 	var version string
-	if err := db.QueryRowContext(ctx, "SELECT VERSION()").Scan(&version); err != nil {
+	if err := conn.QueryRowContext(ctx, "SELECT VERSION()").Scan(&version); err != nil {
 		return nil, fmt.Errorf("cannot read the database version: %w", err)
 	}
 
@@ -170,8 +169,8 @@ func parseDatabaseVersion(version string) *DatabaseSource {
 	return &DatabaseSource{Vendor: vendor, Version: number}
 }
 
-func exportFiles(ctx context.Context, env Environment, name string, fs Filesystem, dirs []string, output string) error {
-	root, err := localRoot(name, fs)
+func exportFiles(ctx context.Context, env Environment, fc fileComponent, roots FileRoots, output string) error {
+	root, err := roots.root(fc)
 	if err != nil {
 		return err
 	}
@@ -181,12 +180,12 @@ func exportFiles(ctx context.Context, env Environment, name string, fs Filesyste
 		return err
 	}
 
-	err = packFiles(ctx, env, root, dirs, file)
+	err = packFiles(ctx, env, root, fc.dirs, file)
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
 	if err != nil {
-		return fmt.Errorf("cannot export %s files: %w", name, err)
+		return fmt.Errorf("cannot export %s files: %w", fc.name, err)
 	}
 
 	return nil
@@ -195,7 +194,7 @@ func exportFiles(ctx context.Context, env Environment, name string, fs Filesyste
 // writeArchive writes the outer tar.gz with metadata.json first, so readers
 // learn about the archive before its payloads. Only the owner may read it, as
 // it can contain credentials, customer data, and private documents.
-func writeArchive(path string, metadata []byte, dir string, entries []string) (err error) {
+func writeArchive(ctx context.Context, path string, metadata []byte, dir string, entries []string) (err error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
@@ -215,7 +214,7 @@ func writeArchive(path string, metadata []byte, dir string, entries []string) (e
 	}
 
 	for _, entry := range entries {
-		if err := addFile(tw, filepath.Join(dir, entry), entry, modTime); err != nil {
+		if err := addFile(ctx, tw, filepath.Join(dir, entry), entry, modTime); err != nil {
 			return err
 		}
 	}
@@ -223,7 +222,7 @@ func writeArchive(path string, metadata []byte, dir string, entries []string) (e
 	return nil
 }
 
-func addFile(tw *tar.Writer, path, name string, modTime time.Time) error {
+func addFile(ctx context.Context, tw *tar.Writer, path, name string, modTime time.Time) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -239,6 +238,6 @@ func addFile(tw *tar.Writer, path, name string, modTime time.Time) error {
 		return err
 	}
 
-	_, err = io.Copy(tw, file)
+	_, err = io.Copy(tw, archiver.ContextReader(ctx, file))
 	return err
 }

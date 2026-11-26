@@ -53,14 +53,7 @@ func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Pr
 }
 
 func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs(ctx)
-	dockerArgs = append(dockerArgs, "composer")
-	dockerArgs = append(dockerArgs, args...)
-
-	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
-	applyDir(d.projectRoot, cmd)
-	logCmd(ctx, cmd)
-	return d.newProcess(cmd, append([]string{"composer"}, args...))
+	return d.Command(ctx, "composer", args...)
 }
 
 func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Process {

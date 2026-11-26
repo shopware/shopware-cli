@@ -11,35 +11,23 @@ import (
 
 // resolveExecutor returns the Executor for the current environment.
 func resolveExecutor(cmd *cobra.Command, projectRoot string) (executor.Executor, error) {
-	cmdExecutor, _, err := resolveEnvironmentExecutor(cmd, projectRoot)
-	return cmdExecutor, err
-}
-
-// resolveEnvironmentExecutor returns the Executor and the configuration of
-// the current environment.
-func resolveEnvironmentExecutor(cmd *cobra.Command, projectRoot string) (executor.Executor, *shop.EnvironmentConfig, error) {
 	actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
 	cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	envCfg, err := cfg.ResolveEnvironment(environmentName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	cfg, err = cfg.WithEnvironment(environmentName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	cmdExecutor, err := executor.New(projectRoot, envCfg, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return cmdExecutor, envCfg, nil
+	return executor.New(projectRoot, envCfg, cfg)
 }
 
 // resolveProjectDatabaseConnection resolves the database credentials of the

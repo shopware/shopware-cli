@@ -1,6 +1,7 @@
 package project
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -58,7 +59,12 @@ confirmation, which is required without an interactive terminal.`,
 			return err
 		}
 
-		cmdExecutor, envCfg, err := resolveEnvironmentExecutor(cmd, projectRoot)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
+			return err
+		}
+
+		fileRoots, err := projectarchive.ResolveFileRoots(cmd.Context(), cmdExecutor, contents.FilesReplaced())
 		if err != nil {
 			return err
 		}
@@ -67,24 +73,19 @@ confirmation, which is required without an interactive terminal.`,
 			Archive:     archive,
 			Contents:    contents,
 			Environment: cmdExecutor,
+			FileRoots:   fileRoots,
 		}
 
-		if components.PublicFiles || components.PrivateFiles || emptyFiles.Any() {
-			if opts.Filesystems, err = projectarchive.ResolveFilesystems(cmd.Context(), cmdExecutor); err != nil {
-				return err
-			}
-		}
-
+		// An empty targetVersion means it could not be detected.
 		targetVersion, err := projectarchive.ShopwareVersion(cmd.Context(), cmdExecutor)
 		if err != nil {
 			logging.FromContext(cmd.Context()).Warnf("Cannot compare the Shopware versions: %v", err)
-			targetVersion = unknownShopwareVersion
 		}
 
-		target := describeTarget(cmdExecutor, envCfg, projectRoot)
-		printImportPlan(cmd.OutOrStdout(), archive, target, targetVersion, contents, emptyFiles)
+		target := describeTarget(cmdExecutor, projectRoot)
+		printImportPlan(cmd.OutOrStdout(), archive, target, cmp.Or(targetVersion, unknownShopwareVersion), contents, emptyFiles)
 
-		if source := contents.Metadata.Source.ShopwareVersion; targetVersion != unknownShopwareVersion && !projectarchive.SameShopwareMinor(source, targetVersion) {
+		if source := contents.Metadata.Source.ShopwareVersion; targetVersion != "" && !projectarchive.SameShopwareMinor(source, targetVersion) {
 			printWarning(cmd.OutOrStdout(),
 				fmt.Sprintf("The archive is from Shopware %s, the target runs Shopware %s", source, targetVersion),
 				"The import may fail or leave the shop inconsistent")
@@ -122,21 +123,16 @@ confirmation, which is required without an interactive terminal.`,
 }
 
 // describeTarget names the environment an import writes to.
-func describeTarget(cmdExecutor executor.Executor, envCfg *shop.EnvironmentConfig, projectRoot string) string {
-	name := environmentName
-	if name == "" {
-		name = "local"
-	}
-
+func describeTarget(cmdExecutor executor.Executor, projectRoot string) string {
 	location := projectRoot
-	if envCfg != nil && envCfg.SSH != nil {
+	if envCfg, err := cmdExecutor.ShopConfig().ResolveEnvironment(environmentName); err == nil && envCfg.SSH != nil {
 		location = envCfg.SSH.Host + ":" + envCfg.SSH.Directory
 		if envCfg.SSH.User != "" {
 			location = envCfg.SSH.User + "@" + location
 		}
 	}
 
-	return fmt.Sprintf("environment %q (%s, %s)", name, cmdExecutor.Type(), location)
+	return fmt.Sprintf("environment %q (%s, %s)", shop.EnvironmentKey(environmentName), cmdExecutor.Type(), location)
 }
 
 func printImportPlan(w io.Writer, archive, target, targetVersion string, contents *projectarchive.Contents, emptyFiles projectarchive.Components) {
@@ -175,7 +171,9 @@ func printImportPlan(w io.Writer, archive, target, targetVersion string, content
 func printWarning(w io.Writer, message, hint string) {
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, tui.YellowText.Render("⚠ "+message))
-	_, _ = fmt.Fprintln(w, "  "+hint)
+	if hint != "" {
+		_, _ = fmt.Fprintln(w, "  "+hint)
+	}
 }
 
 func confirmImport(cmd *cobra.Command, target string) error {
@@ -187,19 +185,18 @@ func confirmImport(cmd *cobra.Command, target string) error {
 		return errors.New("cannot import without confirmation: interaction is disabled (pass --force to replace the data)")
 	}
 
-	confirmed := false
+	answer := tui.No
 	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	err := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[bool]().
+		tui.NewYesNo().
 			Title(fmt.Sprintf("Replace data in %s?", target)).
-			Options(huh.NewOption("No", false), huh.NewOption("Yes", true)).
-			Value(&confirmed),
+			Value(&answer),
 	)).WithTheme(tui.ShopwareTheme()).WithInput(cmd.InOrStdin()).WithOutput(cmd.ErrOrStderr()).RunWithContext(cmd.Context())
 	if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 		return err
 	}
 
-	if !confirmed {
+	if answer != tui.Yes {
 		return tracking.NewCancelled("import cancelled")
 	}
 
@@ -217,16 +214,14 @@ func printImportNextSteps(w io.Writer, components projectarchive.Components) {
 		steps = append(steps,
 			command+" theme:compile",
 			command+" es:index (when Elasticsearch or OpenSearch is used)",
+			"Log in with the admin credentials of the source shop",
 		)
 	}
 
 	_, _ = fmt.Fprintln(w)
-	_, _ = fmt.Fprintln(w, tui.GreenText.Render("✓")+" Import completed. Next steps:")
+	_, _ = fmt.Fprintln(w, tui.CheckOK()+" Import completed. Next steps:")
 	for _, step := range steps {
 		_, _ = fmt.Fprintln(w, "  "+step)
-	}
-	if components.Database {
-		_, _ = fmt.Fprintln(w, "  Log in with the admin credentials of the source shop")
 	}
 }
 

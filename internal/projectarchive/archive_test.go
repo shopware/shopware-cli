@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,13 +23,8 @@ func writeFile(t *testing.T, path, content string) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
-func localFilesystems(root string) Filesystems {
-	var fs Filesystems
-	fs.Public.Type = localAdapter
-	fs.Public.Config.Root = filepath.Join(root, "public")
-	fs.Private.Type = localAdapter
-	fs.Private.Config.Root = filepath.Join(root, "files")
-	return fs
+func localFileRoots(root string) FileRoots {
+	return FileRoots{public: filepath.Join(root, "public"), private: filepath.Join(root, "files")}
 }
 
 // sharedDir links project/<name> to shared/<name>, as SSH deployments do.
@@ -57,7 +53,7 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 		Output:          archive,
 		Components:      files,
 		Environment:     executor.NewLocal(sourceProject),
-		Filesystems:     localFilesystems(sourceProject),
+		FileRoots:       localFileRoots(sourceProject),
 		ShopwareVersion: "6.7.1.0",
 	}))
 
@@ -90,7 +86,7 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 		Archive:     archive,
 		Contents:    contents,
 		Environment: executor.NewLocal(targetProject),
-		Filesystems: localFilesystems(targetProject),
+		FileRoots:   localFileRoots(targetProject),
 	}))
 
 	assert.FileExists(t, filepath.Join(target, "shared/public/media/a/logo.png"))
@@ -132,7 +128,7 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 		Archive:     archive,
 		Contents:    contents,
 		Environment: executor.NewLocal(project),
-		Filesystems: localFilesystems(project),
+		FileRoots:   localFileRoots(project),
 		Database:    noopExecer{},
 	}))
 
@@ -141,37 +137,6 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 	assert.DirExists(t, filepath.Join(project, "public/media"))
 	assert.FileExists(t, filepath.Join(project, "public/theme/all.css"))
 	assert.NoFileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
-}
-
-func TestImportRejectsUnsupportedFilesystemBeforeWriting(t *testing.T) {
-	cases := []struct {
-		name    string
-		modify  func(fs *Filesystem)
-		wantErr string
-	}{
-		{name: "non-local adapter", modify: func(fs *Filesystem) { fs.Type = "amazon-s3" }, wantErr: "amazon-s3"},
-		{name: "unresolved root", modify: func(fs *Filesystem) { fs.Config.Root = "%env(PRIVATE_ROOT)%" }, wantErr: "unresolved"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			project := t.TempDir()
-			writeFile(t, filepath.Join(project, "public/media/keep.png"), "kept")
-
-			fs := localFilesystems(project)
-			tc.modify(&fs.Private)
-
-			err := Import(t.Context(), ImportOptions{
-				Archive:     filepath.Join(t.TempDir(), "missing.tar.gz"),
-				Contents:    &Contents{Components: Components{PublicFiles: true, PrivateFiles: true}},
-				Environment: executor.NewLocal(project),
-				Filesystems: fs,
-			})
-
-			require.ErrorContains(t, err, tc.wantErr)
-			assert.FileExists(t, filepath.Join(project, "public/media/keep.png"))
-		})
-	}
 }
 
 func TestInspectValidatesArchive(t *testing.T) {
@@ -221,11 +186,13 @@ func writeTestArchive(t *testing.T, path string, entries map[string]string) {
 	require.NoError(t, file.Close())
 }
 
-func TestParseFilesystems(t *testing.T) {
-	output := `{
+func TestParseFileRoots(t *testing.T) {
+	// Deprecation notices may precede the JSON.
+	output := `Deprecated: something
+{
     "private": {
         "type": "local",
-        "config": {"root": "/var/www/html/files"},
+        "config": {"root": "%s"},
         "visibility": "private"
     },
     "public": {
@@ -235,11 +202,30 @@ func TestParseFilesystems(t *testing.T) {
     }
 }`
 
-	fs, err := parseFilesystems([]byte(output))
-	require.NoError(t, err)
-	assert.Equal(t, "local", fs.Private.Type)
-	assert.Equal(t, "/var/www/html/files", fs.Private.Config.Root)
-	assert.Equal(t, "amazon-s3", fs.Public.Type)
+	cases := []struct {
+		name     string
+		root     string
+		needed   Components
+		wantRoot string
+		wantErr  string
+	}{
+		{name: "local filesystem", root: "/var/www/html/files", needed: Components{PrivateFiles: true}, wantRoot: "/var/www/html/files"},
+		{name: "unsupported adapter", root: "/var/www/html/files", needed: Components{PublicFiles: true, PrivateFiles: true}, wantErr: "amazon-s3"},
+		{name: "unresolved root", root: "%%env(PRIVATE_ROOT)%%", needed: Components{PrivateFiles: true}, wantErr: "unresolved"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			roots, err := parseFileRoots([]byte(fmt.Sprintf(output, tc.root)), tc.needed)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			// The unsupported public filesystem is fine, as it is not needed.
+			assert.Equal(t, FileRoots{private: tc.wantRoot}, roots)
+		})
+	}
 }
 
 func TestParseShopwareVersion(t *testing.T) {

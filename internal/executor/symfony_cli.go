@@ -50,11 +50,7 @@ func (s *SymfonyCLIExecutor) PHPCommand(ctx context.Context, args ...string) *Pr
 }
 
 func (s *SymfonyCLIExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
-	cmd := exec.CommandContext(ctx, "npm", args...)
-	applyLocalEnv(s.projectRoot, s.env, cmd)
-	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	return s.Command(ctx, "npm", args...)
 }
 
 func (s *SymfonyCLIExecutor) Command(ctx context.Context, name string, args ...string) *Process {

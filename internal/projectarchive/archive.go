@@ -59,6 +59,17 @@ func (c Components) FilesToEmpty() Components {
 	}
 }
 
+// FilesReplaced returns the file components an import of these components
+// replaces: the ones it contains and the ones it empties.
+func (c Components) FilesReplaced() Components {
+	toEmpty := c.FilesToEmpty()
+
+	return Components{
+		PublicFiles:  c.PublicFiles || toEmpty.PublicFiles,
+		PrivateFiles: c.PrivateFiles || toEmpty.PrivateFiles,
+	}
+}
+
 // Metadata is the content of metadata.json.
 type Metadata struct {
 	FormatVersion int       `json:"format_version"`

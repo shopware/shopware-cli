@@ -136,6 +136,7 @@ func TestPrintLogFileListShowsAllFiles(t *testing.T) {
 // logsFakeExecutor implements executor.Executor, serving canned log files
 // and recording GetLog invocations.
 type logsFakeExecutor struct {
+	executor.Executor
 	files        []executor.LogFile
 	getLogCalled bool
 	gotFile      string
@@ -166,10 +167,6 @@ func (f *logsFakeExecutor) PHPCommand(ctx context.Context, _ ...string) *executo
 }
 
 func (f *logsFakeExecutor) NPMCommand(ctx context.Context, _ ...string) *executor.Process {
-	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
-}
-
-func (f *logsFakeExecutor) Command(ctx context.Context, _ string, _ ...string) *executor.Process {
 	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
 }
 

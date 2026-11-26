@@ -1281,9 +1281,9 @@ type ConfigURLState struct {
 	HasEnv bool   `json:"had_env_url,omitempty"`
 }
 
-// urlEnvKey resolves the environments map key the CLI would use: an explicit
-// environment name, or "local" (mirroring Config.ResolveEnvironment).
-func urlEnvKey(envName string) string {
+// EnvironmentKey resolves the environments map key the CLI would use: an
+// explicit environment name, or "local" (mirroring Config.ResolveEnvironment).
+func EnvironmentKey(envName string) string {
 	if envName == "" {
 		return "local"
 	}
@@ -1370,7 +1370,7 @@ func envNode(root *yaml.Node, envName string) *yaml.Node {
 		return nil
 	}
 
-	env := configMapValue(environments, urlEnvKey(envName))
+	env := configMapValue(environments, EnvironmentKey(envName))
 	if env == nil || env.Kind != yaml.MappingNode {
 		return nil
 	}

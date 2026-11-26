@@ -76,10 +76,8 @@ needs free space for about twice its size.`,
 			CreatedAt:   createdAt,
 		}
 
-		if components.PublicFiles || components.PrivateFiles {
-			if opts.Filesystems, err = projectarchive.ResolveFilesystems(cmd.Context(), cmdExecutor); err != nil {
-				return err
-			}
+		if opts.FileRoots, err = projectarchive.ResolveFileRoots(cmd.Context(), cmdExecutor, components); err != nil {
+			return err
 		}
 
 		if opts.ShopwareVersion, err = projectarchive.ShopwareVersion(cmd.Context(), cmdExecutor); err != nil {
@@ -87,11 +85,7 @@ needs free space for about twice its size.`,
 		}
 
 		if components.Database {
-			dbConn, err := cmdExecutor.DatabaseConnection(cmd.Context())
-			if err != nil {
-				return err
-			}
-			if opts.Database.Connection, err = dbConn.MySQLConfig(); err != nil {
+			if opts.Database.Connection, err = cmdExecutor.DatabaseConnection(cmd.Context()); err != nil {
 				return err
 			}
 			if opts.Database.Options, err = dumpDataOptions(cmd); err != nil {
@@ -124,38 +118,41 @@ func selectedComponents(cmd *cobra.Command) projectarchive.Components {
 }
 
 func printExportSummary(w io.Writer, components projectarchive.Components, anonymized bool, output string) {
-	database := "included"
+	const included, skipped = "included", "skipped"
+
+	database := included
 	if anonymized {
-		database = "included, anonymized"
+		database = included + ", anonymized"
+	}
+
+	filesSkipped := skipped
+	if components.Database {
+		filesSkipped = skipped + ", their database rows are excluded"
 	}
 
 	lines := []struct {
 		label    string
 		included bool
 		state    string
+		skipped  string
 	}{
-		{"Database", components.Database, database},
-		{"Public files", components.PublicFiles, "included"},
-		{"Private files", components.PrivateFiles, "included"},
+		{"Database", components.Database, database, skipped},
+		{"Public files", components.PublicFiles, included, filesSkipped},
+		{"Private files", components.PrivateFiles, included, filesSkipped},
 	}
 
 	_, _ = fmt.Fprintln(w)
 	for _, line := range lines {
 		if !line.included {
-			state := "skipped"
-			if components.Database && line.label != "Database" {
-				state = "skipped, their database rows are excluded"
-			}
-			_, _ = fmt.Fprintln(w, tui.DimText.Render(fmt.Sprintf("- %s: %s", line.label, state)))
+			_, _ = fmt.Fprintln(w, tui.DimText.Render(fmt.Sprintf("- %s: %s", line.label, line.skipped)))
 			continue
 		}
-		_, _ = fmt.Fprintln(w, tui.GreenText.Render("✓")+fmt.Sprintf(" %s: %s", line.label, line.state))
+		_, _ = fmt.Fprintf(w, "%s %s: %s\n", tui.CheckOK(), line.label, line.state)
 	}
-	_, _ = fmt.Fprintln(w, tui.GreenText.Render("✓")+" Archive created: "+output)
+	_, _ = fmt.Fprintln(w, tui.CheckOK()+" Archive created: "+output)
 
 	if components.PublicFiles || components.PrivateFiles {
-		_, _ = fmt.Fprintln(w)
-		_, _ = fmt.Fprintln(w, tui.YellowText.Render("⚠ Files are not anonymized and may contain sensitive data"))
+		printWarning(w, "Files are not anonymized and may contain sensitive data", "")
 	}
 }
 

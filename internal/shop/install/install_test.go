@@ -22,6 +22,7 @@ import (
 // fakeExecutor satisfies executor.Executor and lets each test decide which
 // shell command backs console/php invocations.
 type fakeExecutor struct {
+	executor.Executor
 	console func(ctx context.Context, args ...string) *executor.Process
 	php     func(ctx context.Context, args ...string) *executor.Process
 	// env records the last WithEnv call so tests can assert the variables
@@ -52,10 +53,6 @@ func (f *fakeExecutor) ComposerCommand(ctx context.Context, args ...string) *exe
 }
 
 func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor.Process {
-	return shellProcess(ctx, "true")
-}
-
-func (f *fakeExecutor) Command(ctx context.Context, _ string, _ ...string) *executor.Process {
 	return shellProcess(ctx, "true")
 }
 

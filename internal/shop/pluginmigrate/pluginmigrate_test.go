@@ -25,6 +25,7 @@ import (
 // fakeExecutor satisfies executor.Executor and lets each test decide which
 // shell command backs composer/console invocations.
 type fakeExecutor struct {
+	executor.Executor
 	composer func(ctx context.Context, args ...string) *executor.Process
 	console  func(ctx context.Context, args ...string) *executor.Process
 }
@@ -46,10 +47,6 @@ func (f *fakeExecutor) PHPCommand(ctx context.Context, args ...string) *executor
 }
 
 func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor.Process {
-	return shellProcess(ctx, "true")
-}
-
-func (f *fakeExecutor) Command(ctx context.Context, _ string, _ ...string) *executor.Process {
 	return shellProcess(ctx, "true")
 }
 

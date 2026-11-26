@@ -18,11 +18,33 @@ const localAdapter = "local"
 
 const shopwareVersionParameter = "kernel.shopware_version"
 
-// Directories of the public filesystem that belong to an archive.
-var publicDirectories = []string{"media", "thumbnail"}
+// fileComponent describes how a Shopware filesystem is stored in an archive.
+type fileComponent struct {
+	name  string
+	entry string
+	// dirs are the directories below the filesystem root that belong to an
+	// archive.
+	dirs []string
+	// public distinguishes the public from the private filesystem.
+	public bool
+}
 
-// privateDirectories selects the whole private filesystem.
-var privateDirectories = []string{"."}
+// The public filesystem, of which only media and thumbnails belong to an
+// archive, and the whole private filesystem.
+var (
+	publicFiles    = fileComponent{name: "public", entry: publicFilesEntry, dirs: []string{"media", "thumbnail"}, public: true}
+	privateFiles   = fileComponent{name: "private", entry: privateFilesEntry, dirs: []string{"."}}
+	fileComponents = []fileComponent{publicFiles, privateFiles}
+)
+
+// selected reports whether components include the file component.
+func (c fileComponent) selected(components Components) bool {
+	if c.public {
+		return components.PublicFiles
+	}
+
+	return components.PrivateFiles
+}
 
 // packScript writes a tar of directories below the root ($1) to stdout.
 // Symlinks are followed, as SSH deployments link shared directories into each
@@ -67,45 +89,88 @@ for dir in "$@"; do
 	fi
 done`
 
-// Filesystem is a Shopware filesystem configured in shopware.filesystem.
-type Filesystem struct {
+// filesystemConfig is a Shopware filesystem configured in shopware.filesystem.
+type filesystemConfig struct {
 	Type   string `json:"type"`
 	Config struct {
 		Root string `json:"root"`
 	} `json:"config"`
 }
 
-// Filesystems are the public and private Shopware filesystems of a project.
-type Filesystems struct {
-	Public  Filesystem `json:"public"`
-	Private Filesystem `json:"private"`
+// filesystemsConfig are the public and private Shopware filesystems of a
+// project.
+type filesystemsConfig struct {
+	Public  filesystemConfig `json:"public"`
+	Private filesystemConfig `json:"private"`
 }
 
-// ResolveFilesystems reads the resolved shopware.filesystem configuration of
-// the project. The --format option of debug:config requires Symfony 6.3,
-// shipped since Shopware 6.5.2.0.
-func ResolveFilesystems(ctx context.Context, env Environment) (Filesystems, error) {
+// FileRoots are the local roots of the Shopware filesystems an export reads
+// or an import writes. Only ResolveFileRoots creates them, so every root is
+// known to be usable.
+type FileRoots struct {
+	// public and private are empty when the component is not needed.
+	public, private string
+}
+
+// root returns the root of the component's filesystem.
+func (r FileRoots) root(fc fileComponent) (string, error) {
+	root := r.private
+	if fc.public {
+		root = r.public
+	}
+	if root == "" {
+		return "", fmt.Errorf("cannot transfer %s files: the filesystem was not resolved", fc.name)
+	}
+
+	return root, nil
+}
+
+// ResolveFileRoots reads the resolved shopware.filesystem configuration of the
+// project and returns the roots of the needed file components. It rejects
+// filesystems an archive cannot be transferred to or from, so this happens
+// before any data is read or written. The --format option of debug:config
+// requires Symfony 6.3, shipped since Shopware 6.5.2.0.
+func ResolveFileRoots(ctx context.Context, env Environment, needed Components) (FileRoots, error) {
+	if !needed.PublicFiles && !needed.PrivateFiles {
+		return FileRoots{}, nil
+	}
+
 	output, err := env.ConsoleCommand(ctx, "debug:config", "shopware", "filesystem", "--resolve-env", "--format=json", "--no-ansi").Output()
 	if err != nil {
-		return Filesystems{}, fmt.Errorf("cannot read the filesystem configuration: %w", commandError(err))
+		return FileRoots{}, fmt.Errorf("cannot read the filesystem configuration: %w", commandError(err))
 	}
 
-	return parseFilesystems(output)
+	return parseFileRoots(output, needed)
 }
 
-func parseFilesystems(output []byte) (Filesystems, error) {
-	var filesystems Filesystems
+func parseFileRoots(output []byte, needed Components) (FileRoots, error) {
+	var filesystems filesystemsConfig
 	if err := unmarshalConsoleJSON(output, &filesystems); err != nil {
-		return Filesystems{}, fmt.Errorf("cannot parse the filesystem configuration: %w", err)
+		return FileRoots{}, fmt.Errorf("cannot parse the filesystem configuration: %w", err)
 	}
 
-	return filesystems, nil
+	var roots FileRoots
+	var err error
+	if needed.PublicFiles {
+		if roots.public, err = publicFiles.localRoot(filesystems.Public); err != nil {
+			return FileRoots{}, err
+		}
+	}
+	if needed.PrivateFiles {
+		if roots.private, err = privateFiles.localRoot(filesystems.Private); err != nil {
+			return FileRoots{}, err
+		}
+	}
+
+	return roots, nil
 }
 
-// localRoot returns the root of a local filesystem and rejects other adapters.
-// A root with an unresolved parameter like %env(...)% is rejected, as files
-// would be read from or written to a literal directory of that name.
-func localRoot(name string, fs Filesystem) (string, error) {
+// localRoot returns the root of the component's local filesystem and rejects
+// other adapters. A root with an unresolved parameter like %env(...)% is
+// rejected, as files would be read from or written to a literal directory of
+// that name.
+func (c fileComponent) localRoot(fs filesystemConfig) (string, error) {
+	name := c.name
 	if !strings.EqualFold(fs.Type, localAdapter) {
 		return "", fmt.Errorf("cannot transfer files of the %s filesystem: adapter %q is not supported, only %q", name, fs.Type, localAdapter)
 	}
