@@ -59,5 +59,162 @@ jobs:
         with:
           install_args: --locked rumdl
 
+      - name: Probe file 1
+        if: ${{ always() }}
+        run: rumdl check docs/AGENT_SKILLS.md
+
+      - name: Probe file 2
+        if: ${{ always() }}
+        run: rumdl check skills/shopware-cli-admin-api/SKILL.md
+
+      - name: Probe file 3
+        if: ${{ always() }}
+        run: rumdl check skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD001
+        if: ${{ always() }}
+        run: rumdl check --enable MD001 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD003
+        if: ${{ always() }}
+        run: rumdl check --enable MD003 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD004
+        if: ${{ always() }}
+        run: rumdl check --enable MD004 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD005
+        if: ${{ always() }}
+        run: rumdl check --enable MD005 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD007
+        if: ${{ always() }}
+        run: rumdl check --enable MD007 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD009
+        if: ${{ always() }}
+        run: rumdl check --enable MD009 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD010
+        if: ${{ always() }}
+        run: rumdl check --enable MD010 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD011
+        if: ${{ always() }}
+        run: rumdl check --enable MD011 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD012
+        if: ${{ always() }}
+        run: rumdl check --enable MD012 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD013
+        if: ${{ always() }}
+        run: rumdl check --enable MD013 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD022
+        if: ${{ always() }}
+        run: rumdl check --enable MD022 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD024
+        if: ${{ always() }}
+        run: rumdl check --enable MD024 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD025
+        if: ${{ always() }}
+        run: rumdl check --enable MD025 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD026
+        if: ${{ always() }}
+        run: rumdl check --enable MD026 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD029
+        if: ${{ always() }}
+        run: rumdl check --enable MD029 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD030
+        if: ${{ always() }}
+        run: rumdl check --enable MD030 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD031
+        if: ${{ always() }}
+        run: rumdl check --enable MD031 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD032
+        if: ${{ always() }}
+        run: rumdl check --enable MD032 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD033
+        if: ${{ always() }}
+        run: rumdl check --enable MD033 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD034
+        if: ${{ always() }}
+        run: rumdl check --enable MD034 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD036
+        if: ${{ always() }}
+        run: rumdl check --enable MD036 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD040
+        if: ${{ always() }}
+        run: rumdl check --enable MD040 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD041
+        if: ${{ always() }}
+        run: rumdl check --enable MD041 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD047
+        if: ${{ always() }}
+        run: rumdl check --enable MD047 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD051
+        if: ${{ always() }}
+        run: rumdl check --enable MD051 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD052
+        if: ${{ always() }}
+        run: rumdl check --enable MD052 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD053
+        if: ${{ always() }}
+        run: rumdl check --enable MD053 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD054
+        if: ${{ always() }}
+        run: rumdl check --enable MD054 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD057
+        if: ${{ always() }}
+        run: rumdl check --enable MD057 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD059
+        if: ${{ always() }}
+        run: rumdl check --enable MD059 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD060
+        if: ${{ always() }}
+        run: rumdl check --enable MD060 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD071
+        if: ${{ always() }}
+        run: rumdl check --enable MD071 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD076
+        if: ${{ always() }}
+        run: rumdl check --enable MD076 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD077
+        if: ${{ always() }}
+        run: rumdl check --enable MD077 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD085
+        if: ${{ always() }}
+        run: rumdl check --enable MD085 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
+      - name: Probe MD090
+        if: ${{ always() }}
+        run: rumdl check --enable MD090 docs/AGENT_SKILLS.md skills/shopware-cli-admin-api/SKILL.md skills/shopware-cli-admin-api/evals/reports/0.0.1.md
+
       - name: Check Markdown
+        if: ${{ always() }}
         run: mise run --skip-tools lint-markdown
