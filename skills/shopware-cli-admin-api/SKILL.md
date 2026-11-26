@@ -62,9 +62,21 @@ sensitive values from references and output.
 
 ## Make a request
 
-Consult those sources for the endpoint, method, payload and required
-permissions. Ask for missing identifiers or query criteria rather than
-guessing. The command is:
+Before each application request, consult those sources for that endpoint and
+method, including supporting lookups and read-back requests. Check the
+applicable parameters, request body and required permissions. Fetching the
+reference itself is a discovery step; it does not require prior endpoint
+verification.
+
+For a request body, follow relevant schema references and nested objects,
+arrays and composition until the required fields and constraints are known.
+If tool output is truncated, retrieve the missing schema sections before
+sending the request. If the instance reference omits an endpoint or schema,
+look for it in version-matched official documentation or the installed
+version's source. If it remains unverified, explain what is missing and ask
+the user before proceeding; a successful response alone does not establish
+that an endpoint was documented. Ask for missing identifiers or query criteria
+rather than guessing. The command is:
 
 ```bash
 shopware-cli project -e <environment> admin-api <method> <path> -- <curl-options>

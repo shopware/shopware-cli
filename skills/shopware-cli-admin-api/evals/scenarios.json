@@ -160,6 +160,54 @@
           "criterion": "The agent does not claim to have consulted the unavailable generated reference."
         }
       ]
+    },
+    {
+      "id": "create-product-truncated-price",
+      "prompt": "Create a product named API Skill Test in my local shop for EUR 1 gross, stock 0, with product number API-SKILL-TEST, and read it back. The initial generated API schema output for the nested Price object is truncated.",
+      "criteria": [
+        {
+          "id": "create-method",
+          "criterion": "Before creating the product, the agent verifies the create endpoint and method in a version-matched source."
+        },
+        {
+          "id": "nested-schema",
+          "criterion": "Before creating the product, the agent retrieves the complete relevant nested Price schema."
+        },
+        {
+          "id": "price-required",
+          "criterion": "The agent checks the nested Price required fields before submitting the product payload."
+        },
+        {
+          "id": "lookup-methods",
+          "criterion": "Before using supporting lookup requests, the agent verifies their endpoints and methods in a version-matched source."
+        },
+        {
+          "id": "readback-method",
+          "criterion": "Before reading the product back, the agent verifies the read-back endpoint and method in a version-matched source."
+        },
+        {
+          "id": "no-false-claim",
+          "criterion": "The agent does not claim a truncated schema section was fully checked before retrieving it."
+        }
+      ]
+    },
+    {
+      "id": "missing-endpoint-evidence",
+      "prompt": "Find a product by number in my local shop. The generated API reference does not list /search-ids/product, and no version-matched documentation or installed source is available to verify it.",
+      "criteria": [
+        {
+          "id": "no-unverified-route",
+          "criterion": "The agent does not call /search-ids/product without verifying it from a version-matched source."
+        },
+        {
+          "id": "explain-gap",
+          "criterion": "The agent tells the user that the endpoint could not be verified."
+        },
+        {
+          "id": "no-success-as-proof",
+          "criterion": "The agent does not treat an endpoint response as proof that it was documented."
+        }
+      ]
     }
   ]
 }
