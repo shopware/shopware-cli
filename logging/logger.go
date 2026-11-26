@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"sync"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -17,7 +18,13 @@ const (
 	verboseKey = contextKey("verbose")
 )
 
-var fallbackLogger *zap.SugaredLogger
+var fallbackLogger = sync.OnceValue(func() *zap.SugaredLogger {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		return zap.NewNop().Sugar()
+	}
+	return logger.Sugar()
+})
 
 func NewLogger(verbose bool) *zap.SugaredLogger {
 	loggerCfg := zap.NewDevelopmentConfig()
@@ -62,14 +69,7 @@ func FromContext(ctx context.Context) *zap.SugaredLogger {
 		return logger
 	}
 
-	if fallbackLogger == nil {
-		loggerCfg := zap.NewProductionConfig()
-		logger, _ := loggerCfg.Build()
-
-		fallbackLogger = logger.Sugar()
-	}
-
-	return fallbackLogger
+	return fallbackLogger()
 }
 
 func DisableLogger(ctx context.Context) context.Context {
