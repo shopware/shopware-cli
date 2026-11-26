@@ -9,12 +9,25 @@ import (
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 // DNSPort is the fixed local port the shared DNS container publishes on
 // 127.0.0.1. A high port is used so nothing needs elevated privileges; the OS
 // resolver configuration points at it explicitly.
-const DNSPort = 53535
+var DNSPort = dnsPortFor(system.IsWSL())
+
+// dnsPortFor picks the DNS port. On WSL, Docker Desktop publishes ports on the
+// Windows host, where WinNAT/Hyper-V reserve random blocks of the dynamic
+// range 49152-65535 at boot, so the port must stay below that range.
+func dnsPortFor(wsl bool) int {
+	if wsl {
+		return 15353
+	}
+
+	return 53535
+}
 
 // dnsTTL is deliberately short so teardown or a domain change propagates
 // quickly to resolvers and browsers. It is baked into the CoreDNS Corefile.

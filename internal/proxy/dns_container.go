@@ -20,7 +20,7 @@ const (
 	// dnsConfigVersion is stamped on the container as a label; bumping it makes
 	// EnsureDNSContainerRunning recreate containers started by older CLI
 	// versions with an incompatible Corefile or run arguments.
-	dnsConfigVersion      = "2"
+	dnsConfigVersion      = "3"
 	dnsConfigVersionLabel = "com.shopware-cli.proxy-dns-config-version"
 	// dnsDomainLabel records the base domain the container's Corefile answers
 	// for, so a container serving an outdated domain is recreated.

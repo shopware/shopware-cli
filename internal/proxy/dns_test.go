@@ -74,3 +74,10 @@ func TestWriteDNSCorefileIgnoresUmask(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "WriteFile honors umask (077 → 0600); chmod must restore world-read")
 }
+
+func TestDNSPortForStaysOutsideWindowsDynamicRangeOnWSL(t *testing.T) {
+	t.Parallel()
+
+	assert.Less(t, dnsPortFor(true), 49152)
+	assert.Equal(t, 53535, dnsPortFor(false))
+}
