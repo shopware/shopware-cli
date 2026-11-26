@@ -88,7 +88,7 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 	targetProject := filepath.Join(target, "project")
 	require.NoError(t, Import(t.Context(), ImportOptions{
 		Archive:     archive,
-		Components:  files,
+		Contents:    contents,
 		Environment: executor.NewLocal(targetProject),
 		Filesystems: localFilesystems(targetProject),
 	}))
@@ -123,12 +123,14 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 	writeFile(t, filepath.Join(project, "public/media/a/stale.png"), "stale")
 	writeFile(t, filepath.Join(project, "public/thumbnail/a/stale_400x400.png"), "stale")
 	writeFile(t, filepath.Join(project, "public/theme/all.css"), "kept")
-	writeFile(t, filepath.Join(project, "files/documents/invoice.pdf"), "kept")
+	writeFile(t, filepath.Join(project, "files/documents/invoice.pdf"), "stale")
+
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
 
 	require.NoError(t, Import(t.Context(), ImportOptions{
 		Archive:     archive,
-		Components:  Components{Database: true},
-		EmptyFiles:  Components{PublicFiles: true},
+		Contents:    contents,
 		Environment: executor.NewLocal(project),
 		Filesystems: localFilesystems(project),
 		Database:    noopExecer{},
@@ -138,7 +140,7 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(project, "public/thumbnail/a"))
 	assert.DirExists(t, filepath.Join(project, "public/media"))
 	assert.FileExists(t, filepath.Join(project, "public/theme/all.css"))
-	assert.FileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
+	assert.NoFileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
 }
 
 func TestImportRejectsUnsupportedFilesystemBeforeWriting(t *testing.T) {
@@ -161,7 +163,7 @@ func TestImportRejectsUnsupportedFilesystemBeforeWriting(t *testing.T) {
 
 			err := Import(t.Context(), ImportOptions{
 				Archive:     filepath.Join(t.TempDir(), "missing.tar.gz"),
-				Components:  Components{PublicFiles: true, PrivateFiles: true},
+				Contents:    &Contents{Components: Components{PublicFiles: true, PrivateFiles: true}},
 				Environment: executor.NewLocal(project),
 				Filesystems: fs,
 			})
@@ -220,21 +222,18 @@ func writeTestArchive(t *testing.T, path string, entries map[string]string) {
 }
 
 func TestParseFilesystems(t *testing.T) {
-	output := `
-Current configuration for "shopware.filesystem"
-===============================================
-
-private:
-    type: local
-    config:
-        root: /var/www/html/files
-    visibility: private
-public:
-    type: amazon-s3
-    url: 'https://cdn.example.com'
-    config:
-        bucket: media
-`
+	output := `{
+    "private": {
+        "type": "local",
+        "config": {"root": "/var/www/html/files"},
+        "visibility": "private"
+    },
+    "public": {
+        "type": "amazon-s3",
+        "url": "https://cdn.example.com",
+        "config": {"bucket": "media"}
+    }
+}`
 
 	fs, err := parseFilesystems([]byte(output))
 	require.NoError(t, err)

@@ -49,6 +49,16 @@ func (c Components) Any() bool {
 	return c.Database || c.PublicFiles || c.PrivateFiles
 }
 
+// FilesToEmpty returns the file components whose directories an import of
+// these components empties, as an imported database without files has no rows
+// for them.
+func (c Components) FilesToEmpty() Components {
+	return Components{
+		PublicFiles:  c.Database && !c.PublicFiles,
+		PrivateFiles: c.Database && !c.PrivateFiles,
+	}
+}
+
 // Metadata is the content of metadata.json.
 type Metadata struct {
 	FormatVersion int       `json:"format_version"`

@@ -51,11 +51,7 @@ confirmation, which is required without an interactive terminal.`,
 		}
 
 		components := contents.Components
-		// The database of an archive without files has no rows for them.
-		emptyFiles := projectarchive.Components{
-			PublicFiles:  components.Database && !components.PublicFiles,
-			PrivateFiles: components.Database && !components.PrivateFiles,
-		}
+		emptyFiles := components.FilesToEmpty()
 
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
@@ -69,8 +65,7 @@ confirmation, which is required without an interactive terminal.`,
 
 		opts := projectarchive.ImportOptions{
 			Archive:     archive,
-			Components:  components,
-			EmptyFiles:  emptyFiles,
+			Contents:    contents,
 			Environment: cmdExecutor,
 		}
 

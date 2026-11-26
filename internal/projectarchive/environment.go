@@ -11,8 +11,6 @@ import (
 	"io"
 	"os/exec"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // localAdapter is the only Flysystem adapter supported so far.
@@ -71,22 +69,23 @@ done`
 
 // Filesystem is a Shopware filesystem configured in shopware.filesystem.
 type Filesystem struct {
-	Type   string `yaml:"type"`
+	Type   string `json:"type"`
 	Config struct {
-		Root string `yaml:"root"`
-	} `yaml:"config"`
+		Root string `json:"root"`
+	} `json:"config"`
 }
 
 // Filesystems are the public and private Shopware filesystems of a project.
 type Filesystems struct {
-	Public  Filesystem `yaml:"public"`
-	Private Filesystem `yaml:"private"`
+	Public  Filesystem `json:"public"`
+	Private Filesystem `json:"private"`
 }
 
 // ResolveFilesystems reads the resolved shopware.filesystem configuration of
-// the project.
+// the project. The --format option of debug:config requires Symfony 6.3,
+// shipped since Shopware 6.5.2.0.
 func ResolveFilesystems(ctx context.Context, env Environment) (Filesystems, error) {
-	output, err := env.ConsoleCommand(ctx, "debug:config", "shopware", "filesystem", "--resolve-env", "--no-ansi").Output()
+	output, err := env.ConsoleCommand(ctx, "debug:config", "shopware", "filesystem", "--resolve-env", "--format=json", "--no-ansi").Output()
 	if err != nil {
 		return Filesystems{}, fmt.Errorf("cannot read the filesystem configuration: %w", commandError(err))
 	}
@@ -94,19 +93,9 @@ func ResolveFilesystems(ctx context.Context, env Environment) (Filesystems, erro
 	return parseFilesystems(output)
 }
 
-// parseFilesystems parses the output of debug:config, which prints a title
-// underlined with "=" before the YAML configuration.
 func parseFilesystems(output []byte) (Filesystems, error) {
-	lines := strings.Split(string(output), "\n")
-	for i, line := range lines {
-		if trimmed := strings.TrimSpace(line); trimmed != "" && strings.Trim(trimmed, "=") == "" {
-			lines = lines[i+1:]
-			break
-		}
-	}
-
 	var filesystems Filesystems
-	if err := yaml.Unmarshal([]byte(strings.Join(lines, "\n")), &filesystems); err != nil {
+	if err := unmarshalConsoleJSON(output, &filesystems); err != nil {
 		return Filesystems{}, fmt.Errorf("cannot parse the filesystem configuration: %w", err)
 	}
 
@@ -141,13 +130,8 @@ func ShopwareVersion(ctx context.Context, env Environment) (string, error) {
 }
 
 func parseShopwareVersion(output []byte) (string, error) {
-	// Deprecation notices may precede the JSON document.
-	if start := bytes.IndexByte(output, '{'); start > 0 {
-		output = output[start:]
-	}
-
 	var parameters map[string]string
-	if err := json.Unmarshal(output, &parameters); err != nil {
+	if err := unmarshalConsoleJSON(output, &parameters); err != nil {
 		return "", fmt.Errorf("cannot detect the Shopware version: %w", err)
 	}
 
@@ -157,6 +141,16 @@ func parseShopwareVersion(output []byte) (string, error) {
 	}
 
 	return version, nil
+}
+
+// unmarshalConsoleJSON decodes the JSON object printed by a console command.
+// Deprecation notices may precede it.
+func unmarshalConsoleJSON(output []byte, v any) error {
+	if start := bytes.IndexByte(output, '{'); start > 0 {
+		output = output[start:]
+	}
+
+	return json.Unmarshal(output, v)
 }
 
 // packFiles writes a tar.gz of the directories below root to w.
