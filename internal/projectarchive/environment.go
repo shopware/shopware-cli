@@ -73,6 +73,8 @@ exec tar -chf - "$@"`
 // the root may be read-only, like the public directory of a sealed SSH
 // release, while the directories themselves link to writable shared ones.
 // find runs commands with "+", so a failing rm or mv fails the script.
+// --no-same-owner gives extracted files to the importing user, as the source
+// owners are meaningless on the target; only root would restore them.
 const unpackScript = `set -e
 mkdir -p "$1"
 cd "$1"
@@ -80,7 +82,7 @@ shift
 mkdir -p "$@"
 staging=$(mktemp -d "$1/.shopware-import.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
-tar -xf - -C "$staging"
+tar -xf - --no-same-owner -C "$staging"
 staging_name=$(basename "$staging")
 for dir in "$@"; do
 	find "$dir/" -mindepth 1 -maxdepth 1 ! -name "$staging_name" -exec rm -rf {} +
