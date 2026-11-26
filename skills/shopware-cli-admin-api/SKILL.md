@@ -28,11 +28,35 @@ do not build a separate OAuth flow or expose a token.
 - Requests can contain customer and order data. Read only what is needed, keep
   outputs private, and summarize or redact sensitive values.
 
+## API documentation is the source of truth
+
+Shopware's API documentation and the selected shop's generated API reference
+are authoritative for endpoints, methods, schemas, request and response
+formats, and API behavior. This skill explains how to use the CLI; it is not
+an API reference. Do not infer an endpoint or payload from an example here.
+
+1. Identify the shop's Shopware version and use the matching version of the
+   [API guide](https://developer.shopware.com/docs/guides/development/integrations-api/).
+   Follow its links to the Admin API reference for endpoint details, and its
+   [search criteria guide](https://developer.shopware.com/docs/guides/development/integrations-api/search-criteria.html)
+   for filters, pagination and associations.
+2. When the selected instance exposes it, consult its generated reference for
+   the actual installed version and extensions. The
+   [generated reference guide](https://developer.shopware.com/docs/guides/development/integrations-api/generated-reference.html)
+   documents `/api/_info/stoplightio.html`, `/api/_info/openapi3.json` and
+   `/api/_info/open-api-schema.json`. Use the instance's own base URL. The
+   guide says these specifications require `APP_ENV=dev`; do not change an
+   environment's mode to make them available.
+3. For custom or extension endpoints, use the instance's generated reference
+   and the extension's own documentation when available. If documentation or
+   schema is unavailable or conflicts, say what is uncertain and investigate
+   the version-specific source or ask the user; do not invent API details.
+
 ## Make a request
 
-Check the installed CLI and version-matched Shopware Admin API documentation
-or schema for the endpoint, method, payload and required permissions. Ask for
-missing identifiers or query criteria rather than guessing. The command is:
+Consult those sources for the endpoint, method, payload and required
+permissions. Ask for missing identifiers or query criteria rather than
+guessing. The command is:
 
 ```bash
 shopware-cli project -e <environment> admin-api <method> <path> -- <curl-options>

@@ -23,7 +23,7 @@ var integrations = Directory{
 			Provider:      "shopware",
 			Description:   "Make authenticated Admin API requests for a Shopware project.",
 			Status:        StatusActive,
-			Documentation: "https://developer.shopware.com/docs/products/cli/",
+			Documentation: "https://developer.shopware.com/docs/guides/development/integrations-api/",
 			Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/shopware-cli"},
 		},
 		{

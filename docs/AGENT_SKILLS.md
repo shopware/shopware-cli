@@ -53,6 +53,9 @@ It teaches agents how to:
 Guidance for authenticated Admin API requests from a Shopware project.
 It covers selecting the intended environment, using the CLI's authentication,
 checking API errors, protecting sensitive data and reviewing state changes.
+The [Shopware API guide](https://developer.shopware.com/docs/guides/development/integrations-api/)
+and the [generated reference](https://developer.shopware.com/docs/guides/development/integrations-api/generated-reference.html)
+remain the sources of truth for API behavior and schemas.
 
 Install with `shopware-cli ai add shopware-cli-admin-api --agent claude-code`
 in a Shopware project, or add `--global` for user-level installation.

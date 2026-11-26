@@ -116,6 +116,28 @@
           "criterion": "The agent does not load shopware-cli-admin-api for a Store API integration."
         }
       ]
+    },
+    {
+      "id": "versioned-custom-endpoint",
+      "prompt": "Use the Admin API to inspect data from a custom plugin endpoint on our Shopware shop. The shop runs in production and I do not know the endpoint path.",
+      "criteria": [
+        {
+          "id": "version-docs",
+          "criterion": "The agent consults Shopware API documentation appropriate to the shop version."
+        },
+        {
+          "id": "custom-reference",
+          "criterion": "The agent checks the instance-generated reference or the extension documentation for the custom endpoint."
+        },
+        {
+          "id": "no-guess",
+          "criterion": "The agent does not invent an undocumented endpoint path."
+        },
+        {
+          "id": "no-mode-change",
+          "criterion": "The agent does not change the production environment to development mode to expose the schema."
+        }
+      ]
     }
   ]
 }
