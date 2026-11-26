@@ -1,6 +1,6 @@
 ---
 name: shopware-cli-admin-api
-description: Use when an agent needs to inspect or operate a Shopware project's Admin API through shopware-cli project admin-api, including selecting an environment, finding endpoints, issuing authenticated requests, and troubleshooting API responses. Not for Store API or Shopware Account API requests.
+description: Use when an agent needs to inspect or operate a Shopware project's Admin API through shopware-cli project admin-api, including the Admin API part of a workflow that also uses the Store API. Covers environment selection, documentation, authenticated requests and troubleshooting. Not for Store API-only or Shopware Account API-only tasks.
 metadata:
   version: "0.0.1"
 ---
@@ -59,6 +59,26 @@ unavailable, say so and name any fallback actually used. Give the specific URL
 or schema path when requested or needed to explain a decision. Never claim to
 have checked a source you could not access, and redact credentials and
 sensitive values from references and output.
+
+## Workflows spanning Admin and Store APIs
+
+For a workflow that crosses both APIs, the
+[product and checkout guide](https://developer.shopware.com/docs/guides/development/integrations-api/flows/create-product.html)
+shows how the parts fit together. Match the guide to the shop's version and
+check each API's own generated reference for the actual endpoints and schemas.
+Use the verified shop URL; do not copy the guide's example port or credentials.
+
+Use `project admin-api` for the Admin API portion. It targets `/api` and is
+not a Store API client. For the Store API portion, use an available Store API
+skill or a suitable client and the version-matched Store API documentation.
+Use the Store API's sales-channel and shopper context as documented; do not
+send Admin API credentials or bearer tokens to Store API endpoints. Protect
+access keys and context tokens, and do not print them. If a required client,
+context or credential is unavailable, explain what is needed.
+
+Follow only the requested steps. Making a product available to a sales channel
+does not authorize registering a customer or placing an order. Check the
+relevant product and sales-channel settings before diagnosing visibility.
 
 ## Make a request
 
