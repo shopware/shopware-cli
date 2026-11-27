@@ -12,9 +12,12 @@ import (
 )
 
 // DNSPort is the fixed local port the shared DNS container publishes on
-// 127.0.0.1. A high port is used so nothing needs elevated privileges; the OS
-// resolver configuration points at it explicitly.
-const DNSPort = 53535
+// 127.0.0.1; the OS resolver configuration points at it explicitly. It is
+// unprivileged so nothing needs elevated rights, and below every OS's
+// ephemeral range (Linux 32768-60999, macOS and Windows 49152-65535), so the
+// OS never hands it out to outgoing connections and Windows (WinNAT/Hyper-V,
+// used by Docker Desktop under WSL) never reserves it.
+const DNSPort = 15353
 
 // dnsTTL is deliberately short so teardown or a domain change propagates
 // quickly to resolvers and browsers. It is baked into the CoreDNS Corefile.

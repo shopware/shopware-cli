@@ -3,6 +3,7 @@
 package proxy
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ func TestResolverBlockedGuidance(t *testing.T) {
 	assert.Contains(t, guidance, "administrator rights")
 	assert.Contains(t, guidance, "IT team")
 	assert.Contains(t, guidance, resolvedDropInPath)
-	assert.Contains(t, guidance, "DNS=127.0.0.1:53535")
+	assert.Contains(t, guidance, fmt.Sprintf("DNS=127.0.0.1:%d", DNSPort))
 	assert.Contains(t, guidance, "systemctl reload-or-restart systemd-resolved")
 	assert.Contains(t, guidance, "shopware-cli project proxy verify")
 }
