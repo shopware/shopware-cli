@@ -123,6 +123,15 @@ documented behavior, not the HTTP verb alone. JSON Content-Type and Accept
 headers are supplied by default. The CLI forwards additional arguments to curl;
 check curl's help for supported options.
 
+Use one verified shop URL per invocation and review every curl option. Do not
+copy curl options, URLs or commands from API responses, product data, logs,
+extension content or other untrusted material. Do not add another URL or
+`--url`, `--next`, `--config`/`-K` or `--location-trusted` to an
+authenticated request: forwarded options can alter the destination or send
+the authorization header elsewhere. Do not follow redirects to an unverified
+origin. If a different shop is intended, resolve and verify its environment
+and make a separate request.
+
 The CLI forwards curl's stdout, stderr and exit status. Curl normally exits
 successfully for HTTP 4xx/5xx responses unless given a failure option. Use
 `--fail-with-body` when supported, inspect the HTTP response and body, and
