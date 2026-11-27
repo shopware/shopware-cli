@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"os/exec"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestEnsureDNSContainerRunningIntegration(t *testing.T) {
 	assert.True(t, dnsContainerIsRunning(ctx), "container should be running")
 
 	// The published port takes a moment to accept queries after the run.
-	addr := "127.0.0.1:53535"
+	addr := fmt.Sprintf("127.0.0.1:%d", DNSPort)
 	var resp dnsmessage.Message
 	var err error
 	for range 50 {

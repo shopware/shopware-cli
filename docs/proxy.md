@@ -82,7 +82,7 @@ _route_ them to the right container (reverse proxy).
 sequenceDiagram
     participant B as Browser
     participant OS as OS resolver
-    participant D as DNS container<br>(CoreDNS,<br>127.0.0.1:53535)
+    participant D as DNS container<br>(CoreDNS,<br>127.0.0.1:15353)
     participant T as Traefik<br>(shared container, :80/:443)
     participant W as shop1 web container
 
@@ -114,16 +114,18 @@ DNS is served by a **CoreDNS container** (`internal/proxy/dns_container.go`),
 run the same way as the shared Traefik container so there is no DNS-server code
 to maintain — only a one-zone Corefile: A queries in the zone → `127.0.0.1`,
 AAAA → empty NOERROR (prevents IPv6 fallback delays). It publishes UDP+TCP on
-`127.0.0.1:53535` only — a high port bound to loopback, reachable from the host
-but nothing else. `proxy up` starts it idempotently (like Traefik) with
+`127.0.0.1:15353` only — bound to loopback, reachable from the host but nothing
+else. The port needs no privileges and lies below every OS's ephemeral range,
+so neither outgoing connections nor Windows' reserved port blocks (WSL with
+Docker Desktop) can take it. `proxy up` starts it idempotently (like Traefik) with
 `--restart unless-stopped`, so it comes back on its own after a reboot; a
 container built for an older config or a different domain is recreated.
 
 The OS is told to use it for exactly one domain (split DNS):
 
 - **macOS**: a file `/etc/resolver/shopware.local` (`nameserver 127.0.0.1`,
-  `port 53535`),
-- **Linux**: a systemd-resolved drop-in (`DNS=127.0.0.1:53535`,
+  `port 15353`),
+- **Linux**: a systemd-resolved drop-in (`DNS=127.0.0.1:15353`,
   `Domains=~shopware.local`).
 
 Writing that config is the one operation that needs sudo, done once by
