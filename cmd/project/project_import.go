@@ -2,6 +2,7 @@ package project
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/projectarchive"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/sqlshell"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -20,6 +22,11 @@ import (
 
 // unknownShopwareVersion is shown when the target version cannot be detected.
 const unknownShopwareVersion = "unknown"
+
+const (
+	dryRunFlag = "dry-run"
+	forceFlag  = "force"
+)
 
 var projectImportCmd = &cobra.Command{
 	Use:   "import archive",
@@ -96,7 +103,7 @@ confirmation, which is required without an interactive terminal.`,
 				"The import may fail or leave the shop inconsistent")
 		}
 
-		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
+		if dryRun, _ := cmd.Flags().GetBool(dryRunFlag); dryRun {
 			return nil
 		}
 
@@ -109,12 +116,16 @@ confirmation, which is required without an interactive terminal.`,
 			if err != nil {
 				return err
 			}
-			conn, cleanup, err := dbConn.Open(cmd.Context())
+			// Fail before the files are extracted, Import opens its own
+			// connection afterwards.
+			_, closeDB, err := dbConn.Open(cmd.Context())
 			if err != nil {
 				return err
 			}
-			defer cleanup()
-			opts.Database = conn
+			closeDB()
+			opts.OpenDatabase = func(ctx context.Context) (sqlshell.Execer, func(), error) {
+				return dbConn.Open(ctx)
+			}
 		}
 
 		if err := projectarchive.Import(cmd.Context(), opts); err != nil {
@@ -185,12 +196,12 @@ func printWarning(w io.Writer, message, hint string) {
 }
 
 func confirmImport(cmd *cobra.Command, target string) error {
-	if force, _ := cmd.Flags().GetBool("force"); force {
+	if force, _ := cmd.Flags().GetBool(forceFlag); force {
 		return nil
 	}
 
 	if !system.IsInteractionEnabled(cmd.Context()) {
-		return errors.New("cannot import without confirmation: interaction is disabled (pass --force to replace the data)")
+		return errors.New("cannot import without confirmation: interaction is disabled (pass --" + forceFlag + " to replace the data)")
 	}
 
 	answer := tui.No
@@ -236,6 +247,6 @@ func printImportNextSteps(w io.Writer, components projectarchive.Components) {
 func init() {
 	projectRootCmd.AddCommand(projectImportCmd)
 
-	projectImportCmd.Flags().Bool("dry-run", false, "Show what would be replaced, without changing anything")
-	projectImportCmd.Flags().Bool("force", false, "Replace the data without confirmation")
+	projectImportCmd.Flags().Bool(dryRunFlag, false, "Show what would be replaced, without changing anything")
+	projectImportCmd.Flags().Bool(forceFlag, false, "Replace the data without confirmation")
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/sqlshell"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -125,6 +126,13 @@ func TestExportSkipsMissingDirectories(t *testing.T) {
 	assert.Equal(t, Components{PublicFiles: true, PrivateFiles: true}, contents.Components)
 }
 
+// openExecer returns an ImportOptions.OpenDatabase that opens execer.
+func openExecer(execer sqlshell.Execer) func(context.Context) (sqlshell.Execer, func(), error) {
+	return func(context.Context) (sqlshell.Execer, func(), error) {
+		return execer, func() {}, nil
+	}
+}
+
 // noopExecer accepts every statement of a database import.
 type noopExecer struct{}
 
@@ -149,11 +157,11 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, Import(t.Context(), ImportOptions{
-		Archive:     archive,
-		Contents:    contents,
-		Environment: executor.NewLocal(project),
-		FileRoots:   localFileRoots(project),
-		Database:    noopExecer{},
+		Archive:      archive,
+		Contents:     contents,
+		Environment:  executor.NewLocal(project),
+		FileRoots:    localFileRoots(project),
+		OpenDatabase: openExecer(noopExecer{}),
 	}))
 
 	assert.NoDirExists(t, filepath.Join(project, "public/media/a"))
@@ -210,6 +218,53 @@ func TestImportAdoptsTargetPermissions(t *testing.T) {
 	assertMode(filepath.Join(thumbnail, "a"), 0o750)
 }
 
+func TestImportFailsBeforeDatabaseWhenFilesCannotBeRemoved(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can remove every file")
+	}
+
+	dir := t.TempDir()
+	publicArchive := filepath.Join(dir, publicFilesEntry)
+	writeTestArchive(t, publicArchive, map[string]string{"media/a/new.png": "new"})
+	publicContent, err := os.ReadFile(publicArchive)
+	require.NoError(t, err)
+
+	archive := filepath.Join(dir, "archive.tar.gz")
+	writeTestArchive(t, archive, map[string]string{
+		metadataEntry:    `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`,
+		databaseEntry:    "SELECT 1;",
+		publicFilesEntry: string(publicContent),
+	})
+
+	// A subdirectory of another user, e.g. the web server, that the importing
+	// user may not change.
+	project := t.TempDir()
+	writeFile(t, filepath.Join(project, "public/media/b/old.png"), "old")
+	foreign := filepath.Join(project, "public/media/b")
+	require.NoError(t, os.Chmod(foreign, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(foreign, 0o755) })
+
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
+
+	err = Import(t.Context(), ImportOptions{
+		Archive:     archive,
+		Contents:    contents,
+		Environment: executor.NewLocal(project),
+		FileRoots:   localFileRoots(project),
+		OpenDatabase: func(context.Context) (sqlshell.Execer, func(), error) {
+			t.Error("the database must not be touched")
+			return noopExecer{}, func() {}, nil
+		},
+	})
+	require.Error(t, err)
+
+	assert.FileExists(t, filepath.Join(project, "public/media/b/old.png"))
+	matches, err := filepath.Glob(filepath.Join(project, "public/media", stagingPrefix+"*"))
+	require.NoError(t, err)
+	assert.Empty(t, matches, "staging directories must be removed")
+}
+
 // failingExecer rejects every statement of a database import.
 type failingExecer struct{}
 
@@ -239,11 +294,11 @@ func TestImportKeepsFilesWhenDatabaseImportFails(t *testing.T) {
 	require.NoError(t, err)
 
 	err = Import(t.Context(), ImportOptions{
-		Archive:     archive,
-		Contents:    contents,
-		Environment: executor.NewLocal(project),
-		FileRoots:   localFileRoots(project),
-		Database:    failingExecer{},
+		Archive:      archive,
+		Contents:     contents,
+		Environment:  executor.NewLocal(project),
+		FileRoots:    localFileRoots(project),
+		OpenDatabase: openExecer(failingExecer{}),
 	})
 	require.Error(t, err)
 

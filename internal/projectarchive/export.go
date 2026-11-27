@@ -60,10 +60,6 @@ type DatabaseExport struct {
 // staged in a temporary directory next to the output, as tar entries need
 // their size upfront. The archive only appears at Output once it is complete.
 func Export(ctx context.Context, opts ExportOptions) (err error) {
-	if !opts.Components.Any() {
-		return errors.New("cannot export: every component is skipped")
-	}
-
 	staging, err := os.MkdirTemp(filepath.Dir(opts.Output), ".shopware-export-*")
 	if err != nil {
 		return fmt.Errorf("cannot create staging directory: %w", err)

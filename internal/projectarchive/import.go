@@ -14,6 +14,9 @@ import (
 // stagingPrefix names the staging directories of an import.
 const stagingPrefix = ".shopware-import-"
 
+// incompleteHint is added to errors after the import started changing data.
+const incompleteHint = "the import is incomplete (run the import again)"
+
 // ImportOptions configures Import.
 type ImportOptions struct {
 	// Archive is the path of the archive to import.
@@ -25,8 +28,10 @@ type ImportOptions struct {
 	// FileRoots are the roots of the file components the import replaces, as
 	// returned by ResolveFileRoots for Contents.FilesReplaced.
 	FileRoots FileRoots
-	// Database executes the SQL dump, required for the database component.
-	Database sqlshell.Execer
+	// OpenDatabase opens the connection that executes the SQL dump, required
+	// for the database component. It is called only after the files are
+	// staged, so the connection cannot time out while they are extracted.
+	OpenDatabase func(ctx context.Context) (sqlshell.Execer, func(), error)
 }
 
 // Import replaces the project's components with the archive's: the tables
@@ -68,7 +73,8 @@ func Import(ctx context.Context, opts ImportOptions) (err error) {
 			logging.FromContext(ctx).Infof("Replacing %s files", s.name)
 		}
 		if err := s.swap(ctx, opts.Environment); err != nil {
-			return fmt.Errorf("cannot replace %s files: %w", s.name, err)
+			// The database and earlier components may already be replaced.
+			return fmt.Errorf("cannot replace %s files, %s: %w", s.name, incompleteHint, err)
 		}
 		for _, m := range s.ownerMismatches {
 			dir := path.Join(s.root, m.dir)
@@ -99,7 +105,7 @@ func stageImportFiles(ctx context.Context, opts ImportOptions) ([]stagedFiles, e
 			s, err := stageFiles(ctx, opts.Environment, stagedFiles{fileComponent: fc, root: root, staging: staging}, r)
 			staged = append(staged, s)
 			if err != nil {
-				return fmt.Errorf("cannot extract %s files: %w", fc.name, err)
+				return fmt.Errorf("cannot prepare the import of %s files: %w", fc.name, err)
 			}
 		}
 
@@ -130,13 +136,19 @@ func stageImportFiles(ctx context.Context, opts ImportOptions) ([]stagedFiles, e
 
 // importDatabase executes the archived SQL dump.
 func importDatabase(ctx context.Context, opts ImportOptions) error {
+	db, closeDB, err := opts.OpenDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot import database: %w", err)
+	}
+	defer closeDB()
+
 	return walkArchive(opts.Archive, func(entry string, r io.Reader) error {
 		if entry != databaseEntry {
 			return nil
 		}
 		logging.FromContext(ctx).Infof("Importing database")
-		if _, err := sqlshell.ExecuteStream(ctx, opts.Database, r, nil); err != nil {
-			return fmt.Errorf("cannot import database: %w", err)
+		if _, err := sqlshell.ExecuteStream(ctx, db, r, nil); err != nil {
+			return fmt.Errorf("cannot import database, %s: %w", incompleteHint, err)
 		}
 
 		return nil

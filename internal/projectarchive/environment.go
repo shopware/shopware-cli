@@ -83,12 +83,21 @@ COPYFILE_DISABLE=1 exec tar -chf - -C "$root" "$@"`
 // importing user; for each directory whose owner can then neither write them
 // as owner nor through a group-writable group, it prints the directory, the
 // files' owner and the expected one.
+//
+// Before extracting, it checks that swapScript can remove the existing
+// contents, which needs write access to every directory below the target, so
+// a failing swap does not leave a replaced database with half-removed files.
 const stageScript = `set -e
 mkdir -p "$1"
 cd "$1"
 name=$2
 shift 2
 mkdir -p "$@"
+for dir in "$@"; do
+	find "$dir/" -type d -exec sh -c 'for d do
+		[ -r "$d" ] && [ -w "$d" ] && [ -x "$d" ] || { echo "no permission to remove the existing contents of $d" >&2; exit 1; }
+	done' sh {} +
+done
 staging="$1/$name"
 mkdir "$staging"
 tar -xf - --no-same-owner -C "$staging"
