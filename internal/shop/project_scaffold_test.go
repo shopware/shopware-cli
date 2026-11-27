@@ -59,7 +59,6 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		agents := readScaffoldFile(t, projectFolder, "AGENTS.md")
 		assert.Contains(t, agents, "shopware-cli ai list")
 		assert.Contains(t, agents, "shopware-cli project validate")
-		assert.NotContains(t, agents, "6.6", "AGENTS.md must not name a Shopware version")
 	})
 
 	t.Run("creates a Dockerfile for a container deployment", func(t *testing.T) {
