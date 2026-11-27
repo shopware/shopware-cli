@@ -2,9 +2,12 @@ package logging
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestIsVerbose(t *testing.T) {
@@ -29,4 +32,26 @@ func TestIsVerbose(t *testing.T) {
 
 		assert.False(t, IsVerbose(ctx))
 	})
+}
+
+func TestFromContextConcurrentFallback(t *testing.T) {
+	const callers = 32
+	loggers := make([]*zap.SugaredLogger, callers)
+	start := make(chan struct{})
+	var group sync.WaitGroup
+
+	for i := range callers {
+		group.Go(func() {
+			<-start
+			loggers[i] = FromContext(t.Context())
+		})
+	}
+
+	close(start)
+	group.Wait()
+
+	require.NotNil(t, loggers[0])
+	for _, logger := range loggers[1:] {
+		assert.Same(t, loggers[0], logger)
+	}
 }
