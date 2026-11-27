@@ -153,6 +153,18 @@
         {
           "id": "no-blind-retry",
           "criterion": "The agent checks the product state before retrying the update."
+        },
+        {
+          "id": "in-flight",
+          "criterion": "The agent recognizes that the timed-out request may still be running and an unchanged read-back alone does not establish that it will not apply later."
+        },
+        {
+          "id": "side-effects",
+          "criterion": "The agent considers side effects and concurrent changes instead of treating matching fields or explicit IDs alone as proof that a retry is safe."
+        },
+        {
+          "id": "uncertainty",
+          "criterion": "The agent advises against retrying when the outcome or relevant side effects remain uncertain."
         }
       ]
     },

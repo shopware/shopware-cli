@@ -1,6 +1,6 @@
 ---
 name: shopware-cli-admin-api
-description: Use when an agent needs to inspect or operate a Shopware project's Admin API through shopware-cli project admin-api, including the Admin API part of a workflow that also uses the Store API. Covers environment selection, documentation, authenticated requests and troubleshooting. Not for Store API-only or Shopware Account API-only tasks.
+description: Use when working with a Shopware project's Admin API through shopware-cli project admin-api, including product updates, API errors, timeouts and retry decisions, and the Admin API part of workflows that also use the Store API. Covers environment selection, documentation and authenticated requests. Not for Store API-only or Shopware Account API-only tasks.
 metadata:
   version: "0.0.1"
 ---
@@ -164,6 +164,10 @@ operation succeeded.
   operations first. Compare with a reliable prior state and consider concurrent
   activity: a counter advancing does not prove which request advanced it, and
   missing logs or an unchanged counter alone may not establish the outcome.
-  If the outcome remains uncertain, explain what is known and do not retry,
+  After a timeout the original request may still be running, so an unchanged
+  read-back is not proof it will not apply later. A matching final field value
+  or stable entity IDs do not by themselves prove that a repeat is safe or
+  that side effects did not occur. If the outcome remains uncertain, explain
+  what is known and do not retry,
   even if duplicate effects or gaps appear acceptable. Never describe repeating
   a state-changing request as a read-only check.
