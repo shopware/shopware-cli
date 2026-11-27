@@ -139,7 +139,8 @@ done`
 // the contents instead of the directories, as they may be symlinks into a
 // shared directory, as in SSH deployments. tar would replace such symlinks
 // with real directories unless GNU tar's --keep-directory-symlink is used,
-// which bsdtar and BusyBox tar lack.
+// which bsdtar and BusyBox tar lack. The emptied staging directory is left to
+// cleanupScript.
 // find runs commands with "+", so a failing rm or mv fails the script.
 const swapScript = `set -e
 cd "$1"
@@ -151,11 +152,11 @@ for dir in "$@"; do
 	if [ -d "$staging/$dir" ]; then
 		find "$staging/$dir/" -mindepth 1 -maxdepth 1 -exec sh -c 'mv "$@" "$0"' "$dir/" {} +
 	fi
-done
-rm -rf "$staging"`
+done`
 
 // cleanupScript removes the staging directory ($2) below the first directory
-// ($3) below the root ($1), if it exists.
+// ($3) below the root ($1), if it exists. It runs after every import, whether
+// the staged files were swapped in or not.
 const cleanupScript = `cd "$1" 2>/dev/null || exit 0
 rm -rf "$3/$2"`
 
@@ -293,17 +294,13 @@ func unmarshalConsoleJSON(output []byte, v any) error {
 
 // packFiles writes a tar.gz of the directories below root to w.
 func packFiles(ctx context.Context, env Environment, root string, dirs []string, w io.Writer) error {
-	process := env.Command(ctx, "sh", append([]string{"-c", packScript, "sh", root}, dirs...)...)
 	gz := gzip.NewWriter(w)
-	var stderr bytes.Buffer
-	process.Cmd.Stdout = gz
-	process.Cmd.Stderr = &stderr
-
-	if err := process.Run(); err != nil {
-		return withStderr(err, stderr.String())
+	messages, err := runScript(ctx, env, packScript, append([]string{root}, dirs...), nil, gz)
+	if err != nil {
+		return err
 	}
 
-	if messages := strings.TrimSpace(stderr.String()); messages != "" {
+	if messages = strings.TrimSpace(messages); messages != "" {
 		logger := logging.FromContext(ctx)
 		logger.Warnf("Files in %s changed during the export, which is expected while the shop is running. "+
 			"This is usually fine: new files are not referenced by the database, as it is exported first. "+
@@ -316,7 +313,7 @@ func packFiles(ctx context.Context, env Environment, root string, dirs []string,
 }
 
 // stagedFiles are the files of a component extracted into a staging
-// directory, see stageFiles.
+// directory, see stage.
 type stagedFiles struct {
 	fileComponent
 	root string
@@ -336,25 +333,24 @@ type ownerMismatch struct {
 	dir, owner, expected string
 }
 
-// stageFiles extracts the tar.gz read from r into the staging directory below
-// the first of the component's directories, without touching the existing
-// files. It returns the staged files also on error, so they can be cleaned up.
-func stageFiles(ctx context.Context, env Environment, staged stagedFiles, r io.Reader) (stagedFiles, error) {
+// stage extracts the tar.gz read from r into the staging directory below the
+// first of the component's directories, without touching the existing files.
+func (s *stagedFiles) stage(ctx context.Context, env Environment, r io.Reader) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return staged, err
+		return err
 	}
 	// Stop after the first member, so zero padding behind it is not
 	// mistaken for another one.
 	gz.Multistream(false)
 
-	output, err := staged.run(ctx, env, stageScript, gz)
-	if err != nil {
-		return staged, err
+	var output bytes.Buffer
+	if err := s.run(ctx, env, stageScript, gz, &output); err != nil {
+		return err
 	}
-	for line := range strings.Lines(string(output)) {
+	for line := range strings.Lines(output.String()) {
 		if fields := strings.Fields(line); len(fields) == 3 {
-			staged.ownerMismatches = append(staged.ownerMismatches, ownerMismatch{dir: fields[0], owner: fields[1], expected: fields[2]})
+			s.ownerMismatches = append(s.ownerMismatches, ownerMismatch{dir: fields[0], owner: fields[1], expected: fields[2]})
 		}
 	}
 
@@ -362,55 +358,52 @@ func stageFiles(ctx context.Context, env Environment, staged stagedFiles, r io.R
 	// verified the checksum at the end of the stream.
 	_, err = io.Copy(io.Discard, gz)
 
-	return staged, err
+	return err
 }
 
-// stageEmptyFiles stages an empty archive, so swapping empties the
-// directories with the same symlink handling.
-func stageEmptyFiles(ctx context.Context, env Environment, staged stagedFiles) (stagedFiles, error) {
-	staged.empty = true
-
+// emptyFilesArchive returns an empty tar.gz. Staging it makes the swap empty
+// the directories with the same checks and symlink handling as replacing them.
+func emptyFilesArchive() (io.Reader, error) {
 	var archive bytes.Buffer
 	gz := gzip.NewWriter(&archive)
-	if err := tar.NewWriter(gz).Close(); err != nil {
-		return staged, err
-	}
-	if err := gz.Close(); err != nil {
-		return staged, err
-	}
+	err := errors.Join(tar.NewWriter(gz).Close(), gz.Close())
 
-	return stageFiles(ctx, env, staged, &archive)
+	return &archive, err
 }
 
-// swap replaces the directories with the staged files and removes the staging
-// directory.
-func (s stagedFiles) swap(ctx context.Context, env Environment) error {
-	_, err := s.run(ctx, env, swapScript, nil)
-
-	return err
+// swap replaces the directories with the staged files. The emptied staging
+// directory stays until cleanup.
+func (s *stagedFiles) swap(ctx context.Context, env Environment) error {
+	return s.run(ctx, env, swapScript, nil, nil)
 }
 
-// cleanup removes the staging directory, if it still exists.
-func (s stagedFiles) cleanup(ctx context.Context, env Environment) error {
-	_, err := s.run(ctx, env, cleanupScript, nil)
-
-	return err
+// cleanup removes the staging directory, if it exists.
+func (s *stagedFiles) cleanup(ctx context.Context, env Environment) error {
+	return s.run(ctx, env, cleanupScript, nil, nil)
 }
 
 // run runs script with the root, the staging directory name and the
-// component's directories as arguments and returns its output.
-func (s stagedFiles) run(ctx context.Context, env Environment, script string, stdin io.Reader) ([]byte, error) {
-	process := env.Command(ctx, "sh", append([]string{"-c", script, "sh", s.root, s.staging}, s.dirs...)...)
-	var stdout, stderr bytes.Buffer
+// component's directories as arguments.
+func (s *stagedFiles) run(ctx context.Context, env Environment, script string, stdin io.Reader, stdout io.Writer) error {
+	_, err := runScript(ctx, env, script, append([]string{s.root, s.staging}, s.dirs...), stdin, stdout)
+
+	return err
+}
+
+// runScript runs a shell script with args in the environment and returns what
+// it wrote to stderr, which a failure carries in its error instead.
+func runScript(ctx context.Context, env Environment, script string, args []string, stdin io.Reader, stdout io.Writer) (string, error) {
+	process := env.Command(ctx, "sh", append([]string{"-c", script, "sh"}, args...)...)
+	var stderr bytes.Buffer
 	process.Cmd.Stdin = stdin
-	process.Cmd.Stdout = &stdout
+	process.Cmd.Stdout = stdout
 	process.Cmd.Stderr = &stderr
 
 	if err := process.Run(); err != nil {
-		return nil, withStderr(err, stderr.String())
+		return "", withStderr(err, stderr.String())
 	}
 
-	return stdout.Bytes(), nil
+	return stderr.String(), nil
 }
 
 // commandError adds the captured stderr of a failed command to its error.

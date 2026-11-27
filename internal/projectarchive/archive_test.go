@@ -29,6 +29,57 @@ func localFileRoots(root string) FileRoots {
 	return FileRoots{public: filepath.Join(root, "public"), private: filepath.Join(root, "files")}
 }
 
+// testMetadata is a minimal valid metadata.json.
+const testMetadata = `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`
+
+// writeImportArchive writes an archive with the given public files, if any,
+// and optionally a database dump.
+func writeImportArchive(t *testing.T, publicFiles map[string]string, withDatabase bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	entries := map[string]string{metadataEntry: testMetadata}
+	if withDatabase {
+		entries[databaseEntry] = "SELECT 1;"
+	}
+	if publicFiles != nil {
+		payload := filepath.Join(dir, publicFilesEntry)
+		writeTestArchive(t, payload, publicFiles)
+		content, err := os.ReadFile(payload)
+		require.NoError(t, err)
+		entries[publicFilesEntry] = string(content)
+	}
+
+	archive := filepath.Join(dir, "archive.tar.gz")
+	writeTestArchive(t, archive, entries)
+
+	return archive
+}
+
+// importArchive inspects the archive and imports it into the local project.
+func importArchive(t *testing.T, archive, project string, openDatabase func(context.Context) (sqlshell.Execer, func(), error)) error {
+	t.Helper()
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
+
+	return Import(t.Context(), ImportOptions{
+		Archive:      archive,
+		Contents:     contents,
+		Environment:  executor.NewLocal(project),
+		FileRoots:    localFileRoots(project),
+		OpenDatabase: openDatabase,
+	})
+}
+
+// assertNoStagingDirs asserts that an import left no staging directory in dirs.
+func assertNoStagingDirs(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, dir := range dirs {
+		matches, err := filepath.Glob(filepath.Join(dir, stagingPrefix+"*"))
+		require.NoError(t, err)
+		assert.Empty(t, matches, "staging directories must be removed")
+	}
+}
+
 // sharedDir links project/<name> to shared/<name>, as SSH deployments do.
 func sharedDir(t *testing.T, root, name string) {
 	t.Helper()
@@ -83,13 +134,7 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 	require.NoError(t, os.Chmod(sealed, 0o555))
 	t.Cleanup(func() { _ = os.Chmod(sealed, 0o755) })
 
-	targetProject := filepath.Join(target, "project")
-	require.NoError(t, Import(t.Context(), ImportOptions{
-		Archive:     archive,
-		Contents:    contents,
-		Environment: executor.NewLocal(targetProject),
-		FileRoots:   localFileRoots(targetProject),
-	}))
+	require.NoError(t, importArchive(t, archive, filepath.Join(target, "project"), nil))
 
 	assert.FileExists(t, filepath.Join(target, "shared/public/media/a/logo.png"))
 	assert.FileExists(t, filepath.Join(target, "shared/public/thumbnail/a/logo_400x400.png"))
@@ -97,6 +142,7 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(target, "shared/public/media/stale.png"))
 	assert.NoFileExists(t, filepath.Join(target, "shared/files/.hidden"))
 	assert.FileExists(t, filepath.Join(target, "project/public/theme/all.css"))
+	assertNoStagingDirs(t, filepath.Join(target, "shared/public/media"), filepath.Join(target, "shared/files"))
 
 	link, err := os.Lstat(filepath.Join(target, "project/public/media"))
 	require.NoError(t, err)
@@ -183,11 +229,7 @@ func (noopExecer) ExecContext(context.Context, string, ...any) (sql.Result, erro
 }
 
 func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
-	archive := filepath.Join(t.TempDir(), "archive.tar.gz")
-	writeTestArchive(t, archive, map[string]string{
-		metadataEntry: `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`,
-		databaseEntry: "SELECT 1;",
-	})
+	archive := writeImportArchive(t, nil, true)
 
 	project := t.TempDir()
 	writeFile(t, filepath.Join(project, "public/media/a/stale.png"), "stale")
@@ -195,16 +237,7 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 	writeFile(t, filepath.Join(project, "public/theme/all.css"), "kept")
 	writeFile(t, filepath.Join(project, "files/documents/invoice.pdf"), "stale")
 
-	contents, err := Inspect(archive)
-	require.NoError(t, err)
-
-	require.NoError(t, Import(t.Context(), ImportOptions{
-		Archive:      archive,
-		Contents:     contents,
-		Environment:  executor.NewLocal(project),
-		FileRoots:    localFileRoots(project),
-		OpenDatabase: openExecer(noopExecer{}),
-	}))
+	require.NoError(t, importArchive(t, archive, project, openExecer(noopExecer{})))
 
 	assert.NoDirExists(t, filepath.Join(project, "public/media/a"))
 	assert.NoDirExists(t, filepath.Join(project, "public/thumbnail/a"))
@@ -214,17 +247,7 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 }
 
 func TestImportAdoptsTargetPermissions(t *testing.T) {
-	dir := t.TempDir()
-	publicArchive := filepath.Join(dir, publicFilesEntry)
-	writeTestArchive(t, publicArchive, map[string]string{"media/a/new.png": "new", "thumbnail/a/new.png": "new"})
-	publicContent, err := os.ReadFile(publicArchive)
-	require.NoError(t, err)
-
-	archive := filepath.Join(dir, "archive.tar.gz")
-	writeTestArchive(t, archive, map[string]string{
-		metadataEntry:    `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`,
-		publicFilesEntry: string(publicContent),
-	})
+	archive := writeImportArchive(t, map[string]string{"media/a/new.png": "new", "thumbnail/a/new.png": "new"}, false)
 
 	// The web server shares the group, so the target is group-writable.
 	project := t.TempDir()
@@ -236,15 +259,7 @@ func TestImportAdoptsTargetPermissions(t *testing.T) {
 	require.NoError(t, os.MkdirAll(thumbnail, 0o750))
 	require.NoError(t, os.Chmod(thumbnail, 0o750))
 
-	contents, err := Inspect(archive)
-	require.NoError(t, err)
-
-	require.NoError(t, Import(t.Context(), ImportOptions{
-		Archive:     archive,
-		Contents:    contents,
-		Environment: executor.NewLocal(project),
-		FileRoots:   localFileRoots(project),
-	}))
+	require.NoError(t, importArchive(t, archive, project, nil))
 
 	assertMode := func(path string, want os.FileMode) {
 		t.Helper()
@@ -265,18 +280,7 @@ func TestImportFailsBeforeDatabaseWhenFilesCannotBeRemoved(t *testing.T) {
 		t.Skip("root can remove every file")
 	}
 
-	dir := t.TempDir()
-	publicArchive := filepath.Join(dir, publicFilesEntry)
-	writeTestArchive(t, publicArchive, map[string]string{"media/a/new.png": "new"})
-	publicContent, err := os.ReadFile(publicArchive)
-	require.NoError(t, err)
-
-	archive := filepath.Join(dir, "archive.tar.gz")
-	writeTestArchive(t, archive, map[string]string{
-		metadataEntry:    `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`,
-		databaseEntry:    "SELECT 1;",
-		publicFilesEntry: string(publicContent),
-	})
+	archive := writeImportArchive(t, map[string]string{"media/a/new.png": "new"}, true)
 
 	// A subdirectory of another user, e.g. the web server, that the importing
 	// user may not change.
@@ -286,25 +290,14 @@ func TestImportFailsBeforeDatabaseWhenFilesCannotBeRemoved(t *testing.T) {
 	require.NoError(t, os.Chmod(foreign, 0o555))
 	t.Cleanup(func() { _ = os.Chmod(foreign, 0o755) })
 
-	contents, err := Inspect(archive)
-	require.NoError(t, err)
-
-	err = Import(t.Context(), ImportOptions{
-		Archive:     archive,
-		Contents:    contents,
-		Environment: executor.NewLocal(project),
-		FileRoots:   localFileRoots(project),
-		OpenDatabase: func(context.Context) (sqlshell.Execer, func(), error) {
-			t.Error("the database must not be touched")
-			return noopExecer{}, func() {}, nil
-		},
+	err := importArchive(t, archive, project, func(context.Context) (sqlshell.Execer, func(), error) {
+		t.Error("the database must not be touched")
+		return noopExecer{}, func() {}, nil
 	})
 	require.Error(t, err)
 
 	assert.FileExists(t, filepath.Join(project, "public/media/b/old.png"))
-	matches, err := filepath.Glob(filepath.Join(project, "public/media", stagingPrefix+"*"))
-	require.NoError(t, err)
-	assert.Empty(t, matches, "staging directories must be removed")
+	assertNoStagingDirs(t, filepath.Join(project, "public/media"))
 }
 
 // failingExecer rejects every statement of a database import.
@@ -315,44 +308,20 @@ func (failingExecer) ExecContext(context.Context, string, ...any) (sql.Result, e
 }
 
 func TestImportKeepsFilesWhenDatabaseImportFails(t *testing.T) {
-	dir := t.TempDir()
-	publicArchive := filepath.Join(dir, publicFilesEntry)
-	writeTestArchive(t, publicArchive, map[string]string{"media/a/new.png": "new"})
-	publicContent, err := os.ReadFile(publicArchive)
-	require.NoError(t, err)
-
-	archive := filepath.Join(dir, "archive.tar.gz")
-	writeTestArchive(t, archive, map[string]string{
-		metadataEntry:    `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`,
-		databaseEntry:    "SELECT 1;",
-		publicFilesEntry: string(publicContent),
-	})
+	archive := writeImportArchive(t, map[string]string{"media/a/new.png": "new"}, true)
 
 	project := t.TempDir()
 	writeFile(t, filepath.Join(project, "public/media/a/old.png"), "old")
 	writeFile(t, filepath.Join(project, "files/documents/invoice.pdf"), "old")
 
-	contents, err := Inspect(archive)
-	require.NoError(t, err)
-
-	err = Import(t.Context(), ImportOptions{
-		Archive:      archive,
-		Contents:     contents,
-		Environment:  executor.NewLocal(project),
-		FileRoots:    localFileRoots(project),
-		OpenDatabase: openExecer(failingExecer{}),
-	})
+	err := importArchive(t, archive, project, openExecer(failingExecer{}))
 	require.Error(t, err)
 
 	assert.FileExists(t, filepath.Join(project, "public/media/a/old.png"))
 	assert.NoFileExists(t, filepath.Join(project, "public/media/a/new.png"))
 	assert.FileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
 
-	for _, staging := range []string{"public/media", "files"} {
-		matches, err := filepath.Glob(filepath.Join(project, staging, stagingPrefix+"*"))
-		require.NoError(t, err)
-		assert.Empty(t, matches, "staging directories must be removed")
-	}
+	assertNoStagingDirs(t, filepath.Join(project, "public/media"), filepath.Join(project, "files"))
 }
 
 func TestInspectValidatesArchive(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"io/fs"
 	"path"
 
 	"github.com/shopware/shopware-cli/internal/sqlshell"
@@ -88,23 +89,30 @@ func Import(ctx context.Context, opts ImportOptions) (err error) {
 // stageImportFiles extracts the archived files and stages empty directories
 // for the file components to empty. It returns the staged components also on
 // error, so their staging directories can be removed.
-func stageImportFiles(ctx context.Context, opts ImportOptions) ([]stagedFiles, error) {
+func stageImportFiles(ctx context.Context, opts ImportOptions) ([]*stagedFiles, error) {
 	staging := stagingPrefix + rand.Text()
-	var staged []stagedFiles
+	var staged []*stagedFiles
+
+	// stage registers the component before extracting, so a failed extraction
+	// is cleaned up as well.
+	stage := func(fc fileComponent, r io.Reader, empty bool) error {
+		root, err := opts.FileRoots.root(fc)
+		if err != nil {
+			return err
+		}
+		s := &stagedFiles{fileComponent: fc, root: root, staging: staging, empty: empty}
+		staged = append(staged, s)
+
+		return s.stage(ctx, opts.Environment, r)
+	}
 
 	err := walkArchive(opts.Archive, func(entry string, r io.Reader) error {
 		for _, fc := range fileComponents {
 			if entry != fc.entry {
 				continue
 			}
-			root, err := opts.FileRoots.root(fc)
-			if err != nil {
-				return err
-			}
 			logging.FromContext(ctx).Infof("Extracting %s files", fc.name)
-			s, err := stageFiles(ctx, opts.Environment, stagedFiles{fileComponent: fc, root: root, staging: staging}, r)
-			staged = append(staged, s)
-			if err != nil {
+			if err := stage(fc, r, false); err != nil {
 				return fmt.Errorf("cannot prepare the import of %s files: %w", fc.name, err)
 			}
 		}
@@ -120,13 +128,11 @@ func stageImportFiles(ctx context.Context, opts ImportOptions) ([]stagedFiles, e
 		if !fc.selected(toEmpty) {
 			continue
 		}
-		root, err := opts.FileRoots.root(fc)
+		archive, err := emptyFilesArchive()
 		if err != nil {
 			return staged, err
 		}
-		s, err := stageEmptyFiles(ctx, opts.Environment, stagedFiles{fileComponent: fc, root: root, staging: staging})
-		staged = append(staged, s)
-		if err != nil {
+		if err := stage(fc, archive, true); err != nil {
 			return staged, fmt.Errorf("cannot prepare removing %s files: %w", fc.name, err)
 		}
 	}
@@ -151,6 +157,8 @@ func importDatabase(ctx context.Context, opts ImportOptions) error {
 			return fmt.Errorf("cannot import database, %s: %w", incompleteHint, err)
 		}
 
-		return nil
+		// The file payloads behind the dump were staged already, so they
+		// are not decompressed again while database and files disagree.
+		return fs.SkipAll
 	})
 }

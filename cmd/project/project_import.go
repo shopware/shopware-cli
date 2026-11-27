@@ -64,7 +64,6 @@ confirmation, which is required without an interactive terminal.`,
 		}
 
 		components := contents.Components
-		emptyFiles := components.FilesToEmpty()
 
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
@@ -95,7 +94,7 @@ confirmation, which is required without an interactive terminal.`,
 		}
 
 		target := describeTarget(cmdExecutor, projectRoot)
-		printImportPlan(cmd.OutOrStdout(), archive, target, cmp.Or(targetVersion, unknownShopwareVersion), contents, emptyFiles)
+		printImportPlan(cmd.OutOrStdout(), archive, target, cmp.Or(targetVersion, unknownShopwareVersion), contents)
 
 		if source := contents.Metadata.Source.ShopwareVersion; targetVersion != "" && !projectarchive.SameShopwareMinor(source, targetVersion) {
 			printWarning(cmd.OutOrStdout(),
@@ -151,7 +150,8 @@ func describeTarget(cmdExecutor executor.Executor, projectRoot string) string {
 	return fmt.Sprintf("environment %q (%s, %s)", shop.EnvironmentKey(environmentName), cmdExecutor.Type(), location)
 }
 
-func printImportPlan(w io.Writer, archive, target, targetVersion string, contents *projectarchive.Contents, emptyFiles projectarchive.Components) {
+func printImportPlan(w io.Writer, archive, target, targetVersion string, contents *projectarchive.Contents) {
+	emptyFiles := contents.FilesToEmpty()
 	lines := []struct {
 		label       string
 		inArchive   bool

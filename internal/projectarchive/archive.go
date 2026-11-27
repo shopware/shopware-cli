@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
 	"time"
@@ -98,6 +99,15 @@ type Contents struct {
 // Inspect reads the metadata and detects the components of an archive
 // without applying anything.
 func Inspect(path string) (*Contents, error) {
+	contents, err := inspect(path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read archive %s: %w", path, err)
+	}
+
+	return contents, nil
+}
+
+func inspect(path string) (*Contents, error) {
 	var contents Contents
 	var hasMetadata, hasDatabaseDir bool
 
@@ -121,27 +131,28 @@ func Inspect(path string) (*Contents, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("cannot read archive %s: %w", path, err)
+		return nil, err
 	}
 
 	switch {
 	case !hasMetadata:
-		return nil, fmt.Errorf("cannot read archive %s: %s is missing", path, metadataEntry)
+		return nil, fmt.Errorf("%s is missing", metadataEntry)
 	case contents.Metadata.FormatVersion != FormatVersion:
-		return nil, fmt.Errorf("cannot read archive %s: unsupported format version %d", path, contents.Metadata.FormatVersion)
+		return nil, fmt.Errorf("unsupported format version %d", contents.Metadata.FormatVersion)
 	case contents.Database && hasDatabaseDir:
-		return nil, fmt.Errorf("cannot read archive %s: it contains both %s and %s", path, databaseEntry, databaseDirEntry)
+		return nil, fmt.Errorf("it contains both %s and %s", databaseEntry, databaseDirEntry)
 	case hasDatabaseDir:
-		return nil, fmt.Errorf("cannot read archive %s: MySQL Shell dumps in %s are not supported yet", path, databaseDirEntry)
+		return nil, fmt.Errorf("MySQL Shell dumps in %s are not supported yet", databaseDirEntry)
 	case !contents.Any():
-		return nil, fmt.Errorf("cannot read archive %s: it contains neither a database nor files", path)
+		return nil, errors.New("it contains neither a database nor files")
 	}
 
 	return &contents, nil
 }
 
 // walkArchive calls fn for every regular file of the outer tar.gz archive.
-// Names are normalized without "./".
+// Names are normalized without "./". fn returns fs.SkipAll to stop the walk
+// without reading the remaining entries.
 func walkArchive(path string, fn func(name string, r io.Reader) error) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -165,14 +176,15 @@ func walkArchive(path string, fn func(name string, r io.Reader) error) error {
 			return err
 		}
 
-		name := strings.TrimPrefix(header.Name, "./")
-		if header.Typeflag == tar.TypeDir {
-			name = strings.TrimSuffix(name, "/") + "/"
-		} else if header.Typeflag != tar.TypeReg {
+		if header.Typeflag != tar.TypeReg {
 			continue
 		}
 
-		if err := fn(name, tr); err != nil {
+		err = fn(strings.TrimPrefix(header.Name, "./"), tr)
+		if errors.Is(err, fs.SkipAll) {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
 	}
