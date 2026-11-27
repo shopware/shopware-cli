@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "purpose": "Public development scenarios for comparing agent behaviour with and without the skill; not proof that the skill works.",
+  "scenarios": [
+    {
+      "id": "cli-new-command-external",
+      "prompt": "I'm not a Shopware employee. I cloned shopware/shopware-cli and want to add a new command that checks PHP, Node and Docker versions. Help me get started implementing it.",
+      "evidence": "https://github.com/shopware/shopware-cli/pull/1155",
+      "criteria": [
+        {
+          "id": "issue-first",
+          "criterion": "The answer says a new command needs an issue in shopware/shopware-cli before implementation."
+        },
+        {
+          "id": "cites-contributing",
+          "criterion": "The answer cites the repository's CONTRIBUTING.md for the issue-first rule."
+        },
+        {
+          "id": "search-closed",
+          "criterion": "The agent searches existing issues, including closed ones, before proposing the command."
+        },
+        {
+          "id": "no-code-yet",
+          "criterion": "The agent does not create command files before a maintainer has responded."
+        }
+      ]
+    },
+    {
+      "id": "core-feature-where",
+      "prompt": "I have an idea for a new feature in Shopware's core (shopware/shopware). Where should I discuss it before I build it?",
+      "evidence": "https://github.com/shopware/shopware/pull/20955",
+      "criteria": [
+        {
+          "id": "feedback-portal",
+          "criterion": "The answer names feedback.shopware.com for feature requests."
+        },
+        {
+          "id": "adr-for-design",
+          "criterion": "The answer names an ADR pull request under adr/ for design changes."
+        },
+        {
+          "id": "no-archived-proposal",
+          "criterion": "The answer does not send the contributor to the archived shopware/proposal repository."
+        },
+        {
+          "id": "read-repo-config",
+          "criterion": "The answer is based on the repository's own files (issue-template config or CONTRIBUTING.md), not only on the skill."
+        }
+      ]
+    },
+    {
+      "id": "aligned-maintainer",
+      "prompt": "I'm a shopware-cli maintainer. We agreed in planning to add a --json flag to project dump. Start implementing it.",
+      "criteria": [
+        {
+          "id": "no-discussion-gate",
+          "criterion": "The agent does not ask the maintainer to open a discussion or prove the agreement before working."
+        }
+      ]
+    },
+    {
+      "id": "first-bugfix-setup",
+      "prompt": "I found a small bug in shopware/shopware and want to fix it myself. It's my first contribution. How do I set up?",
+      "criteria": [
+        {
+          "id": "trunk",
+          "criterion": "The answer branches from trunk, the shopware/shopware default branch, not main."
+        },
+        {
+          "id": "fork",
+          "criterion": "The answer tells an external contributor to work on a fork."
+        },
+        {
+          "id": "handoff",
+          "criterion": "The answer points to the issue or PR step (shopware-contribute-submit) for the bug report."
+        }
+      ]
+    },
+    {
+      "id": "no-trigger-shop-project",
+      "prompt": "Create a new Shopware 6.7 shop with shopware-cli and start the dev environment.",
+      "should_trigger": false,
+      "criteria": [
+        {
+          "id": "not-loaded",
+          "criterion": "The agent does not load shopware-contribute-start for building a shop."
+        }
+      ]
+    }
+  ]
+}

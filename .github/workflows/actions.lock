@@ -9,6 +9,7 @@ workflows:
         - 'step-security/harden-runner@v2.23.0'
     '.github/workflows/agent-skills.yml':
         - 'actions/checkout@v7.0.1'
+        - 'actions/setup-go@v7.1.0'
     '.github/workflows/base-docker.yml':
         - 'actions/checkout@v7.0.1'
         - 'docker/build-push-action@v7.4.0'

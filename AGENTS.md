@@ -3,6 +3,32 @@
 This file provides guidance to AI coding agents when working with code in this
 repository.
 
+## Contributing
+
+These rules apply whether or not a contributor skill is loaded:
+
+- Follow [CONTRIBUTING.md](CONTRIBUTING.md). New features, commands, flags, or
+  changes to output or behaviour need an issue first, ideally with a
+  maintainer's go-ahead; small fixes can go straight to a pull request. Skip
+  this when the work is already agreed: a linked issue a maintainer agreed to,
+  write access to the repository, or the user says so.
+- User guides on developer.shopware.com live in shopware/docs: a change that
+  needs one gets a second pull request there. Ask a maintainer before adding a
+  page to `docs/`.
+- Before handing work back, run `mise run check`. Without mise, `go test ./...`
+  and `golangci-lint run ./...` skip the Markdown, conventions and workflow
+  lints and the lint-rule tests: name them as not run in the PR. Never report a
+  check as passed that did not run.
+- Write pull request descriptions with `.github/pull_request_template.md`.
+
+| Task                                                                 | Skill                        |
+| -------------------------------------------------------------------- | ---------------------------- |
+| Discuss an idea, set up, fork and branch                             | `shopware-contribute-start`  |
+| Write a bug report, feature request or PR description; answer review | `shopware-contribute-submit` |
+| Choose local checks; understand a failing CI check                   | `shopware-contribute-verify` |
+
+Read the skill from `skills/<name>/SKILL.md` in this repository.
+
 ## Development Commands
 
 ### Building and Running

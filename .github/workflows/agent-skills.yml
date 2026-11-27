@@ -5,13 +5,20 @@ on:
     paths:
       - "skills/**"
       - "docs/AGENT_SKILLS.md"
+      - "internal/ai/directory/**"
       - ".github/workflows/agent-skills.yml"
+    types: [opened, synchronize, reopened, edited]
   push:
     branches:
       - main
     paths:
       - "skills/**"
       - ".github/workflows/agent-skills.yml"
+  schedule:
+    # Mondays: external links in versioned skills. An odd minute avoids the
+    # start-of-hour load that delays scheduled runs.
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -22,6 +29,7 @@ permissions:
 
 jobs:
   validate:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -43,5 +51,66 @@ jobs:
       - name: Validate shopware-cli-extension-anonymize skill
         run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-cli-extension-anonymize
 
+      - name: Validate shopware-contribute-start skill
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-contribute-start
+
+      - name: Validate shopware-contribute-submit skill
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-contribute-submit
+
+      - name: Validate shopware-contribute-verify skill
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-contribute-verify
+
       - name: Verify skills discovery
         run: npx --yes skills@1.5.18 add . --list
+
+  versions:
+    # A changed versioned skill needs a version bump and a linked evaluation
+    # report (docs/AGENT_SKILLS.md#contributor-skills).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.1.0
+        with:
+          go-version: '1.27'
+          check-latest: true
+          cache: true
+
+      - name: Check version bumps and evaluation reports
+        env:
+          GOTOOLCHAIN: local
+          SKILLS_BASE_REF: origin/${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: go test ./internal/ai/directory -run TestChangedSkillsBumpTheirVersion -v
+
+  links:
+    # External links in versioned skills (docs/AGENT_SKILLS.md#contributor-skills);
+    # relative links are checked on every pull request by the Markdown lint (rumdl MD057).
+    if: (github.event_name == 'schedule' && github.repository == 'shopware/shopware-cli') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check external links
+        run: |
+          failed=0
+          while read -r url; do
+            if ! curl -fsSL -o /dev/null --retry 3 --retry-all-errors --max-time 30 "$url"; then
+              echo "::error::Broken link: $url"
+              failed=1
+            fi
+          done < <(grep -rhoE --include='*.md' '\]\(https?://[^)]+\)' skills/shopware-contribute-*/ | sed -E 's/^\]\((.*)\)$/\1/' | sort -u)
+          exit "$failed"

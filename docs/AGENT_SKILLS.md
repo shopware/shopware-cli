@@ -19,13 +19,19 @@ shopware-cli/
     │   └── SKILL.md
     ├── shopware-cli-extension-store/
     │   └── SKILL.md
-    └── shopware-cli-extension-anonymize/
-        └── SKILL.md
+    ├── shopware-cli-extension-anonymize/
+    │   └── SKILL.md
+    └── shopware-contribute-start/      (also -submit, -verify)
+        ├── SKILL.md
+        └── evals/
+            ├── scenarios.json
+            └── reports/0.0.1.md
 ```
 
 Each skill is a single `SKILL.md`, optionally with a `scripts/` directory for
 helper scripts the agent executes (the Agent Skills layout). Keep reference
-material inside `SKILL.md` itself.
+material inside `SKILL.md` itself. Contributor skills add an evaluation suite
+and a report per version (see [Contributor skills](#contributor-skills)).
 
 Do not maintain separate Claude, Cursor, Codex, Copilot, or other
 client-specific copies in this repository.
@@ -96,6 +102,73 @@ It teaches agents to:
   value;
 - leave Shopware core anonymization and unrelated extension validation alone.
 
+### Contributor skills
+
+Three skills help people contribute to Shopware repositories
+(`shopware/shopware`, `shopware/shopware-cli`, `shopware/deployment-helper`,
+and others that follow the same pattern):
+
+- `shopware-contribute-start`: where to discuss an idea, whether a change
+  needs an issue first, setup, fork and branch;
+- `shopware-contribute-submit`: actionable bug reports and feature requests,
+  pull request descriptions that say which checks ran, review feedback;
+- `shopware-contribute-verify`: which local checks apply, and whether a failing
+  CI check is a likely regression, a known failure, an infrastructure failure or
+  unknown.
+
+They read each repository's own `AGENTS.md`, `CONTRIBUTING.md` and templates
+and defer to them. In `shopware/shopware` they defer to its own skills under
+`.agents/skills/`. They are a front door, not a second copy of the
+contribution rules.
+
+Install them with `--global`. A project install needs a Shopware shop, and
+a clone of this repository or of Deployment Helper isn't one:
+
+```bash
+shopware-cli ai add shopware-contribute-start --agent claude-code --global
+```
+
+They are shipped as products, following
+[Google's model for Agent Skills](https://cloud.google.com/blog/topics/developers-practitioners/behind-the-scenes-two-months-later-how-we-ship-google-agent-skills-like-products).
+The rules apply to every skill with `metadata.version`:
+
+- **Versioning:** `metadata.version` is a quoted SemVer string. A new skill
+  starts at `0.0.1`. Any change to `SKILL.md`, `references/`, `scripts/` or
+  `assets/` needs the next major, minor or patch version (lower parts reset to
+  zero), or the pull request is blocked. A renamed skill counts as new and
+  restarts at `0.0.1`. The version's evaluation report says what changed in its
+  "Changes" section; there is no separate changelog.
+- **Evaluation report:** every version has `evals/reports/<version>.md`. It
+  compares the skill with the previous version, or a new skill with an agent
+  without the skill, on every scenario in `evals/scenarios.json`, scored per
+  criterion by a separate judge. The report records `skill_sha256`, the hash
+  of the instructions it ran against; if the skill changes afterwards, the
+  test fails until the evaluation is re-run. Link the report in the pull
+  request description, or the pull request is blocked. A planned or unrun
+  evaluation is not a pass.
+- **Scenarios:** each criterion checks one thing; split compound ones. No
+  duplicate prompts or criteria. Include prompts that must not trigger the
+  skill.
+- **Structure:** `SKILL.md` stays under 500 lines; only `SKILL.md`, `evals/`,
+  `references/`, `scripts/` and `assets/` are allowed; the skill is listed in
+  the AI directory and in this document. `skills-ref validate` already checks
+  the name, folder and description length for every skill.
+- **Links:** the Markdown lint already checks relative links on every pull
+  request (MD057). External links are checked every Monday (the `links` job in
+  `agent-skills.yml`); nothing else in this repository checks them.
+- **Gates:** `TestVersionedSkillsFollowTheProductContract` runs in the test
+  suite on every pull request; the `versions` job in `agent-skills.yml` runs
+  `TestChangedSkillsBumpTheirVersion` against the pull request's base and
+  description.
+- **Review:** a maintainer (`CODEOWNERS`) approves every change, and a
+  maintainer of each covered repository reviews content about it.
+- **Freshness:** when a covered repository changes its `CONTRIBUTING.md`,
+  `AGENTS.md`, templates or default branch, review the skills. The skills
+  read those files at run time, so most changes need no edit.
+- **Retirement:** retire a skill when the repositories' own `AGENTS.md` and
+  `CONTRIBUTING.md` cover it, or usage shows nobody needs it. Mark the
+  directory entry `deprecated` first, then remove it in a later release.
+
 ## Source of truth
 
 The files under `skills/` are the canonical source.
@@ -113,12 +186,14 @@ For user-facing Shopware CLI changes:
 
 1. Implement the CLI change.
 2. Check whether `skills/shopware-cli/SKILL.md` is affected.
-3. Check whether `skills/shopware-cli-docker/SKILL.md`,
+3. Changing `CONTRIBUTING.md`, `AGENTS.md` or the issue and PR templates?
+   Check the `skills/shopware-contribute-*` skills.
+4. Check whether `skills/shopware-cli-docker/SKILL.md`,
    `skills/shopware-cli-extension-store/SKILL.md`, or
    `skills/shopware-cli-extension-anonymize/SKILL.md` is affected.
-4. Update the skill in the same PR when required.
-5. Validate the skills.
-6. Verify that the skills can still be discovered by the skills CLI.
+5. Update the skill in the same PR when required.
+6. Validate the skills.
+7. Verify that the skills can still be discovered by the skills CLI.
 
 Consider adding the following item to the repository PR template:
 
@@ -135,6 +210,9 @@ skills-ref validate ./skills/shopware-cli
 skills-ref validate ./skills/shopware-cli-docker
 skills-ref validate ./skills/shopware-cli-extension-store
 skills-ref validate ./skills/shopware-cli-extension-anonymize
+skills-ref validate ./skills/shopware-contribute-start
+skills-ref validate ./skills/shopware-contribute-submit
+skills-ref validate ./skills/shopware-contribute-verify
 ```
 
 Verify repository discovery:
@@ -314,7 +392,10 @@ skills continue to exist.
 
 ## Versioning
 
-Skills do not have an independent Shopware version.
+Skills do not have an independent Shopware version. Contributor skills also
+carry their own `metadata.version` and a report per version, so a contributor
+can tell which behaviour they installed (see
+[Contributor skills](#contributor-skills)).
 
 Because their canonical source lives in the Shopware CLI repository, every Git
 tag and Shopware CLI release records the exact skill source that existed for
