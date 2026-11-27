@@ -77,6 +77,31 @@ func TestAssembleConnectionURIFlagOverrides(t *testing.T) {
 	assert.Equal(t, "shop_prod", cfg.DBName)
 }
 
+func TestAssembleConnectionURIEnvironmentOutsideProject(t *testing.T) {
+	chdirOutsideProject(t)
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("SHOPWARE_CLI_NO_SYMFONY_CLI", "1")
+	testhelper.WriteFile(t, ".shopware-project.yml", `
+compatibility_date: "2026-01-01"
+environments:
+  production:
+    type: local
+`)
+	testhelper.WriteFile(t, ".env", "DATABASE_URL=mysql://app:secret@db.example.com:3307/shop\n")
+
+	previousEnvironmentName := environmentName
+	t.Cleanup(func() { environmentName = previousEnvironmentName })
+
+	environmentName = "production"
+	cfg, err := assembleConnectionURI(newDumpFlagCommand(t, nil))
+	require.NoError(t, err)
+	assert.Equal(t, "db.example.com:3307", cfg.Addr)
+
+	environmentName = "does-not-exist"
+	_, err = assembleConnectionURI(newDumpFlagCommand(t, nil))
+	require.Error(t, err)
+}
+
 func TestAssembleConnectionURIUsernameClearsPassword(t *testing.T) {
 	chdirOutsideProject(t)
 	t.Setenv("DATABASE_URL", "")
