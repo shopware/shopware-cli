@@ -197,26 +197,50 @@ func unshallowRepository(ctx context.Context, repo string) error {
 	return err
 }
 
-// IsInsideWorkTree reports whether dir is inside a Git working tree.
+// IsInsideWorkTree reports whether dir is inside a Git working tree. Only Git's answer
+// that it found no repository counts as outside; any other failure, such as a repository
+// Git refuses because of dubious ownership, is returned with Git's message.
 func IsInsideWorkTree(ctx context.Context, dir string) (bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--is-inside-work-tree") //nolint:gosec
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+
 	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return false, nil
+		if !errors.As(err, &exitErr) {
+			return false, fmt.Errorf("cannot run git in %s: %w", dir, err)
 		}
 
-		return false, fmt.Errorf("checking git repository: %w", err)
+		stderr := strings.TrimSpace(string(exitErr.Stderr))
+		// Git found no repository in dir or any parent. A .git file that points to a missing
+		// repository prints "fatal: not a git repository: <path>" instead and stays an error.
+		// Check every line, as GIT_TRACE output can come before Git's error.
+		for line := range strings.Lines(stderr) {
+			if strings.HasPrefix(line, "fatal: not a git repository (or any ") {
+				return false, nil
+			}
+		}
+
+		return false, fmt.Errorf("cannot check the Git repository of %s: %w: %s", dir, err, strings.ReplaceAll(stderr, "\n", "; "))
 	}
 
 	return strings.TrimSpace(string(output)) == "true", nil
 }
 
 func IsWorkingTreeDirty(ctx context.Context, repo string) (bool, bool, error) {
-	isGitRepository, err := IsInsideWorkTree(ctx, repo)
-	if err != nil || !isGitRepository {
-		return false, false, err
+	cmd := exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--is-inside-work-tree") //nolint:gosec
+	output, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return false, false, nil
+		}
+
+		return false, false, fmt.Errorf("checking git repository: %w", err)
+	}
+
+	if strings.TrimSpace(string(output)) != "true" {
+		return false, false, nil
 	}
 
 	statusCmd := exec.CommandContext(ctx, "git", "-C", repo, "status", "--porcelain", "--untracked-files=all") //nolint:gosec

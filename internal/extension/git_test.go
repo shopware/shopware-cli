@@ -97,10 +97,54 @@ func TestGitCopyFolderFallsBackToBranchWithoutTagAtHead(t *testing.T) {
 }
 
 func TestGitCopyFolderOutsideGitRepository(t *testing.T) {
-	source := t.TempDir()
-	writeComposerJSON(t, source, `{"version":"1.0.0"}`)
+	cases := []struct {
+		name     string
+		gitTrace string
+	}{
+		{name: "plain", gitTrace: ""},
+		// Git writes trace lines to stderr before its error.
+		{name: "with GIT_TRACE", gitTrace: "1"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GIT_TRACE", tc.gitTrace)
+
+			source := t.TempDir()
+			writeComposerJSON(t, source, `{"version":"1.0.0"}`)
+
+			_, err := GitCopyFolder(t.Context(), source, t.TempDir(), "")
+
+			assert.ErrorIs(t, err, ErrNotGitRepository)
+		})
+	}
+}
+
+func TestGitCopyFolderKeepsOtherGitErrors(t *testing.T) {
+	fakeGitDir := t.TempDir()
+	script := "#!/bin/sh\necho \"fatal: detected dubious ownership in repository at '$2'\" >&2\nexit 128\n"
+	require.NoError(t, os.WriteFile(filepath.Join(fakeGitDir, "git"), []byte(script), 0o755))
+	t.Setenv("PATH", fakeGitDir)
+
+	// The path contains the words Git uses for a missing repository.
+	source := filepath.Join(t.TempDir(), "not a git repository")
+	require.NoError(t, os.Mkdir(source, 0o755))
 
 	_, err := GitCopyFolder(t.Context(), source, t.TempDir(), "")
 
-	assert.ErrorIs(t, err, ErrNotGitRepository)
+	assert.NotErrorIs(t, err, ErrNotGitRepository)
+	assert.ErrorContains(t, err, "dubious ownership")
+}
+
+func TestGitCopyFolderKeepsErrorForBrokenGitFile(t *testing.T) {
+	// A submodule or worktree copied without its parent repository.
+	source := t.TempDir()
+	writeComposerJSON(t, source, `{"version":"1.0.0"}`)
+	missing := filepath.Join(t.TempDir(), "missing")
+	require.NoError(t, os.WriteFile(filepath.Join(source, ".git"), []byte("gitdir: "+missing+"\n"), 0o644))
+
+	_, err := GitCopyFolder(t.Context(), source, t.TempDir(), "")
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrNotGitRepository)
 }
