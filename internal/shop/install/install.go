@@ -16,6 +16,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // Defaults applied when an Options field is left empty. They match the
@@ -213,11 +214,38 @@ func ClearPendingWarning(projectRoot string, err error) string {
 // IsInstalled reports whether the shop is installed. An installation started
 // by the CLI that did not finish counts as not installed, because
 // system:is-installed already succeeds once the base schema exists.
+//
+// An installed Docker shop without install.lock (an imported database, or the
+// ignored file was cleaned) gets one, because its worker and scheduler
+// containers wait for that file.
 func IsInstalled(ctx context.Context, exec executor.Executor, projectRoot string) bool {
 	if IsPending(projectRoot) {
 		return false
 	}
-	return exec.ConsoleCommand(ctx, "system:is-installed").Run() == nil
+	if exec.ConsoleCommand(ctx, "system:is-installed").Run() != nil {
+		return false
+	}
+
+	if exec.Type() == executor.TypeDocker {
+		if err := ensureInstallLock(projectRoot); err != nil {
+			logging.FromContext(ctx).Warnf("Cannot create install.lock, the worker and scheduler wait for it: %v", err)
+		}
+	}
+
+	return true
+}
+
+// ensureInstallLock creates install.lock unless it exists. Shopware writes it
+// at the end of system:install; the content is not read.
+func ensureInstallLock(projectRoot string) error {
+	f, err := os.OpenFile(filepath.Join(projectRoot, "install.lock"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if errors.Is(err, fs.ErrExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // Run installs Shopware by running the deployment helper with the INSTALL_*

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -364,6 +366,15 @@ func (d *DockerExecutor) StopEnvironment(ctx context.Context, opts StopOptions) 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w\n%s", err, output)
+	}
+
+	// The database is gone, so drop install.lock too: the worker and
+	// scheduler start once it exists and would otherwise run against the
+	// empty database.
+	if opts.RemoveVolumes {
+		if err := os.Remove(filepath.Join(d.projectRoot, "install.lock")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("cannot remove install.lock: %w", err)
+		}
 	}
 
 	return nil

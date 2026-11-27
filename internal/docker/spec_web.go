@@ -1,5 +1,7 @@
 package docker
 
+import "strings"
+
 // containerCABundlePath is where the combined CA bundle is mounted inside the
 // shop's containers: straight over the system trust store, so openssl, curl and
 // PHP pick it up with no update-ca-certificates step (which the www-data image
@@ -16,6 +18,16 @@ const redisMessengerDSN = "redis://cache:6379/messages/symfony/?auto_setup=true&
 // consoleProcessLimits bound the dedicated console processes so they recycle
 // periodically (paired with restart: unless-stopped in the compose file).
 var consoleProcessLimits = []string{"--time-limit=300", "--memory-limit=512M"}
+
+// waitForInstall holds a console process until Shopware is installed, so it
+// does not fail against a database that is still being created or migrated.
+// system:install writes install.lock once the schema is complete. Checking the
+// file needs no PHP, so only a line before and after the wait is logged.
+const waitForInstall = "if [ ! -f install.lock ]; then " +
+	"echo 'Waiting for Shopware to be installed (install.lock not found)'; " +
+	"until [ -f install.lock ]; do sleep 2; done; " +
+	"echo 'Shopware is installed (install.lock found), starting'; " +
+	"fi; exec "
 
 // buildWeb builds the shop container: the docker-dev image with the project
 // bind-mounted, wired to every generated service through its environment.
@@ -35,11 +47,13 @@ func buildWeb(e *Environment, _ service) composeService {
 // buildConsole returns the build function for a long-running
 // `php bin/console <args...>` process that reuses the web image and its
 // environment: the messenger worker and scheduled-task runner when the admin
-// worker is disabled. Each is bounded by --time-limit / --memory-limit so it
-// recycles periodically (restart: unless-stopped brings it back up).
+// worker is disabled. Each waits until Shopware is installed and is bounded by
+// --time-limit / --memory-limit so it recycles periodically (restart:
+// unless-stopped brings it back up).
 func buildConsole(consoleArgs ...string) func(*Environment, service) composeService {
-	command := append([]string{"php", "bin/console"}, consoleArgs...)
-	command = append(command, consoleProcessLimits...)
+	args := append([]string{"php", "bin/console"}, consoleArgs...)
+	args = append(args, consoleProcessLimits...)
+	command := []string{"sh", "-c", waitForInstall + strings.Join(args, " ")}
 
 	return func(e *Environment, svc service) composeService {
 		console := buildWeb(e, svc)

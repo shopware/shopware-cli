@@ -27,6 +27,8 @@ type fakeExecutor struct {
 	// env records the last WithEnv call so tests can assert the variables
 	// the deployment helper runs with.
 	env map[string]string
+	// executorType is returned by Type; empty means local.
+	executorType string
 }
 
 func shellProcess(ctx context.Context, script string) *executor.Process {
@@ -64,7 +66,12 @@ func (f *fakeExecutor) GetLog(context.Context, string, int, bool, io.Writer) err
 }
 
 func (f *fakeExecutor) NormalizePath(hostPath string) string { return hostPath }
-func (f *fakeExecutor) Type() string                         { return executor.TypeLocal }
+func (f *fakeExecutor) Type() string {
+	if f.executorType != "" {
+		return f.executorType
+	}
+	return executor.TypeLocal
+}
 func (f *fakeExecutor) WithEnv(env map[string]string) executor.Executor {
 	f.env = env
 	return f
@@ -365,4 +372,40 @@ func TestClearPendingWarningNamesAbsoluteMarkerPath(t *testing.T) {
 	abs, err := filepath.Abs(filepath.Join("project", ".shopware-cli", "install", "pending"))
 	require.NoError(t, err)
 	assert.Contains(t, warning, abs)
+}
+
+func TestIsInstalledCreatesInstallLockForDocker(t *testing.T) {
+	notInstalled := func(ctx context.Context, _ ...string) *executor.Process { return shellProcess(ctx, "false") }
+
+	t.Run("creates install.lock for an installed Docker shop", func(t *testing.T) {
+		root := t.TempDir()
+
+		assert.True(t, IsInstalled(t.Context(), &fakeExecutor{executorType: executor.TypeDocker}, root))
+		assert.FileExists(t, filepath.Join(root, "install.lock"))
+	})
+
+	t.Run("keeps an existing install.lock", func(t *testing.T) {
+		root := t.TempDir()
+		lock := filepath.Join(root, "install.lock")
+		require.NoError(t, os.WriteFile(lock, []byte("2026-11-25"), 0o644))
+
+		assert.True(t, IsInstalled(t.Context(), &fakeExecutor{executorType: executor.TypeDocker}, root))
+		content, err := os.ReadFile(lock)
+		require.NoError(t, err)
+		assert.Equal(t, "2026-11-25", string(content))
+	})
+
+	t.Run("leaves a shop that is not installed alone", func(t *testing.T) {
+		root := t.TempDir()
+
+		assert.False(t, IsInstalled(t.Context(), &fakeExecutor{executorType: executor.TypeDocker, console: notInstalled}, root))
+		assert.NoFileExists(t, filepath.Join(root, "install.lock"))
+	})
+
+	t.Run("leaves other executors alone", func(t *testing.T) {
+		root := t.TempDir()
+
+		assert.True(t, IsInstalled(t.Context(), &fakeExecutor{}, root))
+		assert.NoFileExists(t, filepath.Join(root, "install.lock"))
+	})
 }
