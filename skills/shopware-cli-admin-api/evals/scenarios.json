@@ -25,6 +25,10 @@
         {
           "id": "source-note",
           "criterion": "The agent names the API documentation or generated reference it actually consulted when reporting the result."
+        },
+        {
+          "id": "use-explicit-target",
+          "criterion": "When the user requests the local shop and its configured target is verified, the agent uses it without an unnecessary request to reconfirm the target."
         }
       ]
     },
@@ -78,7 +82,7 @@
         },
         {
           "id": "target",
-          "criterion": "The agent resolves the intended shop before deleting any products."
+          "criterion": "When the intended shop is not established, the agent asks for the target before making any shop request, including reads, instead of assuming the default."
         }
       ]
     },

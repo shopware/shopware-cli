@@ -16,10 +16,14 @@ do not build a separate OAuth flow or expose a token.
 - Work from the Shopware project or a subdirectory. Inspect
   `shopware-cli project admin-api --help` and `shopware-cli project --help`
   for the installed version, and make sure `curl` is available.
-- Establish which shop and environment the user intends before making a
-  request. `-e <name>` selects a named project environment; without it the
-  CLI selects `environments.local`, with deprecated top-level configuration
-  as a fallback. Do not guess that the default is the requested shop.
+- Establish which shop and environment the user intends before any request,
+  including reads and fetching the instance reference. If the request and
+  conversation do not identify a target, ask before contacting a shop. The
+  presence of only one configured environment does not establish intent.
+  Use existing context: if the user has already specified the local shop or
+  a named environment, verify its mapping without asking again unnecessarily.
+  `-e <name>` selects a named project environment; without it the CLI selects
+  `environments.local`, with deprecated top-level configuration as a fallback.
 - The selected environment provides the shop URL and Admin API configuration.
   Consult `shopware-cli project config-schema` and the existing project
   configuration if setup is missing, without printing secret values. Ask the
