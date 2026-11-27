@@ -126,6 +126,48 @@ func TestExportSkipsMissingDirectories(t *testing.T) {
 	assert.Equal(t, Components{PublicFiles: true, PrivateFiles: true}, contents.Components)
 }
 
+func TestExportToleratesFilesChangedByGNUTar(t *testing.T) {
+	cases := []struct {
+		name    string
+		version string
+		wantErr bool
+	}{
+		// GNU tar exits 1 when files change while archiving, but the archive is valid.
+		{name: "GNU tar", version: "tar (GNU tar) 1.35"},
+		// Other tars use exit code 1 for real errors and broken archives.
+		{name: "bsdtar", version: "bsdtar 3.5.3 - libarchive 3.7.4", wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bin := t.TempDir()
+			fakeTar := "#!/bin/sh\n" +
+				"if [ \"$1\" = --version ]; then echo '" + tc.version + "'; exit 0; fi\n" +
+				"dd if=/dev/zero bs=1024 count=1 2>/dev/null\n" +
+				"echo 'tar: media/a: file changed as we read it' >&2\n" +
+				"exit 1\n"
+			require.NoError(t, os.WriteFile(filepath.Join(bin, "tar"), []byte(fakeTar), 0o755))
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			project := t.TempDir()
+			writeFile(t, filepath.Join(project, "public/media/a/logo.png"), "logo")
+
+			err := Export(t.Context(), ExportOptions{
+				Output:          filepath.Join(t.TempDir(), "archive.tar.gz"),
+				Components:      Components{PublicFiles: true},
+				Environment:     executor.NewLocal(project),
+				FileRoots:       localFileRoots(project),
+				ShopwareVersion: "6.7.1.0",
+			})
+			if tc.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 // openExecer returns an ImportOptions.OpenDatabase that opens execer.
 func openExecer(execer sqlshell.Execer) func(context.Context) (sqlshell.Execer, func(), error) {
 	return func(context.Context) (sqlshell.Execer, func(), error) {

@@ -11,6 +11,8 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // localAdapter is the only Flysystem adapter supported so far.
@@ -55,6 +57,11 @@ func (c fileComponent) selected(components Components) bool {
 // which GNU tar rejects. COPYFILE_DISABLE stops macOS tar from adding
 // AppleDouble "._" files for extended attributes, which other tars extract as
 // regular files.
+//
+// A running shop keeps adding, writing, and deleting files while they are
+// archived. GNU tar reports this with exit code 1 but still writes a valid
+// archive, so it counts as success and tar's messages become a warning. Other
+// tars do not detect it, or use exit code 1 for real errors and broken archives.
 const packScript = `set -e
 root=$1
 shift
@@ -63,7 +70,10 @@ for dir do
 	if [ -e "$root/$dir" ]; then set -- "$@" "$dir"; fi
 done
 [ $# -gt 0 ] || exec dd if=/dev/zero bs=1024 count=1 2>/dev/null
-COPYFILE_DISABLE=1 exec tar -chf - -C "$root" "$@"`
+status=0
+COPYFILE_DISABLE=1 tar -chf - -C "$root" "$@" || status=$?
+if [ "$status" -eq 1 ] && tar --version 2>/dev/null | grep -q 'GNU tar'; then exit 0; fi
+exit "$status"`
 
 // stageScript extracts the tar read from stdin into a new staging directory
 // ($2) below the first directory, which is below the root ($1). It does not
@@ -291,6 +301,15 @@ func packFiles(ctx context.Context, env Environment, root string, dirs []string,
 
 	if err := process.Run(); err != nil {
 		return withStderr(err, stderr.String())
+	}
+
+	if messages := strings.TrimSpace(stderr.String()); messages != "" {
+		logger := logging.FromContext(ctx)
+		logger.Warnf("Files in %s changed during the export, which is expected while the shop is running. "+
+			"This is usually fine: new files are not referenced by the database, as it is exported first. "+
+			"Only files deleted or overwritten during the export may be missing or incomplete in the archive. "+
+			"Use \"--verbose\" to see the %d messages from tar", root, strings.Count(messages, "\n")+1)
+		logger.Debugf("Messages from tar:\n%s", messages)
 	}
 
 	return gz.Close()
