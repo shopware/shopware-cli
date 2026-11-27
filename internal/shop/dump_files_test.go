@@ -61,7 +61,8 @@ func TestDumpDatabaseSkipFileRowsFiltersMedia(t *testing.T) {
 			opts := tc.opts
 			opts.Output = filepath.Join(t.TempDir(), "dump.sql")
 			opts.SkipLockTables = true
-			require.NoError(t, dumpDatabase(t.Context(), db, nil, opts))
+			_, err = dumpDatabase(t.Context(), db, nil, opts)
+			require.NoError(t, err)
 
 			data, err := os.ReadFile(opts.Output)
 			require.NoError(t, err)

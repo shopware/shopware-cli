@@ -30,10 +30,15 @@ filesystems of the current environment with an archive written by
 
 The database import recreates the tables contained in the archive, other tables
 stay untouched. The media and thumbnail directories of the public filesystem and
-the whole private filesystem are emptied before the archived files are copied.
+the whole private filesystem are replaced with the archived files. They are
+extracted next to the existing files first and replace them after the database
+import, so a failure before that leaves the files untouched.
 When the archive contains the database but no files, the imported database has
 no rows for them, so their directories are emptied as well.
 For now only the local filesystem adapter is supported, not S3 or other adapters.
+
+The import is a downtime operation: do not use the shop until it has completed.
+Media and documents created while it runs may be lost or break.
 
 The import replaces shop credentials such as the admin password, and live
 integrations of the source shop become active on the target. A summary is shown
@@ -161,6 +166,9 @@ func printImportPlan(w io.Writer, archive, target, targetVersion string, content
 			_, _ = fmt.Fprintln(w, tui.DimText.Render(line.label+": not in the archive, left untouched"))
 		}
 	}
+
+	printWarning(w, "Import is a downtime operation, do not use the shop until it has completed",
+		"Media and documents created during the import may be lost or break, as the database and files are replaced one after another")
 
 	if contents.Database {
 		printWarning(w, "Import replaces shop credentials such as the admin password",

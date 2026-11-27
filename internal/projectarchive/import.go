@@ -2,12 +2,16 @@ package projectarchive
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 
 	"github.com/shopware/shopware-cli/internal/sqlshell"
 	"github.com/shopware/shopware-cli/logging"
 )
+
+// stagingPrefix names the staging directories of an import.
+const stagingPrefix = ".shopware-import-"
 
 // ImportOptions configures Import.
 type ImportOptions struct {
@@ -26,37 +30,78 @@ type ImportOptions struct {
 
 // Import replaces the project's components with the archive's: the tables
 // contained in the dump are recreated, and the media and thumbnail directories
-// of the public filesystem and the whole private filesystem are emptied before
-// the archived files are extracted. File components missing from an archive
-// with a database are emptied after the import, see Components.FilesToEmpty.
-func Import(ctx context.Context, opts ImportOptions) error {
-	err := walkArchive(opts.Archive, func(name string, r io.Reader) error {
-		if name == databaseEntry {
-			logging.FromContext(ctx).Infof("Importing database")
-			if _, err := sqlshell.ExecuteStream(ctx, opts.Database, r, nil); err != nil {
-				return fmt.Errorf("cannot import database: %w", err)
+// of the public filesystem and the whole private filesystem are replaced with
+// the archived files. File components missing from an archive with a database
+// are emptied, see Components.FilesToEmpty.
+//
+// The files are extracted into staging directories first, so an unwritable
+// target or a corrupt archive fails before the database is touched. They
+// replace the existing files only after the database import, which keeps the
+// window in which database and files disagree short.
+func Import(ctx context.Context, opts ImportOptions) (err error) {
+	staged, err := stageImportFiles(ctx, opts)
+	defer func() {
+		// Also clean up after a cancellation, the staging directories hold a
+		// copy of the files.
+		cleanupCtx := context.WithoutCancel(ctx)
+		for _, s := range staged {
+			if cleanupErr := s.cleanup(cleanupCtx, opts.Environment); cleanupErr != nil {
+				logging.FromContext(ctx).Warnf("Cannot remove the staging directory %s/%s/%s: %v", s.root, s.dirs[0], s.staging, cleanupErr)
 			}
-			return nil
 		}
+	}()
+	if err != nil {
+		return err
+	}
 
+	if opts.Contents.Database {
+		if err := importDatabase(ctx, opts); err != nil {
+			return err
+		}
+	}
+
+	for _, s := range staged {
+		if s.empty {
+			logging.FromContext(ctx).Infof("Removing %s files, as the imported database has no rows for them", s.name)
+		} else {
+			logging.FromContext(ctx).Infof("Replacing %s files", s.name)
+		}
+		if err := s.swap(ctx, opts.Environment); err != nil {
+			return fmt.Errorf("cannot replace %s files: %w", s.name, err)
+		}
+	}
+
+	return nil
+}
+
+// stageImportFiles extracts the archived files and stages empty directories
+// for the file components to empty. It returns the staged components also on
+// error, so their staging directories can be removed.
+func stageImportFiles(ctx context.Context, opts ImportOptions) ([]stagedFiles, error) {
+	staging := stagingPrefix + rand.Text()
+	var staged []stagedFiles
+
+	err := walkArchive(opts.Archive, func(entry string, r io.Reader) error {
 		for _, fc := range fileComponents {
-			if name != fc.entry {
+			if entry != fc.entry {
 				continue
 			}
 			root, err := opts.FileRoots.root(fc)
 			if err != nil {
 				return err
 			}
-			logging.FromContext(ctx).Infof("Importing %s files", fc.name)
-			if err := unpackFiles(ctx, opts.Environment, root, fc.dirs, r); err != nil {
-				return fmt.Errorf("cannot import %s files: %w", fc.name, err)
+			logging.FromContext(ctx).Infof("Extracting %s files", fc.name)
+			s, err := stageFiles(ctx, opts.Environment, stagedFiles{fileComponent: fc, root: root, staging: staging}, r)
+			staged = append(staged, s)
+			if err != nil {
+				return fmt.Errorf("cannot extract %s files: %w", fc.name, err)
 			}
 		}
 
 		return nil
 	})
 	if err != nil {
-		return err
+		return staged, err
 	}
 
 	toEmpty := opts.Contents.FilesToEmpty()
@@ -66,13 +111,29 @@ func Import(ctx context.Context, opts ImportOptions) error {
 		}
 		root, err := opts.FileRoots.root(fc)
 		if err != nil {
-			return err
+			return staged, err
 		}
-		logging.FromContext(ctx).Infof("Removing %s files, as the imported database has no rows for them", fc.name)
-		if err := emptyFiles(ctx, opts.Environment, root, fc.dirs); err != nil {
-			return fmt.Errorf("cannot remove %s files: %w", fc.name, err)
+		s, err := stageEmptyFiles(ctx, opts.Environment, stagedFiles{fileComponent: fc, root: root, staging: staging})
+		staged = append(staged, s)
+		if err != nil {
+			return staged, fmt.Errorf("cannot prepare removing %s files: %w", fc.name, err)
 		}
 	}
 
-	return nil
+	return staged, nil
+}
+
+// importDatabase executes the archived SQL dump.
+func importDatabase(ctx context.Context, opts ImportOptions) error {
+	return walkArchive(opts.Archive, func(entry string, r io.Reader) error {
+		if entry != databaseEntry {
+			return nil
+		}
+		logging.FromContext(ctx).Infof("Importing database")
+		if _, err := sqlshell.ExecuteStream(ctx, opts.Database, r, nil); err != nil {
+			return fmt.Errorf("cannot import database: %w", err)
+		}
+
+		return nil
+	})
 }

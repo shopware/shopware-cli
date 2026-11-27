@@ -133,7 +133,7 @@ func exportDatabase(ctx context.Context, opts ExportOptions, output string) (*Da
 		return nil, err
 	}
 
-	if err := shop.DumpDatabase(ctx, cfg, opts.Database.Config, dumpOpts); err != nil {
+	if _, err := shop.DumpDatabase(ctx, cfg, opts.Database.Config, dumpOpts); err != nil {
 		return nil, err
 	}
 

@@ -48,48 +48,65 @@ func (c fileComponent) selected(components Components) bool {
 
 // packScript writes a tar of directories below the root ($1) to stdout.
 // Symlinks are followed, as SSH deployments link shared directories into each
-// release. Missing directories are created, so an unused filesystem exports as
-// empty. Compression happens in Go: tar implementations disagree on padding
-// compressed streams, which GNU tar rejects.
+// release. Missing directories are skipped instead of created, as the source
+// may be read-only, so an unused filesystem exports as an empty tar: two zero
+// blocks, as BusyBox tar refuses to create an empty archive. Compression
+// happens in Go: tar implementations disagree on padding compressed streams,
+// which GNU tar rejects. COPYFILE_DISABLE stops macOS tar from adding
+// AppleDouble "._" files for extended attributes, which other tars extract as
+// regular files.
 const packScript = `set -e
-mkdir -p "$1"
-cd "$1"
+root=$1
 shift
-mkdir -p "$@"
-exec tar -chf - "$@"`
+for dir do
+	shift
+	if [ -e "$root/$dir" ]; then set -- "$@" "$dir"; fi
+done
+[ $# -gt 0 ] || exec dd if=/dev/zero bs=1024 count=1 2>/dev/null
+COPYFILE_DISABLE=1 exec tar -chf - -C "$root" "$@"`
 
-// unpackScript extracts the tar read from stdin into a staging directory, then
-// replaces the contents of each directory below the root ($1) with the
-// extracted one. It does not extract directly into the directories:
-//   - Import replaces the directories, so extracting directly would mean
-//     emptying them first. A truncated or corrupt archive would then lose the
-//     existing files, while a failed extraction into staging leaves them as is.
-//   - Directories may be symlinks into a shared directory, as in SSH
-//     deployments. tar replaces such symlinks with real directories unless GNU
-//     tar's --keep-directory-symlink is used, which bsdtar and BusyBox tar lack.
-//     Moving the extracted contents keeps the symlinks.
-//
-// The staging directory lives in the first directory instead of the root, as
-// the root may be read-only, like the public directory of a sealed SSH
-// release, while the directories themselves link to writable shared ones.
-// find runs commands with "+", so a failing rm or mv fails the script.
+// stageScript extracts the tar read from stdin into a new staging directory
+// ($2) below the first directory, which is below the root ($1). It does not
+// touch the existing files, so a failed extraction or database import leaves
+// them as is; swapScript replaces them afterwards. The staging directory lives
+// in the first directory instead of the root, as the root may be read-only,
+// like the public directory of a sealed SSH release, while the directories
+// themselves link to writable shared ones.
 // --no-same-owner gives extracted files to the importing user, as the source
 // owners are meaningless on the target; only root would restore them.
-const unpackScript = `set -e
+const stageScript = `set -e
 mkdir -p "$1"
 cd "$1"
-shift
+name=$2
+shift 2
 mkdir -p "$@"
-staging=$(mktemp -d "$1/.shopware-import.XXXXXX")
-trap 'rm -rf "$staging"' EXIT
-tar -xf - --no-same-owner -C "$staging"
-staging_name=$(basename "$staging")
+mkdir "$1/$name"
+tar -xf - --no-same-owner -C "$1/$name"`
+
+// swapScript replaces the contents of each directory below the root ($1) with
+// the one extracted by stageScript into the staging directory ($2). It moves
+// the contents instead of the directories, as they may be symlinks into a
+// shared directory, as in SSH deployments. tar would replace such symlinks
+// with real directories unless GNU tar's --keep-directory-symlink is used,
+// which bsdtar and BusyBox tar lack.
+// find runs commands with "+", so a failing rm or mv fails the script.
+const swapScript = `set -e
+cd "$1"
+name=$2
+shift 2
+staging="$1/$name"
 for dir in "$@"; do
-	find "$dir/" -mindepth 1 -maxdepth 1 ! -name "$staging_name" -exec rm -rf {} +
+	find "$dir/" -mindepth 1 -maxdepth 1 ! -name "$name" -exec rm -rf {} +
 	if [ -d "$staging/$dir" ]; then
 		find "$staging/$dir/" -mindepth 1 -maxdepth 1 -exec sh -c 'mv "$@" "$0"' "$dir/" {} +
 	fi
-done`
+done
+rm -rf "$staging"`
+
+// cleanupScript removes the staging directory ($2) below the first directory
+// ($3) below the root ($1), if it exists.
+const cleanupScript = `cd "$1" 2>/dev/null || exit 0
+rm -rf "$3/$2"`
 
 // filesystemConfig is a Shopware filesystem configured in shopware.filesystem.
 type filesystemConfig struct {
@@ -211,13 +228,16 @@ func parseShopwareVersion(output []byte) (string, error) {
 }
 
 // unmarshalConsoleJSON decodes the JSON object printed by a console command.
-// Deprecation notices may precede it.
+// Notices may surround it and contain braces themselves, like "{closure}", so
+// the object starts with the first line that starts with a brace.
 func unmarshalConsoleJSON(output []byte, v any) error {
-	if start := bytes.IndexByte(output, '{'); start > 0 {
-		output = output[start:]
+	if !bytes.HasPrefix(output, []byte("{")) {
+		if start := bytes.Index(output, []byte("\n{")); start >= 0 {
+			output = output[start+1:]
+		}
 	}
 
-	return json.Unmarshal(output, v)
+	return json.NewDecoder(bytes.NewReader(output)).Decode(v)
 }
 
 // packFiles writes a tar.gz of the directories below root to w.
@@ -235,19 +255,75 @@ func packFiles(ctx context.Context, env Environment, root string, dirs []string,
 	return gz.Close()
 }
 
-// unpackFiles replaces the directories below root with the tar.gz read from r.
-func unpackFiles(ctx context.Context, env Environment, root string, dirs []string, r io.Reader) error {
+// stagedFiles are the files of a component extracted into a staging
+// directory, see stageFiles.
+type stagedFiles struct {
+	fileComponent
+	root string
+	// staging is the name of the staging directory below the first of dirs.
+	staging string
+	// empty reports whether an empty archive was staged, so the swap
+	// empties the directories.
+	empty bool
+}
+
+// stageFiles extracts the tar.gz read from r into the staging directory below
+// the first of the component's directories, without touching the existing
+// files. It returns the staged files also on error, so they can be cleaned up.
+func stageFiles(ctx context.Context, env Environment, staged stagedFiles, r io.Reader) (stagedFiles, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return err
+		return staged, err
 	}
 	// Stop after the first member, so zero padding behind it is not
 	// mistaken for another one.
 	gz.Multistream(false)
 
-	process := env.Command(ctx, "sh", append([]string{"-c", unpackScript, "sh", root}, dirs...)...)
+	if err := staged.run(ctx, env, stageScript, gz); err != nil {
+		return staged, err
+	}
+
+	// tar may stop reading at its end-of-archive marker, before gzip has
+	// verified the checksum at the end of the stream.
+	_, err = io.Copy(io.Discard, gz)
+
+	return staged, err
+}
+
+// stageEmptyFiles stages an empty archive, so swapping empties the
+// directories with the same symlink handling.
+func stageEmptyFiles(ctx context.Context, env Environment, staged stagedFiles) (stagedFiles, error) {
+	staged.empty = true
+
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	if err := tar.NewWriter(gz).Close(); err != nil {
+		return staged, err
+	}
+	if err := gz.Close(); err != nil {
+		return staged, err
+	}
+
+	return stageFiles(ctx, env, staged, &archive)
+}
+
+// swap replaces the directories with the staged files and removes the staging
+// directory.
+func (s stagedFiles) swap(ctx context.Context, env Environment) error {
+	return s.run(ctx, env, swapScript, nil)
+}
+
+// cleanup removes the staging directory, if it still exists.
+func (s stagedFiles) cleanup(ctx context.Context, env Environment) error {
+	return s.run(ctx, env, cleanupScript, nil)
+}
+
+// run runs script with the root, the staging directory name and the
+// component's directories as arguments.
+func (s stagedFiles) run(ctx context.Context, env Environment, script string, stdin io.Reader) error {
+	process := env.Command(ctx, "sh", append([]string{"-c", script, "sh", s.root, s.staging}, s.dirs...)...)
 	var stderr bytes.Buffer
-	process.Cmd.Stdin = gz
+	process.Cmd.Stdin = stdin
 	process.Cmd.Stderr = &stderr
 
 	if err := process.Run(); err != nil {
@@ -255,21 +331,6 @@ func unpackFiles(ctx context.Context, env Environment, root string, dirs []strin
 	}
 
 	return nil
-}
-
-// emptyFiles empties the directories below root. It unpacks an empty archive,
-// so it shares the symlink handling of unpackFiles.
-func emptyFiles(ctx context.Context, env Environment, root string, dirs []string) error {
-	var archive bytes.Buffer
-	gz := gzip.NewWriter(&archive)
-	if err := tar.NewWriter(gz).Close(); err != nil {
-		return err
-	}
-	if err := gz.Close(); err != nil {
-		return err
-	}
-
-	return unpackFiles(ctx, env, root, dirs, &archive)
 }
 
 // commandError adds the captured stderr of a failed command to its error.

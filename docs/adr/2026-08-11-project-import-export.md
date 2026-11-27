@@ -111,6 +111,13 @@ Interactive imports then ask for confirmation, defaulting to "No". `--force`
 skips the confirmation and is required without an interactive terminal or with
 `--no-interaction`, so unattended imports authorize the replacement explicitly.
 
+Import extracts the archived files into staging directories next to the
+existing ones before it imports the database, and replaces the existing files
+only afterwards. An unwritable target or a corrupt archive then fails before
+anything is replaced, and the window in which database and files disagree stays
+short. Import is still a downtime operation: media or documents created while it
+runs may be lost or break, which the summary warns about.
+
 Import only writes the selected package components. Follow-up work on the
 running shop is out of scope and must be triggered by the user: Elasticsearch or
 OpenSearch indexing, cache warmup, message queue catch-up, theme compile, and

@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // passwordFlagPrompt is the sentinel value Cobra sets via NoOptDefVal when
@@ -65,7 +66,14 @@ Limits require CREATE and DROP privileges for staging tables.`,
 		opts.InsertIntoLimit, _ = cmd.Flags().GetInt("insert-into-limit")
 		opts.InsertIntoMaxBytes, _ = cmd.Flags().GetInt("insert-into-max-bytes")
 
-		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, opts)
+		output, err := shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, opts)
+		if err != nil {
+			return err
+		}
+
+		logging.FromContext(cmd.Context()).Infof("Successfully created the dump %s", output)
+
+		return nil
 	},
 }
 

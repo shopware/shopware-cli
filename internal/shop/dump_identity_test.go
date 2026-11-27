@@ -53,7 +53,7 @@ func TestDumpDatabaseResetIdentityFiltersExportedAppRows(t *testing.T) {
 			mock.ExpectQuery("SHOW TRIGGERS").WillReturnRows(sqlmock.NewRows([]string{"trigger", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}))
 
 			output := filepath.Join(t.TempDir(), "dump.sql")
-			err = dumpDatabase(t.Context(), db, nil, DumpDatabaseOptions{
+			_, err = dumpDatabase(t.Context(), db, nil, DumpDatabaseOptions{
 				Output: output, SkipLockTables: true, ResetIdentity: resetIdentity,
 			})
 			require.NoError(t, err)

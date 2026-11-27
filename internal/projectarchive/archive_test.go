@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -101,6 +102,29 @@ func TestExportImportFilesRoundTrip(t *testing.T) {
 	assert.NotZero(t, link.Mode()&os.ModeSymlink, "shared directory symlink must survive the import")
 }
 
+func TestExportSkipsMissingDirectories(t *testing.T) {
+	// A sealed release without media, thumbnails or a private filesystem.
+	project := t.TempDir()
+	public := filepath.Join(project, "public")
+	require.NoError(t, os.MkdirAll(public, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(public, 0o755) })
+
+	archive := filepath.Join(t.TempDir(), "archive.tar.gz")
+	require.NoError(t, Export(t.Context(), ExportOptions{
+		Output:          archive,
+		Components:      Components{PublicFiles: true, PrivateFiles: true},
+		Environment:     executor.NewLocal(project),
+		FileRoots:       localFileRoots(project),
+		ShopwareVersion: "6.7.1.0",
+	}))
+
+	assert.NoDirExists(t, filepath.Join(project, "files"), "export must not write to the source")
+
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
+	assert.Equal(t, Components{PublicFiles: true, PrivateFiles: true}, contents.Components)
+}
+
 // noopExecer accepts every statement of a database import.
 type noopExecer struct{}
 
@@ -137,6 +161,54 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 	assert.DirExists(t, filepath.Join(project, "public/media"))
 	assert.FileExists(t, filepath.Join(project, "public/theme/all.css"))
 	assert.NoFileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
+}
+
+// failingExecer rejects every statement of a database import.
+type failingExecer struct{}
+
+func (failingExecer) ExecContext(context.Context, string, ...any) (sql.Result, error) {
+	return nil, errors.New("connection lost")
+}
+
+func TestImportKeepsFilesWhenDatabaseImportFails(t *testing.T) {
+	dir := t.TempDir()
+	publicArchive := filepath.Join(dir, publicFilesEntry)
+	writeTestArchive(t, publicArchive, map[string]string{"media/a/new.png": "new"})
+	publicContent, err := os.ReadFile(publicArchive)
+	require.NoError(t, err)
+
+	archive := filepath.Join(dir, "archive.tar.gz")
+	writeTestArchive(t, archive, map[string]string{
+		metadataEntry:    `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`,
+		databaseEntry:    "SELECT 1;",
+		publicFilesEntry: string(publicContent),
+	})
+
+	project := t.TempDir()
+	writeFile(t, filepath.Join(project, "public/media/a/old.png"), "old")
+	writeFile(t, filepath.Join(project, "files/documents/invoice.pdf"), "old")
+
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
+
+	err = Import(t.Context(), ImportOptions{
+		Archive:     archive,
+		Contents:    contents,
+		Environment: executor.NewLocal(project),
+		FileRoots:   localFileRoots(project),
+		Database:    failingExecer{},
+	})
+	require.Error(t, err)
+
+	assert.FileExists(t, filepath.Join(project, "public/media/a/old.png"))
+	assert.NoFileExists(t, filepath.Join(project, "public/media/a/new.png"))
+	assert.FileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
+
+	for _, staging := range []string{"public/media", "files"} {
+		matches, err := filepath.Glob(filepath.Join(project, staging, stagingPrefix+"*"))
+		require.NoError(t, err)
+		assert.Empty(t, matches, "staging directories must be removed")
+	}
 }
 
 func TestInspectValidatesArchive(t *testing.T) {
@@ -187,8 +259,8 @@ func writeTestArchive(t *testing.T, path string, entries map[string]string) {
 }
 
 func TestParseFileRoots(t *testing.T) {
-	// Deprecation notices may precede the JSON.
-	output := `Deprecated: something
+	// Notices with braces may precede the JSON.
+	output := `Deprecated: Method {closure}() is deprecated
 {
     "private": {
         "type": "local",
@@ -229,7 +301,7 @@ func TestParseFileRoots(t *testing.T) {
 }
 
 func TestParseShopwareVersion(t *testing.T) {
-	version, err := parseShopwareVersion([]byte("Deprecated: something\n{\n    \"kernel.shopware_version\": \"6.7.1.0\"\n}\n"))
+	version, err := parseShopwareVersion([]byte("Deprecated: something\n{\n    \"kernel.shopware_version\": \"6.7.1.0\"\n}\nDeprecated: {closure}\n"))
 	require.NoError(t, err)
 	assert.Equal(t, "6.7.1.0", version)
 
