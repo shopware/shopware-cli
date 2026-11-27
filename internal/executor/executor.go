@@ -36,6 +36,9 @@ type Executor interface {
 	ComposerCommand(ctx context.Context, args ...string) *Process
 	PHPCommand(ctx context.Context, args ...string) *Process
 	NPMCommand(ctx context.Context, args ...string) *Process
+	// Command runs a program in the project directory of the environment:
+	// locally, inside the web container, or on the remote host.
+	Command(ctx context.Context, name string, args ...string) *Process
 	// AvailableLogFiles lists the .log files in the project's var/log
 	// directory, most recently modified first.
 	AvailableLogFiles(ctx context.Context) ([]LogFile, error)

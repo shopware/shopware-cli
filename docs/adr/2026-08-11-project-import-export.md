@@ -1,5 +1,6 @@
 ---
 title: Project import and export
+status: In progress
 tags: [project import, project export, mysql, database]
 ---
 
@@ -28,8 +29,10 @@ Portable shop-data packages are a new pair of commands:
 
 Export and import operate on independently selectable components: database,
 public files, and private files. An archive does not have to include public or
-private files. `project import` applies every component that is present.
-Skipping public or private files is opt-out (`--skip-public`, `--skip-private`).
+private files. Skipping a component on export is opt-out (`--skip-database`,
+`--skip-public-files`, `--skip-private-files`). `project import` applies every
+component that is present and has no skip flags, as importing only a part of a
+consistent archive leaves database rows and files out of sync.
 
 The archive is the interchange unit. Its layout should match the format expected
 by Shopware hosting where applicable and practical, so a CLI export can be
@@ -76,20 +79,24 @@ layout:
   accepted. The CLI does not re-encode MySQL Shell internals.
 
 Public and private files are optional tar archives of the corresponding Shopware
-filesystems, not of the project source tree. Export includes a filesystem only
-when that component is selected. Import applies `public.tar.gz` and
-`private.tar.gz` when they are present, unless the matching `--skip-public` or
-`--skip-private` flag is set. A missing file is valid and is not an error. When
-they are applied, export reads them and import writes them through the project's
-existing Flysystem configuration in `config/packages`
-(`shopware.filesystem.public` and `shopware.filesystem.private`). Only the
-`local` and `amazon-s3` adapters are supported. Any other adapter is rejected
-with a clear error.
+filesystems, not of the project source tree. Export includes a filesystem unless
+that component is intentionally excluded. Import applies `public.tar.gz` and
+`private.tar.gz` when they are present. A missing file is valid and is not an
+error. When they are applied, export reads them and import
+writes them through the project's existing Flysystem configuration in
+`config/packages` (`shopware.filesystem.public` and
+`shopware.filesystem.private`). Only the `local` and `amazon-s3` adapters are
+supported. Any other adapter is rejected with a clear error.
 
 `--anonymize` and `ConfigDump` rules apply only to the SQL dumper. They do not
 sanitize public or private files. File components are transferred as stored.
 Private files can include invoices, documents, and other sensitive shop data;
 that is expected and must be documented.
+
+The above documented archive format is not part of the shopware-cli's public
+interface and only intended to be consumed by the CLI's import command.
+It may change with future versions while the import command stays backwards
+compatible where possible.
 
 ### Import safety
 
@@ -97,13 +104,19 @@ Import replaces the selected target components. That includes shop credentials
 in the database, such as the admin password. It must not do this quietly.
 
 Before any write, `project import` prints what it is about to apply: the
-archive, `source`, and each selected component. `--dry-run` does that inspection
-and print, then exits without writing.
+archive, `source`, the target environment, and each selected component.
+`--dry-run` does that inspection and print, then exits without writing.
 
-If the target is not empty, import refuses unless `--force` is set. A target is
-not empty when a selected database already has Shopware tables, or a selected
-filesystem already has objects. `--force` is required for both interactive and
-non-interactive use; a confirmation prompt is not a substitute.
+Interactive imports then ask for confirmation, defaulting to "No". `--force`
+skips the confirmation and is required without an interactive terminal or with
+`--no-interaction`, so unattended imports authorize the replacement explicitly.
+
+Import extracts the archived files into staging directories next to the
+existing ones before it imports the database, and replaces the existing files
+only afterwards. An unwritable target or a corrupt archive then fails before
+anything is replaced, and the window in which database and files disagree stays
+short. Import is still a downtime operation: media or documents created while it
+runs may be lost or break, which the summary warns about.
 
 Import only writes the selected package components. Follow-up work on the
 running shop is out of scope and must be triggered by the user: Elasticsearch or
@@ -162,8 +175,8 @@ the Flysystem adapters above.
 - `project dump` remains the database-only SQL command. Existing scripts keep
   working.
 - `project export` / `project import` are the portable shop-data commands.
-- Import prints the planned apply, supports `--dry-run`, and refuses a non-empty
-  target unless `--force` is set.
+- Import prints the planned apply, supports `--dry-run`, and asks for
+  confirmation unless `--force` is set.
 - Post-import shop tasks such as search indexing stay with the user.
 - Public and private files travel with the database in one archive, using the
   project's Flysystem config (`local` and `amazon-s3` only).

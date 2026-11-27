@@ -12,7 +12,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/shopware/shopware-cli/internal/mysqldump"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 // DumpDatabaseOptions configures DumpDatabase. CLI concerns such as resolving
@@ -55,14 +54,21 @@ type DumpDatabaseOptions struct {
 	InsertIntoMaxBytes int
 	// LimitOverrides contains "table=rows" entries limiting the dumped rows per table
 	LimitOverrides []string
+	// SkipPublicFileRows excludes the media rows of files in the public
+	// filesystem, for exports without these files.
+	SkipPublicFileRows bool
+	// SkipPrivateFileRows excludes the media and import/export file rows of
+	// files in the private filesystem, for exports without these files.
+	SkipPrivateFileRows bool
 }
 
-// DumpDatabase dumps the database described by sqlCfg to opts.Output. cfg may
-// be nil; dump options are applied to cfg in place.
-func DumpDatabase(ctx context.Context, sqlCfg *mysql.Config, cfg *ConfigDump, opts DumpDatabaseOptions) error {
+// DumpDatabase dumps the database described by sqlCfg to opts.Output and
+// returns the written path, which carries the compression suffix. cfg may be
+// nil; dump options are applied to cfg in place.
+func DumpDatabase(ctx context.Context, sqlCfg *mysql.Config, cfg *ConfigDump, opts DumpDatabaseOptions) (string, error) {
 	connector, err := mysql.NewConnector(sqlCfg)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	db := sql.OpenDB(connector)
@@ -71,10 +77,10 @@ func DumpDatabase(ctx context.Context, sqlCfg *mysql.Config, cfg *ConfigDump, op
 	return dumpDatabase(ctx, db, cfg, opts)
 }
 
-func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDatabaseOptions) error {
+func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDatabaseOptions) (string, error) {
 	cfg, err := prepareDumpConfig(cfg, opts)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	dumper := mysqldump.NewMySQLDumper(db)
@@ -82,23 +88,21 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 
 	w, output, err := mysqldump.OpenOutput(opts.Output, opts.Compression)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = w.Close() }()
 
 	if err := dumper.Dump(ctx, w); err != nil {
-		return explainDumpError(err, opts.SkipCustomerData || cfg.SkipCustomerData)
+		return "", explainDumpError(err, opts.SkipCustomerData || cfg.SkipCustomerData)
 	}
 
 	// Closing flushes the compressor into the file; report flush errors
 	// instead of silently producing a truncated dump.
 	if err := w.Close(); err != nil {
-		return err
+		return "", err
 	}
 
-	logging.FromContext(ctx).Infof("Successfully created the dump %s", output)
-
-	return nil
+	return output, nil
 }
 
 // explainDumpError adds actionable guidance while preserving the database error.
@@ -148,6 +152,11 @@ func configureDumper(dumper *mysqldump.Dumper, cfg *ConfigDump, opts DumpDatabas
 	dumper.NoData = cfg.NoData
 	dumper.Ignore = cfg.Ignore
 	dumper.LimitMap = cfg.Limit
+	if exclusions := fileRowExclusions(opts.SkipPublicFileRows, opts.SkipPrivateFileRows); len(exclusions) > 0 {
+		dumper.ExcludeMap = exclusions
+		// Rows that require a file left out of the export are left out too.
+		dumper.ExcludeRestrictedReferences = true
+	}
 	if opts.ResetIdentity {
 		dumper.BuildRowExclusions = resetIdentityExclusions
 	}

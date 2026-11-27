@@ -175,6 +175,28 @@ func TestExcludeFailsWhenRetainedRowsReferenceExcludedParent(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestExcludeRestrictedReferencesFiltersReferencingRows(t *testing.T) {
+	for _, onDelete := range []string{"RESTRICT", "NO ACTION"} {
+		t.Run(onDelete, func(t *testing.T) {
+			db, mock := getDB(t)
+			dumper := NewMySQLDumper(db)
+			dumper.schemaCache = map[string]*TableSchema{
+				"parent": {Name: "parent", PrimaryKey: []string{"id"}, Columns: notNullColumns("id", "secret")},
+				"child": {Name: "child", PrimaryKey: []string{"id"}, Columns: notNullColumns("id", "parent_id"), ForeignKeys: []ForeignKeySchema{{
+					Name: "fk.child.parent", Columns: []string{"parent_id"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}, OnDelete: onDelete,
+				}}},
+			}
+			dumper.ExcludeMap = map[string]string{"parent": "secret = 1"}
+			dumper.ExcludeRestrictedReferences = true
+			mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+			require.NoError(t, dumper.computeExcludeFilters(t.Context()))
+			assert.Contains(t, dumper.excludeWhere["child"], "`parent_id` IN (SELECT `id` FROM `parent` WHERE (secret = 1))")
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
 func TestExcludeValidatesSelfReferencingRowsAgainstFinalFilter(t *testing.T) {
 	db, mock := getDB(t)
 	dumper := NewMySQLDumper(db)

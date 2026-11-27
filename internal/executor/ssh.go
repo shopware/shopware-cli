@@ -209,6 +209,10 @@ func (s *SSHExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
 	return s.command(ctx, "npm", args...)
 }
 
+func (s *SSHExecutor) Command(ctx context.Context, name string, args ...string) *Process {
+	return s.command(ctx, name, args...)
+}
+
 func (s *SSHExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, error) {
 	out, err := s.PHPCommand(ctx, "-r", listLogFilesPHP(path.Join(s.remoteDir(), "var", "log"))).Output()
 	if err != nil {

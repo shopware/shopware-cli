@@ -117,7 +117,11 @@ func (l *LocalExecutor) PHPCommand(ctx context.Context, args ...string) *Process
 }
 
 func (l *LocalExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
-	cmd := exec.CommandContext(ctx, "npm", args...)
+	return l.Command(ctx, "npm", args...)
+}
+
+func (l *LocalExecutor) Command(ctx context.Context, name string, args ...string) *Process {
+	cmd := exec.CommandContext(ctx, name, args...)
 	applyLocalEnv(l.projectRoot, l.env, cmd)
 	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
 	logCmd(ctx, cmd)

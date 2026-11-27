@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // passwordFlagPrompt is the sentinel value Cobra sets via NoOptDefVal when
@@ -54,47 +55,69 @@ Limits require CREATE and DROP privileges for staging tables.`,
 			return err
 		}
 
-		output, _ := cmd.Flags().GetString("output")
-		clean, _ := cmd.Flags().GetBool("clean")
-		skipCustomerData, _ := cmd.Flags().GetBool("skip-customer-data")
-		noData, _ := cmd.Flags().GetStringArray("no-data")
-		skipLockTables, _ := cmd.Flags().GetBool("skip-lock-tables")
-		anonymize, _ := cmd.Flags().GetBool("anonymize")
-		resetIdentity, _ := cmd.Flags().GetBool("reset-identity")
-		cloneShop, _ := cmd.Flags().GetBool("clone-shop")
-		quick, _ := cmd.Flags().GetBool("quick")
-		parallel, _ := cmd.Flags().GetInt("parallel")
-		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
-		insertIntoMaxBytes, _ := cmd.Flags().GetInt("insert-into-max-bytes")
-		limits, _ := cmd.Flags().GetStringArray("limit")
-
-		var extensionTables map[string]map[string]string
-		var systemConfigRules []shop.SystemConfigRule
-		if anonymize {
-			extensionTables, systemConfigRules, err = anonymizationFromInstalledExtensions(cmd.Context())
-			if err != nil {
-				return err
-			}
+		opts, err := dumpDataOptions(cmd)
+		if err != nil {
+			return err
 		}
 
-		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, shop.DumpDatabaseOptions{
-			Output:             output,
-			Compression:        compression,
-			Clean:              clean || cloneShop,
-			SkipCustomerData:   skipCustomerData,
-			NoData:             noData,
-			Anonymize:          anonymize,
-			ResetIdentity:      resetIdentity || cloneShop,
-			ExtensionTables:    extensionTables,
-			SystemConfigRules:  systemConfigRules,
-			SkipLockTables:     skipLockTables,
-			Quick:              quick,
-			Parallel:           parallel,
-			InsertIntoLimit:    insertIntoLimit,
-			InsertIntoMaxBytes: insertIntoMaxBytes,
-			LimitOverrides:     limits,
-		})
+		opts.Output, _ = cmd.Flags().GetString("output")
+		opts.Compression = compression
+		opts.Quick, _ = cmd.Flags().GetBool("quick")
+		opts.InsertIntoLimit, _ = cmd.Flags().GetInt("insert-into-limit")
+		opts.InsertIntoMaxBytes, _ = cmd.Flags().GetInt("insert-into-max-bytes")
+
+		output, err := shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, opts)
+		if err != nil {
+			return err
+		}
+
+		logging.FromContext(cmd.Context()).Infof("Successfully created the dump %s", output)
+
+		return nil
 	},
+}
+
+// registerDumpDataFlags registers the flags that select the dumped data,
+// shared by "project dump" and "project export".
+func registerDumpDataFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")
+	cmd.Flags().Bool("clone-shop", false, "Shorthand for --clean --reset-identity")
+	cmd.Flags().Bool("skip-customer-data", false, "Exclude customer, order, newsletter, review, document, and related history data while keeping table schemas; includes clean mode")
+	cmd.Flags().StringArray("no-data", nil, "Export only the schema of a table or glob pattern (e.g. 'klarna_*'), can be given multiple times")
+	cmd.Flags().Bool("skip-lock-tables", false, "Skip locking tables during the dump")
+	cmd.Flags().Bool("anonymize", false, "Anonymize personal data, extension-declared columns, and extension system config secrets")
+	cmd.MarkFlagsMutuallyExclusive("skip-customer-data", "anonymize")
+	cmd.Flags().Bool("reset-identity", false, "Remove the shop ID, apps with registration secrets, and their integrations")
+	cmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
+	cmd.Flags().StringArray("limit", nil, "Limit the rows of a table to the newest ones (e.g. order=100), can be given multiple times")
+}
+
+// dumpDataOptions reads the flags registered by registerDumpDataFlags.
+func dumpDataOptions(cmd *cobra.Command) (shop.DumpDatabaseOptions, error) {
+	clean, _ := cmd.Flags().GetBool("clean")
+	cloneShop, _ := cmd.Flags().GetBool("clone-shop")
+	resetIdentity, _ := cmd.Flags().GetBool("reset-identity")
+
+	opts := shop.DumpDatabaseOptions{
+		Clean:         clean || cloneShop,
+		ResetIdentity: resetIdentity || cloneShop,
+	}
+	opts.SkipCustomerData, _ = cmd.Flags().GetBool("skip-customer-data")
+	opts.NoData, _ = cmd.Flags().GetStringArray("no-data")
+	opts.SkipLockTables, _ = cmd.Flags().GetBool("skip-lock-tables")
+	opts.Anonymize, _ = cmd.Flags().GetBool("anonymize")
+	opts.Parallel, _ = cmd.Flags().GetInt("parallel")
+	opts.LimitOverrides, _ = cmd.Flags().GetStringArray("limit")
+
+	if opts.Anonymize {
+		var err error
+		opts.ExtensionTables, opts.SystemConfigRules, err = anonymizationFromInstalledExtensions(cmd.Context())
+		if err != nil {
+			return shop.DumpDatabaseOptions{}, err
+		}
+	}
+
+	return opts, nil
 }
 
 func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
@@ -246,20 +269,11 @@ func init() {
 	projectDatabaseDumpCmd.Flags().String("ssl-key", "", "Path to the client private key (PEM) for mutual TLS")
 
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "File or - (for stdout)")
-	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")
-	projectDatabaseDumpCmd.Flags().Bool("clone-shop", false, "Shorthand for --clean --reset-identity")
-	projectDatabaseDumpCmd.Flags().Bool("skip-customer-data", false, "Exclude customer, order, newsletter, review, document, and related history data while keeping table schemas; includes clean mode")
-	projectDatabaseDumpCmd.Flags().StringArray("no-data", nil, "Export only the schema of a table or glob pattern (e.g. 'klarna_*'), can be given multiple times")
-	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skip locking tables during the dump")
-	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize personal data, extension-declared columns, and extension system config secrets")
-	projectDatabaseDumpCmd.MarkFlagsMutuallyExclusive("skip-customer-data", "anonymize")
-	projectDatabaseDumpCmd.Flags().Bool("reset-identity", false, "Remove the shop ID, apps with registration secrets, and their integrations")
+	registerDumpDataFlags(projectDatabaseDumpCmd)
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Write one row per INSERT statement")
-	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-max-bytes", mysqldump.DefaultInsertIntoMaxBytes, "Target maximum INSERT size in bytes; a single larger row is written on its own")
-	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table to the newest ones (e.g. order=100), can be given multiple times")
 
 	// Autocomplete registrations
 	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("ssl-mode", completeTLSModes)

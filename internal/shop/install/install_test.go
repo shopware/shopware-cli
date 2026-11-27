@@ -22,6 +22,7 @@ import (
 // fakeExecutor satisfies executor.Executor and lets each test decide which
 // shell command backs console/php invocations.
 type fakeExecutor struct {
+	executor.Executor
 	console func(ctx context.Context, args ...string) *executor.Process
 	php     func(ctx context.Context, args ...string) *executor.Process
 	// env records the last WithEnv call so tests can assert the variables

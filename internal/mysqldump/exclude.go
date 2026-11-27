@@ -13,7 +13,8 @@ import (
 // computeExcludeFilters translates ExcludeMap into the WHERE conditions stored
 // in excludeWhere. Directly configured exclusions keep only rows whose condition is not true.
 // CASCADE edges filter referencing rows, SET NULL edges rewrite their foreign
-// key values, and restrictive edges are checked for dangling exported rows.
+// key values, and restrictive edges are checked for dangling exported rows,
+// unless ExcludeRestrictedReferences filters them like CASCADE edges.
 // Must run after prefetchAllSchemas because it walks the cached foreign keys.
 func (d *Dumper) computeExcludeFilters(ctx context.Context) error {
 	hasNoData := false
@@ -78,11 +79,12 @@ func (d *Dumper) newExcludeResolver(ctx context.Context) *excludeResolver {
 	}
 
 	return &excludeResolver{
-		schemas:          schemas,
-		directExclusions: directExclusions,
-		affected:         make(map[string]bool),
-		memo:             make(map[string]string),
-		resolving:        make(map[string]bool),
+		schemas:           schemas,
+		directExclusions:  directExclusions,
+		excludeRestricted: d.ExcludeRestrictedReferences,
+		affected:          make(map[string]bool),
+		memo:              make(map[string]string),
+		resolving:         make(map[string]bool),
 	}
 }
 
@@ -138,6 +140,8 @@ type excludeResolver struct {
 	schemas map[string]*TableSchema
 	// directExclusions maps tables to their configured conditions selecting rows to omit.
 	directExclusions map[string]string
+	// excludeRestricted follows RESTRICT and NO ACTION edges like CASCADE edges.
+	excludeRestricted bool
 	// affected includes tables with direct exclusions and those reached through foreign keys.
 	affected map[string]bool
 	// memo caches the excluded-row condition per table.
@@ -170,7 +174,7 @@ func (r *excludeResolver) keepConditions() map[string]string {
 }
 
 // keepConditionFor retains rows that neither match a direct exclusion nor
-// reference excluded parents through CASCADE edges.
+// reference excluded parents through filtering edges.
 func (r *excludeResolver) keepConditionFor(table string) string {
 	var parts []string
 
@@ -187,7 +191,7 @@ func (r *excludeResolver) keepConditionFor(table string) string {
 
 // excludedConditionFor returns the condition selecting the excluded rows of the
 // given table: rows matching a direct exclusion or referencing an excluded
-// parent through a CASCADE foreign key.
+// parent through a filtering foreign key.
 func (r *excludeResolver) excludedConditionFor(table string) string {
 	if condition, ok := r.memo[table]; ok {
 		return condition
@@ -209,14 +213,14 @@ func (r *excludeResolver) excludedConditionFor(table string) string {
 	return condition
 }
 
-// cascadeExclusions follows only CASCADE relationships. Recursive calls skip
+// cascadeExclusions follows filtering relationships. Recursive calls skip
 // edges already being resolved; the final keep condition still checks those edges.
 func (r *excludeResolver) cascadeExclusions(table string) []string {
 	var parts []string
 	for _, fk := range r.schemas[table].ForeignKeys {
 		referenced := strings.ToLower(fk.ReferencedTable)
 		if !r.affected[referenced] ||
-			!strings.EqualFold(fk.OnDelete, "CASCADE") ||
+			!r.filtersReferencingRows(fk) ||
 			r.resolving[referenced] {
 			continue
 		}
@@ -240,4 +244,17 @@ func (r *excludeResolver) cascadeExclusions(table string) []string {
 	}
 
 	return parts
+}
+
+// filtersReferencingRows reports whether rows referencing an excluded parent
+// through fk are excluded too. SET NULL edges are rewritten instead.
+func (r *excludeResolver) filtersReferencingRows(fk ForeignKeySchema) bool {
+	switch strings.ToUpper(fk.OnDelete) {
+	case "CASCADE":
+		return true
+	case "RESTRICT", "NO ACTION":
+		return r.excludeRestricted
+	default:
+		return false
+	}
 }

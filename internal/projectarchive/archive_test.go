@@ -1,0 +1,423 @@
+package projectarchive
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/sqlshell"
+)
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+func localFileRoots(root string) FileRoots {
+	return FileRoots{public: filepath.Join(root, "public"), private: filepath.Join(root, "files")}
+}
+
+// testMetadata is a minimal valid metadata.json.
+const testMetadata = `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`
+
+// writeImportArchive writes an archive with the given public files, if any,
+// and optionally a database dump.
+func writeImportArchive(t *testing.T, publicFiles map[string]string, withDatabase bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	entries := map[string]string{metadataEntry: testMetadata}
+	if withDatabase {
+		entries[databaseEntry] = "SELECT 1;"
+	}
+	if publicFiles != nil {
+		payload := filepath.Join(dir, publicFilesEntry)
+		writeTestArchive(t, payload, publicFiles)
+		content, err := os.ReadFile(payload)
+		require.NoError(t, err)
+		entries[publicFilesEntry] = string(content)
+	}
+
+	archive := filepath.Join(dir, "archive.tar.gz")
+	writeTestArchive(t, archive, entries)
+
+	return archive
+}
+
+// importArchive inspects the archive and imports it into the local project.
+func importArchive(t *testing.T, archive, project string, openDatabase func(context.Context) (sqlshell.Execer, func(), error)) error {
+	t.Helper()
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
+
+	return Import(t.Context(), ImportOptions{
+		Archive:      archive,
+		Contents:     contents,
+		Environment:  executor.NewLocal(project),
+		FileRoots:    localFileRoots(project),
+		OpenDatabase: openDatabase,
+	})
+}
+
+// assertNoStagingDirs asserts that an import left no staging directory in dirs.
+func assertNoStagingDirs(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, dir := range dirs {
+		matches, err := filepath.Glob(filepath.Join(dir, stagingPrefix+"*"))
+		require.NoError(t, err)
+		assert.Empty(t, matches, "staging directories must be removed")
+	}
+}
+
+// sharedDir links project/<name> to shared/<name>, as SSH deployments do.
+func sharedDir(t *testing.T, root, name string) {
+	t.Helper()
+	target := filepath.Join(root, "shared", name)
+	require.NoError(t, os.MkdirAll(target, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, "project", name)), 0o755))
+	require.NoError(t, os.Symlink(target, filepath.Join(root, "project", name)))
+}
+
+func TestExportImportFilesRoundTrip(t *testing.T) {
+	files := Components{PublicFiles: true, PrivateFiles: true}
+
+	source := t.TempDir()
+	sharedDir(t, source, "public/media")
+	writeFile(t, filepath.Join(source, "shared/public/media/a/logo.png"), "logo")
+	writeFile(t, filepath.Join(source, "project/public/thumbnail/a/logo_400x400.png"), "thumb")
+	writeFile(t, filepath.Join(source, "project/public/theme/all.css"), "not exported")
+	writeFile(t, filepath.Join(source, "project/files/documents/invoice.pdf"), "invoice")
+
+	// Named like a payload entry, which must not clash with the staged one.
+	archive := filepath.Join(t.TempDir(), privateFilesEntry)
+	sourceProject := filepath.Join(source, "project")
+	require.NoError(t, Export(t.Context(), ExportOptions{
+		Output:          archive,
+		Components:      files,
+		Environment:     executor.NewLocal(sourceProject),
+		FileRoots:       localFileRoots(sourceProject),
+		ShopwareVersion: "6.7.1.0",
+	}))
+
+	info, err := os.Stat(archive)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "archive may contain sensitive data")
+
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
+	assert.Equal(t, files, contents.Components)
+	assert.Equal(t, FormatVersion, contents.Metadata.FormatVersion)
+	assert.Equal(t, "6.7.1.0", contents.Metadata.Source.ShopwareVersion)
+	assert.Nil(t, contents.Metadata.Source.Database)
+
+	target := t.TempDir()
+	sharedDir(t, target, "public/media")
+	sharedDir(t, target, "public/thumbnail")
+	sharedDir(t, target, "files")
+	writeFile(t, filepath.Join(target, "shared/public/media/stale.png"), "stale")
+	writeFile(t, filepath.Join(target, "shared/files/.hidden"), "stale")
+	writeFile(t, filepath.Join(target, "project/public/theme/all.css"), "kept")
+
+	// SSH deployments seal the release, only the shared directories are writable.
+	sealed := filepath.Join(target, "project/public")
+	require.NoError(t, os.Chmod(sealed, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(sealed, 0o755) })
+
+	require.NoError(t, importArchive(t, archive, filepath.Join(target, "project"), nil))
+
+	assert.FileExists(t, filepath.Join(target, "shared/public/media/a/logo.png"))
+	assert.FileExists(t, filepath.Join(target, "shared/public/thumbnail/a/logo_400x400.png"))
+	assert.FileExists(t, filepath.Join(target, "shared/files/documents/invoice.pdf"))
+	assert.NoFileExists(t, filepath.Join(target, "shared/public/media/stale.png"))
+	assert.NoFileExists(t, filepath.Join(target, "shared/files/.hidden"))
+	assert.FileExists(t, filepath.Join(target, "project/public/theme/all.css"))
+	assertNoStagingDirs(t, filepath.Join(target, "shared/public/media"), filepath.Join(target, "shared/files"))
+
+	link, err := os.Lstat(filepath.Join(target, "project/public/media"))
+	require.NoError(t, err)
+	assert.NotZero(t, link.Mode()&os.ModeSymlink, "shared directory symlink must survive the import")
+}
+
+func TestExportSkipsMissingDirectories(t *testing.T) {
+	// A sealed release without media, thumbnails or a private filesystem.
+	project := t.TempDir()
+	public := filepath.Join(project, "public")
+	require.NoError(t, os.MkdirAll(public, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(public, 0o755) })
+
+	archive := filepath.Join(t.TempDir(), "archive.tar.gz")
+	require.NoError(t, Export(t.Context(), ExportOptions{
+		Output:          archive,
+		Components:      Components{PublicFiles: true, PrivateFiles: true},
+		Environment:     executor.NewLocal(project),
+		FileRoots:       localFileRoots(project),
+		ShopwareVersion: "6.7.1.0",
+	}))
+
+	assert.NoDirExists(t, filepath.Join(project, "files"), "export must not write to the source")
+
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
+	assert.Equal(t, Components{PublicFiles: true, PrivateFiles: true}, contents.Components)
+}
+
+func TestExportToleratesFilesChangedByGNUTar(t *testing.T) {
+	cases := []struct {
+		name    string
+		version string
+		wantErr bool
+	}{
+		// GNU tar exits 1 when files change while archiving, but the archive is valid.
+		{name: "GNU tar", version: "tar (GNU tar) 1.35"},
+		// Other tars use exit code 1 for real errors and broken archives.
+		{name: "bsdtar", version: "bsdtar 3.5.3 - libarchive 3.7.4", wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bin := t.TempDir()
+			fakeTar := "#!/bin/sh\n" +
+				"if [ \"$1\" = --version ]; then echo '" + tc.version + "'; exit 0; fi\n" +
+				"dd if=/dev/zero bs=1024 count=1 2>/dev/null\n" +
+				"echo 'tar: media/a: file changed as we read it' >&2\n" +
+				"exit 1\n"
+			require.NoError(t, os.WriteFile(filepath.Join(bin, "tar"), []byte(fakeTar), 0o755))
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			project := t.TempDir()
+			writeFile(t, filepath.Join(project, "public/media/a/logo.png"), "logo")
+
+			err := Export(t.Context(), ExportOptions{
+				Output:          filepath.Join(t.TempDir(), "archive.tar.gz"),
+				Components:      Components{PublicFiles: true},
+				Environment:     executor.NewLocal(project),
+				FileRoots:       localFileRoots(project),
+				ShopwareVersion: "6.7.1.0",
+			})
+			if tc.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// openExecer returns an ImportOptions.OpenDatabase that opens execer.
+func openExecer(execer sqlshell.Execer) func(context.Context) (sqlshell.Execer, func(), error) {
+	return func(context.Context) (sqlshell.Execer, func(), error) {
+		return execer, func() {}, nil
+	}
+}
+
+// noopExecer accepts every statement of a database import.
+type noopExecer struct{}
+
+func (noopExecer) ExecContext(context.Context, string, ...any) (sql.Result, error) {
+	return driver.RowsAffected(0), nil
+}
+
+func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
+	archive := writeImportArchive(t, nil, true)
+
+	project := t.TempDir()
+	writeFile(t, filepath.Join(project, "public/media/a/stale.png"), "stale")
+	writeFile(t, filepath.Join(project, "public/thumbnail/a/stale_400x400.png"), "stale")
+	writeFile(t, filepath.Join(project, "public/theme/all.css"), "kept")
+	writeFile(t, filepath.Join(project, "files/documents/invoice.pdf"), "stale")
+
+	require.NoError(t, importArchive(t, archive, project, openExecer(noopExecer{})))
+
+	assert.NoDirExists(t, filepath.Join(project, "public/media/a"))
+	assert.NoDirExists(t, filepath.Join(project, "public/thumbnail/a"))
+	assert.DirExists(t, filepath.Join(project, "public/media"))
+	assert.FileExists(t, filepath.Join(project, "public/theme/all.css"))
+	assert.NoFileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
+}
+
+func TestImportAdoptsTargetPermissions(t *testing.T) {
+	archive := writeImportArchive(t, map[string]string{"media/a/new.png": "new", "thumbnail/a/new.png": "new"}, false)
+
+	// The web server shares the group, so the target is group-writable.
+	project := t.TempDir()
+	media := filepath.Join(project, "public/media")
+	writeFile(t, filepath.Join(media, "old.png"), "old")
+	require.NoError(t, os.Chmod(filepath.Join(media, "old.png"), 0o660))
+	require.NoError(t, os.Chmod(media, 0o770))
+	thumbnail := filepath.Join(project, "public/thumbnail")
+	require.NoError(t, os.MkdirAll(thumbnail, 0o750))
+	require.NoError(t, os.Chmod(thumbnail, 0o750))
+
+	require.NoError(t, importArchive(t, archive, project, nil))
+
+	assertMode := func(path string, want os.FileMode) {
+		t.Helper()
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.Equal(t, want, info.Mode().Perm(), path)
+	}
+	// Modes of an existing file and of the directory.
+	assertMode(filepath.Join(media, "a/new.png"), 0o660)
+	assertMode(filepath.Join(media, "a"), 0o770)
+	// Without an existing file, the directory's mode without execute bits.
+	assertMode(filepath.Join(thumbnail, "a/new.png"), 0o640)
+	assertMode(filepath.Join(thumbnail, "a"), 0o750)
+}
+
+func TestImportFailsBeforeDatabaseWhenFilesCannotBeRemoved(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can remove every file")
+	}
+
+	archive := writeImportArchive(t, map[string]string{"media/a/new.png": "new"}, true)
+
+	// A subdirectory of another user, e.g. the web server, that the importing
+	// user may not change.
+	project := t.TempDir()
+	writeFile(t, filepath.Join(project, "public/media/b/old.png"), "old")
+	foreign := filepath.Join(project, "public/media/b")
+	require.NoError(t, os.Chmod(foreign, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(foreign, 0o755) })
+
+	err := importArchive(t, archive, project, func(context.Context) (sqlshell.Execer, func(), error) {
+		t.Error("the database must not be touched")
+		return noopExecer{}, func() {}, nil
+	})
+	require.Error(t, err)
+
+	assert.FileExists(t, filepath.Join(project, "public/media/b/old.png"))
+	assertNoStagingDirs(t, filepath.Join(project, "public/media"))
+}
+
+// failingExecer rejects every statement of a database import.
+type failingExecer struct{}
+
+func (failingExecer) ExecContext(context.Context, string, ...any) (sql.Result, error) {
+	return nil, errors.New("connection lost")
+}
+
+func TestImportKeepsFilesWhenDatabaseImportFails(t *testing.T) {
+	archive := writeImportArchive(t, map[string]string{"media/a/new.png": "new"}, true)
+
+	project := t.TempDir()
+	writeFile(t, filepath.Join(project, "public/media/a/old.png"), "old")
+	writeFile(t, filepath.Join(project, "files/documents/invoice.pdf"), "old")
+
+	err := importArchive(t, archive, project, openExecer(failingExecer{}))
+	require.Error(t, err)
+
+	assert.FileExists(t, filepath.Join(project, "public/media/a/old.png"))
+	assert.NoFileExists(t, filepath.Join(project, "public/media/a/new.png"))
+	assert.FileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
+
+	assertNoStagingDirs(t, filepath.Join(project, "public/media"), filepath.Join(project, "files"))
+}
+
+func TestInspectValidatesArchive(t *testing.T) {
+	validMetadata := `{"format_version": 1, "created_at": "2026-08-11T12:00:00Z", "source": {"shopware_version": "6.7.1.0"}, "unknown": true}`
+
+	cases := []struct {
+		name    string
+		entries map[string]string
+		wantErr string
+	}{
+		{name: "valid", entries: map[string]string{metadataEntry: validMetadata, databaseEntry: "SELECT 1;"}},
+		{name: "missing metadata", entries: map[string]string{databaseEntry: "SELECT 1;"}, wantErr: "metadata.json is missing"},
+		{name: "unknown format version", entries: map[string]string{metadataEntry: `{"format_version": 2}`, databaseEntry: ""}, wantErr: "unsupported format version 2"},
+		{name: "two database payloads", entries: map[string]string{metadataEntry: validMetadata, databaseEntry: "", "database/@.json": "{}"}, wantErr: "both"},
+		{name: "no components", entries: map[string]string{metadataEntry: validMetadata}, wantErr: "neither"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "archive.tar.gz")
+			writeTestArchive(t, path, tc.entries)
+
+			contents, err := Inspect(path)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, Components{Database: true}, contents.Components)
+		})
+	}
+}
+
+func writeTestArchive(t *testing.T, path string, entries map[string]string) {
+	t.Helper()
+	file, err := os.Create(path)
+	require.NoError(t, err)
+	gz := gzip.NewWriter(file)
+	tw := tar.NewWriter(gz)
+	for name, content := range entries {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content))}))
+		_, err := tw.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	require.NoError(t, file.Close())
+}
+
+func TestParseFileRoots(t *testing.T) {
+	// Notices with braces may precede the JSON.
+	output := `Deprecated: Method {closure}() is deprecated
+{
+    "private": {
+        "type": "local",
+        "config": {"root": "%s"},
+        "visibility": "private"
+    },
+    "public": {
+        "type": "amazon-s3",
+        "url": "https://cdn.example.com",
+        "config": {"bucket": "media"}
+    }
+}`
+
+	cases := []struct {
+		name     string
+		root     string
+		needed   Components
+		wantRoot string
+		wantErr  string
+	}{
+		{name: "local filesystem", root: "/var/www/html/files", needed: Components{PrivateFiles: true}, wantRoot: "/var/www/html/files"},
+		{name: "unsupported adapter", root: "/var/www/html/files", needed: Components{PublicFiles: true, PrivateFiles: true}, wantErr: "amazon-s3"},
+		{name: "unresolved root", root: "%%env(PRIVATE_ROOT)%%", needed: Components{PrivateFiles: true}, wantErr: "unresolved"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			roots, err := parseFileRoots([]byte(fmt.Sprintf(output, tc.root)), tc.needed)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			// The unsupported public filesystem is fine, as it is not needed.
+			assert.Equal(t, FileRoots{private: tc.wantRoot}, roots)
+		})
+	}
+}
+
+func TestParseShopwareVersion(t *testing.T) {
+	version, err := parseShopwareVersion([]byte("Deprecated: something\n{\n    \"kernel.shopware_version\": \"6.7.1.0\"\n}\nDeprecated: {closure}\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "6.7.1.0", version)
+
+	_, err = parseShopwareVersion([]byte(`{"kernel.shopware_version": ""}`))
+	assert.Error(t, err)
+}

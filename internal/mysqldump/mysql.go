@@ -37,6 +37,9 @@ type Dumper struct {
 	// (table -> WHERE clause). Foreign-key delete actions control how referencing
 	// rows are handled.
 	ExcludeMap map[string]string
+	// ExcludeRestrictedReferences also excludes rows referencing excluded rows
+	// through RESTRICT or NO ACTION foreign keys, instead of failing the dump.
+	ExcludeRestrictedReferences bool
 	// BuildRowExclusions builds exclusion conditions after schemas are loaded,
 	// allowing rules to account for columns missing in older schemas.
 	// Results override matching ExcludeMap entries. The callback must not modify schemas.

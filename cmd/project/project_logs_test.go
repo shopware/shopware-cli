@@ -136,6 +136,7 @@ func TestPrintLogFileListShowsAllFiles(t *testing.T) {
 // logsFakeExecutor implements executor.Executor, serving canned log files
 // and recording GetLog invocations.
 type logsFakeExecutor struct {
+	executor.Executor
 	files        []executor.LogFile
 	getLogCalled bool
 	gotFile      string
