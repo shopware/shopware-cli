@@ -17,6 +17,16 @@ var integrations = Directory{
 			Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/shopware-cli"},
 		},
 		{
+			Name:          "shopware-cli-admin-api",
+			DisplayName:   "Shopware CLI Admin API",
+			Type:          TypeSkill,
+			Provider:      "shopware",
+			Description:   "Make authenticated Admin API requests for a Shopware project.",
+			Status:        StatusActive,
+			Documentation: "https://developer.shopware.com/docs/guides/development/integrations-api/",
+			Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/shopware-cli"},
+		},
+		{
 			Name:          "shopware-cli-docker",
 			DisplayName:   "Shopware CLI (Docker)",
 			Type:          TypeSkill,

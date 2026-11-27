@@ -15,6 +15,8 @@ shopware-cli/
 └── skills/
     ├── shopware-cli/
     │   └── SKILL.md
+    ├── shopware-cli-admin-api/
+    │   └── SKILL.md
     ├── shopware-cli-docker/
     │   └── SKILL.md
     ├── shopware-cli-extension-store/
@@ -23,9 +25,10 @@ shopware-cli/
         └── SKILL.md
 ```
 
-Each skill is a single `SKILL.md`, optionally with a `scripts/` directory for
-helper scripts the agent executes (the Agent Skills layout). Keep reference
-material inside `SKILL.md` itself.
+Each skill has a `SKILL.md`, optionally with a `scripts/` directory for
+helper scripts the agent executes (the Agent Skills layout). Versioned skills
+may also include evaluation scenarios and reports. Keep reference material
+inside `SKILL.md` itself.
 
 Do not maintain separate Claude, Cursor, Codex, Copilot, or other
 client-specific copies in this repository.
@@ -44,6 +47,18 @@ It teaches agents how to:
 - reason about command safety and side effects;
 - work non-interactively;
 - troubleshoot CLI failures.
+
+### `shopware-cli-admin-api`
+
+Guidance for authenticated Admin API requests from a Shopware project.
+It covers selecting the intended environment, using the CLI's authentication,
+checking API errors, protecting sensitive data and reviewing state changes.
+The official Shopware API documentation and the shop's generated reference
+remain the sources of truth for API behavior and schemas. The skill links to
+those sources.
+
+Install with `shopware-cli ai add shopware-cli-admin-api --agent claude-code`
+in a Shopware project, or add `--global` for user-level installation.
 
 ### `shopware-cli-docker`
 
@@ -113,7 +128,8 @@ For user-facing Shopware CLI changes:
 
 1. Implement the CLI change.
 2. Check whether `skills/shopware-cli/SKILL.md` is affected.
-3. Check whether `skills/shopware-cli-docker/SKILL.md`,
+3. Check whether `skills/shopware-cli-admin-api/SKILL.md`,
+   `skills/shopware-cli-docker/SKILL.md`,
    `skills/shopware-cli-extension-store/SKILL.md`, or
    `skills/shopware-cli-extension-anonymize/SKILL.md` is affected.
 4. Update the skill in the same PR when required.
@@ -132,6 +148,7 @@ Validate each skill against the Agent Skills format:
 
 ```bash
 skills-ref validate ./skills/shopware-cli
+skills-ref validate ./skills/shopware-cli-admin-api
 skills-ref validate ./skills/shopware-cli-docker
 skills-ref validate ./skills/shopware-cli-extension-store
 skills-ref validate ./skills/shopware-cli-extension-anonymize
@@ -277,7 +294,7 @@ npx skills check
 Update the Shopware skills with:
 
 ```bash
-npx skills update shopware-cli shopware-cli-docker shopware-cli-extension-store shopware-cli-extension-anonymize
+npx skills update shopware-cli shopware-cli-admin-api shopware-cli-docker shopware-cli-extension-store shopware-cli-extension-anonymize
 ```
 
 or update all installed project skills with:
@@ -314,7 +331,9 @@ skills continue to exist.
 
 ## Versioning
 
-Skills do not have an independent Shopware version.
+The Admin API skill declares an independent version in its metadata and keeps
+evaluation scenarios with the skill. Other existing skills do not yet declare
+an independent version.
 
 Because their canonical source lives in the Shopware CLI repository, every Git
 tag and Shopware CLI release records the exact skill source that existed for
