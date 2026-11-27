@@ -163,6 +163,53 @@ func TestImportEmptiesFilesMissingFromArchive(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(project, "files/documents/invoice.pdf"))
 }
 
+func TestImportAdoptsTargetPermissions(t *testing.T) {
+	dir := t.TempDir()
+	publicArchive := filepath.Join(dir, publicFilesEntry)
+	writeTestArchive(t, publicArchive, map[string]string{"media/a/new.png": "new", "thumbnail/a/new.png": "new"})
+	publicContent, err := os.ReadFile(publicArchive)
+	require.NoError(t, err)
+
+	archive := filepath.Join(dir, "archive.tar.gz")
+	writeTestArchive(t, archive, map[string]string{
+		metadataEntry:    `{"format_version": 1, "source": {"shopware_version": "6.7.1.0"}}`,
+		publicFilesEntry: string(publicContent),
+	})
+
+	// The web server shares the group, so the target is group-writable.
+	project := t.TempDir()
+	media := filepath.Join(project, "public/media")
+	writeFile(t, filepath.Join(media, "old.png"), "old")
+	require.NoError(t, os.Chmod(filepath.Join(media, "old.png"), 0o660))
+	require.NoError(t, os.Chmod(media, 0o770))
+	thumbnail := filepath.Join(project, "public/thumbnail")
+	require.NoError(t, os.MkdirAll(thumbnail, 0o750))
+	require.NoError(t, os.Chmod(thumbnail, 0o750))
+
+	contents, err := Inspect(archive)
+	require.NoError(t, err)
+
+	require.NoError(t, Import(t.Context(), ImportOptions{
+		Archive:     archive,
+		Contents:    contents,
+		Environment: executor.NewLocal(project),
+		FileRoots:   localFileRoots(project),
+	}))
+
+	assertMode := func(path string, want os.FileMode) {
+		t.Helper()
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.Equal(t, want, info.Mode().Perm(), path)
+	}
+	// Modes of an existing file and of the directory.
+	assertMode(filepath.Join(media, "a/new.png"), 0o660)
+	assertMode(filepath.Join(media, "a"), 0o770)
+	// Without an existing file, the directory's mode without execute bits.
+	assertMode(filepath.Join(thumbnail, "a/new.png"), 0o640)
+	assertMode(filepath.Join(thumbnail, "a"), 0o750)
+}
+
 // failingExecer rejects every statement of a database import.
 type failingExecer struct{}
 

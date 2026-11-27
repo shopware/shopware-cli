@@ -71,17 +71,49 @@ COPYFILE_DISABLE=1 exec tar -chf - -C "$root" "$@"`
 // them as is; swapScript replaces them afterwards. The staging directory lives
 // in the first directory instead of the root, as the root may be read-only,
 // like the public directory of a sealed SSH release, while the directories
-// themselves link to writable shared ones.
-// --no-same-owner gives extracted files to the importing user, as the source
-// owners are meaningless on the target; only root would restore them.
+// themselves link to writable shared ones. Living there also inherits a
+// setgid group or default ACLs of the directory.
+//
+// The extracted files take over ownership and permissions of the target, as
+// the source's are meaningless there: --no-same-owner gives them to the
+// importing user, and as root, they are given to the owner of the target
+// directory, e.g. the web server user. Directories take the mode of the target
+// directory and files the one of an existing file in it, or of the directory
+// without execute bits when there is none. Without root, the files keep the
+// importing user; for each directory whose owner can then neither write them
+// as owner nor through a group-writable group, it prints the directory, the
+// files' owner and the expected one.
 const stageScript = `set -e
 mkdir -p "$1"
 cd "$1"
 name=$2
 shift 2
 mkdir -p "$@"
-mkdir "$1/$name"
-tar -xf - --no-same-owner -C "$1/$name"`
+staging="$1/$name"
+mkdir "$staging"
+tar -xf - --no-same-owner -C "$staging"
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+for dir in "$@"; do
+	[ -d "$staging/$dir" ] || continue
+	owner=$(ls -nd "$dir/" | awk '{print $3 ":" $4}')
+	if [ "$(id -u)" = 0 ]; then
+		chown -R "$owner" "$staging/$dir"
+	fi
+	dir_mode=$(mode "$dir/")
+	file=$(find "$dir/" -name "$name" -prune -o -type f -print | head -n 1)
+	if [ -n "$file" ]; then
+		file_mode=$(mode "$file")
+	else
+		file_mode=$(printf '%o' $((0$dir_mode & 0666)))
+	fi
+	find "$staging/$dir" -mindepth 1 -type d -exec chmod "$dir_mode" {} +
+	find "$staging/$dir" -type f -exec chmod "$file_mode" {} +
+	staged_owner=$(ls -nd "$staging/$dir" | awk '{print $3 ":" $4}')
+	if [ "${staged_owner%:*}" != "${owner%:*}" ] &&
+		{ [ "${staged_owner#*:}" != "${owner#*:}" ] || [ $((0$dir_mode & 0$file_mode & 020)) -eq 0 ]; }; then
+		echo "$dir $staged_owner $owner"
+	fi
+done`
 
 // swapScript replaces the contents of each directory below the root ($1) with
 // the one extracted by stageScript into the staging directory ($2). It moves
@@ -265,6 +297,15 @@ type stagedFiles struct {
 	// empty reports whether an empty archive was staged, so the swap
 	// empties the directories.
 	empty bool
+	// ownerMismatches are the directories whose files the owner of the
+	// target directory may not be able to change.
+	ownerMismatches []ownerMismatch
+}
+
+// ownerMismatch describes staged files of a directory that belong to another
+// user than the target directory, as reported by stageScript.
+type ownerMismatch struct {
+	dir, owner, expected string
 }
 
 // stageFiles extracts the tar.gz read from r into the staging directory below
@@ -279,8 +320,14 @@ func stageFiles(ctx context.Context, env Environment, staged stagedFiles, r io.R
 	// mistaken for another one.
 	gz.Multistream(false)
 
-	if err := staged.run(ctx, env, stageScript, gz); err != nil {
+	output, err := staged.run(ctx, env, stageScript, gz)
+	if err != nil {
 		return staged, err
+	}
+	for line := range strings.Lines(string(output)) {
+		if fields := strings.Fields(line); len(fields) == 3 {
+			staged.ownerMismatches = append(staged.ownerMismatches, ownerMismatch{dir: fields[0], owner: fields[1], expected: fields[2]})
+		}
 	}
 
 	// tar may stop reading at its end-of-archive marker, before gzip has
@@ -310,27 +357,32 @@ func stageEmptyFiles(ctx context.Context, env Environment, staged stagedFiles) (
 // swap replaces the directories with the staged files and removes the staging
 // directory.
 func (s stagedFiles) swap(ctx context.Context, env Environment) error {
-	return s.run(ctx, env, swapScript, nil)
+	_, err := s.run(ctx, env, swapScript, nil)
+
+	return err
 }
 
 // cleanup removes the staging directory, if it still exists.
 func (s stagedFiles) cleanup(ctx context.Context, env Environment) error {
-	return s.run(ctx, env, cleanupScript, nil)
+	_, err := s.run(ctx, env, cleanupScript, nil)
+
+	return err
 }
 
 // run runs script with the root, the staging directory name and the
-// component's directories as arguments.
-func (s stagedFiles) run(ctx context.Context, env Environment, script string, stdin io.Reader) error {
+// component's directories as arguments and returns its output.
+func (s stagedFiles) run(ctx context.Context, env Environment, script string, stdin io.Reader) ([]byte, error) {
 	process := env.Command(ctx, "sh", append([]string{"-c", script, "sh", s.root, s.staging}, s.dirs...)...)
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	process.Cmd.Stdin = stdin
+	process.Cmd.Stdout = &stdout
 	process.Cmd.Stderr = &stderr
 
 	if err := process.Run(); err != nil {
-		return withStderr(err, stderr.String())
+		return nil, withStderr(err, stderr.String())
 	}
 
-	return nil
+	return stdout.Bytes(), nil
 }
 
 // commandError adds the captured stderr of a failed command to its error.

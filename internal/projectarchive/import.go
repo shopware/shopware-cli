@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"path"
 
 	"github.com/shopware/shopware-cli/internal/sqlshell"
 	"github.com/shopware/shopware-cli/logging"
@@ -68,6 +69,10 @@ func Import(ctx context.Context, opts ImportOptions) (err error) {
 		}
 		if err := s.swap(ctx, opts.Environment); err != nil {
 			return fmt.Errorf("cannot replace %s files: %w", s.name, err)
+		}
+		for _, m := range s.ownerMismatches {
+			dir := path.Join(s.root, m.dir)
+			logging.FromContext(ctx).Warnf("Imported %s files in %s belong to %s instead of %s like the directory, so the web server may not be able to change them. Fix it as root, e.g. with \"chown -R %s %s\"", s.name, dir, m.owner, m.expected, m.expected, dir)
 		}
 	}
 
