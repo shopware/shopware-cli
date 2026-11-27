@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -28,7 +29,7 @@ var (
 var extensionPackageCmd = &cobra.Command{
 	Use:   "package path [branch]",
 	Short: "Build a distributable extension ZIP",
-	Long:  "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag-or-branch>.zip when a tag or branch is available, or <name>.zip otherwise, unless --filename is set.",
+	Long:  "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. A folder outside a Git repository is packaged from the working copy. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag-or-branch>.zip when a tag or branch is available, or <name>.zip otherwise, unless --filename is set.",
 	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		extPath, err := filepath.Abs(args[0])
@@ -80,20 +81,28 @@ var extensionPackageCmd = &cobra.Command{
 		var tag string
 
 		// Extract files using strategy
-		if disableGit {
+		copyWorkingCopy := disableGit
+		if !disableGit {
+			gitCommit, _ := cmd.Flags().GetString("git-commit")
+
+			tag, err = extension.GitCopyFolder(cmd.Context(), extPath, extDir, gitCommit)
+			// Without Git there is no tag or branch to check out. Fall back to the working copy,
+			// unless a flag asks for something only Git can provide.
+			if errors.Is(err, extension.ErrNotGitRepository) && gitCommit == "" && !cmd.Flags().Changed("use-git-tag-as-version") {
+				logging.FromContext(cmd.Context()).Warnf("Not inside a Git repository, packaging the working copy: %s", extPath)
+				copyWorkingCopy = true
+			} else if err != nil {
+				return fmt.Errorf("copy via git: %w", err)
+			} else {
+				logging.FromContext(cmd.Context()).Infof("Checking out %s using Git", tag)
+			}
+		}
+
+		if copyWorkingCopy {
 			err = cp.Copy(extPath, extDir, copyOptions())
 			if err != nil {
 				return fmt.Errorf("copy files: %w", err)
 			}
-		} else {
-			gitCommit, _ := cmd.Flags().GetString("git-commit")
-
-			tag, err = extension.GitCopyFolder(cmd.Context(), extPath, extDir, gitCommit)
-			if err != nil {
-				return fmt.Errorf("copy via git: %w", err)
-			}
-
-			logging.FromContext(cmd.Context()).Infof("Checking out %s using Git", tag)
 		}
 
 		// User input wins
