@@ -143,5 +143,15 @@ operation succeeded.
   method and request body. A 401 or 403 is not a reason to bypass
   authentication or weaken permissions. Never disable TLS verification as a
   workaround without the user's informed instruction.
-- Do not silently retry a write: the server may have applied it even if the
-  response was lost. Check the resulting state first.
+- A 403 alone does not establish whether authentication succeeded or which
+  layer denied the request. Use the redacted response and available logs as
+  evidence; HTML, an empty body, or missing logs do not prove where it was
+  handled. A verified Shopware missing-privilege error can identify an ACL
+  denial; do not assume all 403s are ACL errors.
+- Before suggesting any retry, determine whether the original request could
+  change state; POST and GET can both have side effects. If the effect is
+  unknown, treat it as potentially state-changing. A failed or timed-out
+  mutation may already have taken effect, even after a 403. Check the
+  resulting state and relevant side effects using documented read-only
+  operations first. If the outcome remains uncertain, do not retry. Never
+  describe repeating a state-changing request as a read-only check.
