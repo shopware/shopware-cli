@@ -49,7 +49,7 @@ remaining workflows in independently verified stages.
 
 | Term | Meaning |
 | --- | --- |
-| Executor | Command builder and runner. Provides PHP, Composer, Node and generic commands, defaults and output capture. |
+| Executor | Command builder and runner. Provides PHP, Composer, Node.js, npm and generic commands, defaults and output capture. |
 | Runtime | Runs commands locally, in containers or over SSH through the `runtime.Runtime` interface. A runtime can also offer container and network management. |
 | Capability | An interface for related operations a runtime supports. For example, a consumer that manages persistent containers requires `runtime.Containers`. |
 | Implementation | Code that implements a shared interface for a specific environment or container engine. |
@@ -80,7 +80,7 @@ service runtime.
 flowchart TB
     W["Application wiring"] --> S["Service stack<br/>Up · Status · Stop · Service"]
     S -->|Service| B["runtime.Runtime"]
-    C["Command consumer"] --> E["Executor<br/>PHP · Composer · Node · generic"]
+    C["Command consumer"] --> E["Executor<br/>PHP · Composer · Node.js · npm · generic"]
     E --> B
     B --> L["Local or SSH"]
     B --> D["Disposable container"]
@@ -158,7 +158,7 @@ type CaptureMode uint8
 const (
     CaptureNone CaptureMode = iota // Do not retain output (default).
     CaptureSeparate                // Retain stdout and stderr separately.
-    CaptureCombined                // Merge streams in observed write order.
+    CaptureCombined                // Merge both streams into one output.
 )
 
 type Process interface {
@@ -176,6 +176,7 @@ type Process interface {
 
 type Result struct {
     ExitCode int            // Workload exit code, or -1 when unknown.
+    Signal   string         // Name of the signal that ended the workload, such as SIGKILL.
     Output   CapturedOutput // Output retained according to Capture.
     Usage    *ResourceUsage // Workload resource usage. Nil when unavailable.
 }
@@ -208,6 +209,24 @@ prevents sending the termination request. Cancellation during communication
 does not guarantee that termination was prevented. If the command ignores
 `Stop`, the caller can use `Kill`. There is no automatic escalation.
 
+The local runtime starts each command in its own process group, so termination
+also reaches the workers a command starts. The CLI cancels its context on
+`SIGINT`, `SIGTERM` and `SIGHUP`. If the CLI itself dies without a catchable
+signal, the group keeps running. The group runs in the background of the
+terminal, so the local runtime rejects a terminal as `Stdin` with
+`runtime.ErrUnsupported`. A later interactive mode will use `TTY: true` to run
+the command in the CLI's foreground group. Its first expected consumer is a
+MySQL client.
+
+Graceful cancellation is designed but not built. The runtime contract stays
+"a cancelled context means forceful termination". An opt-in grace period on a
+command makes the executor start the runtime with a derived context that does
+not inherit cancellation. When the caller's context ends, the executor calls
+`Stop`. After the grace period it cancels the derived context, so the runtime
+kills as usual. If `Stop` returns `runtime.ErrUnsupported`, it cancels at once.
+`Wait` reports the caller's context error even after a clean exit. The feature
+is built with its first consumer.
+
 Closing a Docker or SSH connection does not guarantee that the command stopped.
 Implementations that cannot terminate the command return
 `runtime.ErrUnsupported` from `Stop` and `Kill`. Losing the connection can leave
@@ -217,32 +236,56 @@ the command's status unknown.
 receive output as it is produced. Output without a writer is discarded unless
 capture is enabled. Capture is disabled by default and can be combined with
 streaming. Separate capture retains stdout and stderr separately. Combined
-capture merges both streams in observed write order. The executor collects
+capture merges both streams. Their order is exact when both use the same writer
+or none, because the runtime then forwards them as one stream. The executor collects
 captured output through the supplied writers, so runtimes only forward streams.
 Caller-owned streams must remain usable until completion. Blocked output writes
-can delay completion. The caller must unblock input readers that remain blocked
+can delay completion. Runtimes may bound that delay by discarding the remaining
+output and reporting an error. The local runtime waits one second after exit,
+which keeps commands from hanging on background processes that hold output open
+and costs nothing for the CLI's commands, which write to terminals or in-memory
+buffers. A command that exits while another process still holds its output
+therefore returns `exec.ErrWaitDelay` as a runtime failure after one second. A
+future SSH runtime must not start a `ControlPersist` master through forwarded
+pipes for that reason. The caller must unblock input readers that remain blocked
 after the command exits.
 
-`ExitCode` describes the executed command, with -1 meaning unknown. `Usage`
-contains resource measurements for that command when available, rather than
-measurements for a Docker or SSH client. Results retain captured output even
-when execution fails. Runtimes distinguish a command's non-zero exit from
-failures to start it, communicate with it or clean up. Consumers interpret
-command output and exit codes for their specific tools. Unsupported capabilities
-or settings return explicit errors.
+Capture retains at most 128 MiB across both streams of one command. Output
+beyond the limit is still forwarded but no longer retained, and the executor
+returns `executor.ErrCaptureLimit` as a failure instead of an exit error.
+
+`ExitCode` describes the executed command, with -1 meaning unknown. `Signal`
+holds the name of the signal that ended the command, for example `SIGKILL`. It
+is empty when the command was not ended by a signal, and a runtime that cannot
+tell a signal from an exit code leaves it empty. `runtime.ExitError` carries
+both values. `Usage` contains resource measurements for that command when
+available, rather than measurements for a Docker or SSH client. Results retain
+captured output even when execution fails. A runtime reports the command's exit
+only through `ExitCode` and returns an error only for its own failures, such as
+starting, communicating, forwarding output, cleaning up or cancellation.
+Consumers interpret command output and exit codes for their specific tools.
+Unsupported capabilities or settings return explicit errors.
 
 ### Executor and target wiring
 
-The executor runs arbitrary commands through the supplied runtime. Helpers for
-PHP, Composer and Node.js simplify common invocations through the same command
-API. Tool installation and environment selection remain with application wiring.
-Changing defaults or command options returns a copy without modifying the
-original executor or command.
+The executor runs arbitrary commands through the supplied runtime. Domain
+executors build common invocations of a tool ecosystem through the same command
+API and keep the executor's defaults. They also report the installed PHP and
+Node.js version, so callers only decide which version they need. Tool
+installation and environment selection remain with application wiring. Changing
+defaults or command options returns a copy without modifying the original
+executor or command. The executor returns `runtime.ExitError` for an
+unsuccessful exit when the runtime reported no failure, so an error is either
+an exit or a runtime failure, never both.
+
+`orchestration.NewExecutor` is the single place that selects the runtime for
+the CLI's workflows. Today it returns an executor on the local runtime. It gains
+parameters when selection between Docker, Podman or SSH arrives.
 
 ```go
 // Application code using orchestration/executor.
 streams := runtime.Options{Stdout: os.Stdout, Stderr: os.Stderr}
-runner := executor.New(local.New()).WithDir(workspaceRoot)
+runner := orchestration.NewExecutor().WithDir(workspaceRoot)
 
 _, err := runner.PHP().Composer("install", "--no-interaction").Run(ctx, streams)
 if err != nil {
@@ -728,7 +771,7 @@ remote runtime and supply JSON input through stdin:
 
 ```go
 runner := executor.New(remoteRuntime).WithDir(remoteDirectory)
-result, err := runner.PHP().Run("-r", phpCode).Run(ctx, runtime.Options{
+result, err := runner.PHP().Command("-r", phpCode).Run(ctx, runtime.Options{
     Stdin:   bytes.NewReader(payload),
     Stderr:  os.Stderr,
     Capture: runtime.CaptureSeparate,
@@ -811,6 +854,10 @@ engines. Implementations report unsupported capabilities or settings explicitly.
   files directly or through mounts. Transfer policy stays with its consumer.
 - Automatic rewriting of arguments or raw output paths.
 - Foreground stack execution and a general stack-definition language.
+- Native Windows. The local runtime supports Linux and macOS, and Windows users
+  run the CLI inside WSL2. The CLI does not compile for native Windows today,
+  because the QA tool setup uses `syscall.Flock`. Supporting it would be a
+  separate requirement.
 
 ## Alternatives considered
 
