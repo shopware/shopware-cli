@@ -47,6 +47,12 @@ var dockerignoreContent string
 //go:embed project_scaffold_static/admin_worker.yaml
 var adminWorkerConfig string
 
+// agentsMD guides AI agents in a new shop. It is the same for every shop and
+// names no Shopware version, so it stays correct after upgrades.
+//
+//go:embed project_scaffold_static/AGENTS.md
+var agentsMD string
+
 // ShopwareProjectScaffold describes the files and directories of a new
 // Shopware project. CLI concerns such as prompting, tracking, and detecting
 // local tools intentionally live outside this type.
@@ -160,6 +166,7 @@ func (s *ShopwareProjectScaffold) scaffold(ctx context.Context) error {
 		{path: ".env", content: envContent},
 		{path: ".env.local", content: envLocalContent(s.UseDocker)},
 		{path: ".gitignore", content: "/.idea\n/.shopware-cli\n/vendor"},
+		{path: "AGENTS.md", content: agentsMD},
 	}
 	for _, file := range files {
 		if err := os.WriteFile(filepath.Join(s.ProjectFolder, file.path), []byte(file.content), os.ModePerm); err != nil {
