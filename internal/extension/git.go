@@ -52,7 +52,7 @@ func GitCopyFolder(ctx context.Context, source, target, commitHash string) (stri
 	}
 
 	if !isGitRepository {
-		return "", fmt.Errorf("cannot package %s: %w (pass --disable-git to package the working copy)", source, ErrNotGitRepository)
+		return "", fmt.Errorf("cannot package %s: %w", source, ErrNotGitRepository)
 	}
 
 	if commitHash == "" {
