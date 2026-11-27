@@ -50,7 +50,7 @@ var adminWorkerConfig string
 // agentsMD guides AI agents in a new shop. It is the same for every shop and
 // names no Shopware version, so it stays correct after upgrades.
 //
-//go:embed project_scaffold_static/AGENTS.md
+//go:embed project_scaffold_static/AGENTS.scaffold.md
 var agentsMD string
 
 // ShopwareProjectScaffold describes the files and directories of a new
