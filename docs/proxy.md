@@ -117,8 +117,8 @@ AAAA → empty NOERROR (prevents IPv6 fallback delays). It publishes UDP+TCP on
 `127.0.0.1:15353` only — bound to loopback, reachable from the host but nothing
 else. The port needs no privileges and lies below every OS's ephemeral range,
 so neither outgoing connections nor Windows' reserved port blocks (WSL with
-Docker Desktop) can take it. `proxy up` starts it idempotently (like Traefik) with
-`--restart unless-stopped`, so it comes back on its own after a reboot; a
+Docker Desktop) can take it. `proxy up` starts it idempotently (like Traefik)
+with `--restart unless-stopped`, so it comes back on its own after a reboot; a
 container built for an older config or a different domain is recreated.
 
 The OS is told to use it for exactly one domain (split DNS):
