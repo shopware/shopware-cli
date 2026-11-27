@@ -221,13 +221,26 @@ func anonymizationFromInstalledExtensions(ctx context.Context) (map[string]map[s
 
 // resolveDumpDatabaseConnection resolves credentials like the other database
 // commands, but keeps dump usable outside a Shopware project: there the
-// process environment and the connection flags are all that is needed.
+// process environment and the connection flags are all that is needed. An
+// explicitly selected environment only needs the project config, so outside
+// a project it is read from the current directory (e.g. a folder with just
+// .shopware-project.yml targeting an SSH host) instead of being ignored.
 func resolveDumpDatabaseConnection(cmd *cobra.Command, endpoints ...executor.DatabaseEndpoint) (*executor.DatabaseConnection, error) {
-	if _, err := shop.FindClosestShopwareProject(false); err != nil {
+	projectRoot, err := shop.FindClosestShopwareProject(environmentName != "")
+	if err != nil {
+		if environmentName != "" {
+			return nil, err
+		}
+
 		return executor.NewLocal("").DatabaseConnection(cmd.Context(), endpoints...)
 	}
 
-	return resolveProjectDatabaseConnection(cmd, endpoints...)
+	cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	return cmdExecutor.DatabaseConnection(cmd.Context(), endpoints...)
 }
 
 func init() {
