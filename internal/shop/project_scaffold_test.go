@@ -55,6 +55,10 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env.local"))
 		assert.Equal(t, "/.idea\n/.shopware-cli\n/vendor", readScaffoldFile(t, projectFolder, ".gitignore"))
 		assert.Equal(t, "memory_limit=512M", readScaffoldFile(t, projectFolder, "php.ini"))
+
+		agents := readScaffoldFile(t, projectFolder, "AGENTS.md")
+		assert.Contains(t, agents, "shopware-cli ai list")
+		assert.Contains(t, agents, "shopware-cli project validate")
 	})
 
 	t.Run("creates a Dockerfile for a container deployment", func(t *testing.T) {
