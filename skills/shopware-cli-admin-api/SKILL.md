@@ -153,5 +153,9 @@ operation succeeded.
   unknown, treat it as potentially state-changing. A failed or timed-out
   mutation may already have taken effect, even after a 403. Check the
   resulting state and relevant side effects using documented read-only
-  operations first. If the outcome remains uncertain, do not retry. Never
-  describe repeating a state-changing request as a read-only check.
+  operations first. Compare with a reliable prior state and consider concurrent
+  activity: a counter advancing does not prove which request advanced it, and
+  missing logs or an unchanged counter alone may not establish the outcome.
+  If the outcome remains uncertain, explain what is known and do not retry,
+  even if duplicate effects or gaps appear acceptable. Never describe repeating
+  a state-changing request as a read-only check.
