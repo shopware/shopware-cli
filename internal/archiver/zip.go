@@ -75,18 +75,26 @@ func CreateZip(baseFolder, zipFile string) error {
 		return fmt.Errorf("create zipfile: %w", err)
 	}
 
-	defer func() {
-		_ = outFile.Close()
-	}()
-
 	// Create a new zip archive.
 	w := zip.NewWriter(outFile)
 
-	defer func() {
+	if err := AddZipFiles(w, baseFolder, ""); err != nil {
 		_ = w.Close()
-	}()
+		_ = outFile.Close()
+		return err
+	}
 
-	return AddZipFiles(w, baseFolder, "")
+	// Close writes the central directory; without it the archive is unreadable.
+	if err := w.Close(); err != nil {
+		_ = outFile.Close()
+		return fmt.Errorf("finalize zipfile: %w", err)
+	}
+
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("close zipfile: %w", err)
+	}
+
+	return nil
 }
 
 // AddZipFiles recursively adds files from a directory to a zip archive.

@@ -164,8 +164,8 @@ github.com/shyim/go-php-discover v0.0.0-20260802092855-da3bc85f491c h1:4u/ATdQ4w
 github.com/shyim/go-php-discover v0.0.0-20260802092855-da3bc85f491c/go.mod h1:AGw/+zOkH6mNkBiTO4+2zCZvdMgd3oFyRLmxIMXQPGw=
 github.com/shyim/go-phplint v0.2.6 h1:OiiAPiARqMg09BK6aFpIIC1PhXmlZSp9a0SzeK4ljuM=
 github.com/shyim/go-phplint v0.2.6/go.mod h1:EFbIzL9UZ0DKJwt9SbYUr2thlbK1BHiiaLGyue5XjcM=
-github.com/shyim/go-spdx v0.0.0-20260602055701-a935a2772ac1 h1:oD4MMCeWHSuvvLv2iXOKVMZRvJyn+r3xwIMU2BFttDo=
-github.com/shyim/go-spdx v0.0.0-20260602055701-a935a2772ac1/go.mod h1:G8YfjnnIrntUnXjmOlbkLn9HuEA5if+XvxIxuWq7tUg=
+github.com/shyim/go-spdx v0.0.0-20261118115346-13bae9de376b h1:+9p9wZ5LAQ9CzgfoXpvXAGwlcQOScyb6ka3SAzL0J+Y=
+github.com/shyim/go-spdx v0.0.0-20261118115346-13bae9de376b/go.mod h1:G8YfjnnIrntUnXjmOlbkLn9HuEA5if+XvxIxuWq7tUg=
 github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32 h1:LEMavffuqxLwefNTQYlTNj/d9yAg5zVPCKvQrtt1/l4=
 github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32/go.mod h1:z47ygE4N7EC0H58FP5j5cXZtl1pSnfjwYJsHtiVtcwU=
 github.com/smallstep/truststore v0.13.0 h1:90if9htAOblavbMeWlqNLnO9bsjjgVv2hQeQJCi/py4=
