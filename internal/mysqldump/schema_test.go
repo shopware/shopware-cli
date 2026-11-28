@@ -765,6 +765,13 @@ func TestFormatDefault(t *testing.T) {
 		{"mariadb escaped string default", "\\'product\\'", "varchar(255)", "'product'"},
 		{"mariadb escaped binary string default", "\\'somevalue\\'", "binary(16)", "'somevalue'"},
 		{"mysql escaped json default", "_utf8mb4\\'{}\\'", "json", "(_utf8mb4'{}')"},
+		// MySQL only accepts expression defaults on TEXT/BLOB/JSON columns.
+		{"mariadb empty string default on longtext", "''", "longtext", "('')"},
+		{"mariadb string default on text", "\\'foo\\'", "text", "('foo')"},
+		{"mariadb literal json default", "'[]'", "json", "('[]')"},
+		{"mariadb json_array default on json", "json_array()", "json", "(json_array())"},
+		{"hex literal default on blob", "x'00'", "blob", "(x'00')"},
+		{"mysql escaped text default", "_utf8mb4\\'\\'", "mediumtext", "(_utf8mb4'')"},
 	}
 
 	for _, tt := range tests {
@@ -905,4 +912,82 @@ func TestFetchCheckConstraintsUnsupported(t *testing.T) {
 
 	assert.NoError(t, dumper.fetchAllCheckConstraints(t.Context()))
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestFetchCheckConstraintsMariaDBJSONColumns(t *testing.T) {
+	db, mock := getDB(t)
+	defer func() { _ = db.Close() }()
+	dumper := getInternalMySQLInstance(db)
+	table := "pickware_erp_free_goods_receipt_stock_movement_process_mapping"
+	utf8mb4 := sql.NullString{String: "utf8mb4", Valid: true}
+	bin := sql.NullString{String: "utf8mb4_bin", Valid: true}
+	dumper.schemaCache = map[string]*TableSchema{
+		table: {
+			Name: table, Engine: "InnoDB", Charset: "utf8mb4", Collation: "utf8mb4_unicode_ci",
+			Columns: []ColumnSchema{
+				{Name: "id", Type: "int(11)"},
+				{Name: "payload", Type: "longtext", Nullable: true, CharacterSet: utf8mb4, Collation: bin},
+				{Name: "config", Type: "longtext", CharacterSet: utf8mb4, Collation: bin, Default: sql.NullString{String: "json_object()", Valid: true}},
+				{Name: "indexed", Type: "longtext", Nullable: true, CharacterSet: utf8mb4, Collation: bin},
+				{Name: "amount", Type: "int(11)"},
+				{Name: "other", Type: "longtext", Nullable: true},
+			},
+			PrimaryKey: []string{"id"},
+			Indexes: []IndexSchema{{
+				Name:    "idx.indexed",
+				Columns: []IndexColumnSchema{{Name: sql.NullString{String: "indexed", Valid: true}, SubPart: sql.NullInt64{Int64: 255, Valid: true}}},
+			}},
+		},
+	}
+	mock.ExpectQuery("SELECT COUNT.*FROM INFORMATION_SCHEMA.COLUMNS").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(1))
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS").
+		WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE"}).
+			AddRow(table, "payload", "json_valid(`payload`)").
+			AddRow(table, "config", "json_valid(`config`)").
+			AddRow(table, "indexed", "json_valid(`indexed`)").
+			AddRow(table, "amount", "`amount` > 0").
+			AddRow(table, "json.t.other", "json_valid(`other`)"))
+
+	require.NoError(t, dumper.fetchAllCheckConstraints(t.Context()))
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	schema := dumper.schemaCache[table]
+	createSQL := schema.BuildCreateTableSQL()
+
+	assert.Contains(t, createSQL, "`payload` json,")
+	assert.Contains(t, createSQL, "`config` json NOT NULL DEFAULT (json_object()),")
+	assert.NotContains(t, createSQL, "CHECK (json_valid(`payload`))")
+	assert.NotContains(t, createSQL, "CHECK (json_valid(`config`))")
+
+	// Indexed columns stay LONGTEXT, MySQL cannot index JSON columns.
+	assert.Contains(t, createSQL, "`indexed` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin CHECK (json_valid(`indexed`))")
+	// Other column checks stay inline.
+	assert.Contains(t, createSQL, "`amount` int(11) NOT NULL CHECK (`amount` > 0)")
+	// Named table checks are kept as they are.
+	assert.Equal(t, "longtext", schema.Columns[5].Type)
+	assert.Contains(t, createSQL, "CONSTRAINT `json.t.other` CHECK (json_valid(`other`))")
+}
+
+func TestIsMariaDBJSONColumn(t *testing.T) {
+	schema := &TableSchema{}
+	tests := []struct {
+		name     string
+		col      ColumnSchema
+		expr     string
+		expected bool
+	}{
+		{"json column", ColumnSchema{Name: "data", Type: "longtext"}, "json_valid(`data`)", true},
+		{"upper case function", ColumnSchema{Name: "data", Type: "longtext"}, "JSON_VALID(`data`)", true},
+		{"check on other column", ColumnSchema{Name: "data", Type: "longtext"}, "json_valid(`other`)", false},
+		{"not longtext", ColumnSchema{Name: "data", Type: "text"}, "json_valid(`data`)", false},
+		{"combined expression", ColumnSchema{Name: "data", Type: "longtext"}, "json_valid(`data`) and `data` <> ''", false},
+		{"generated column", ColumnSchema{Name: "data", Type: "longtext", GenerationExpr: sql.NullString{String: "json_object()", Valid: true}}, "json_valid(`data`)", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, schema.isMariaDBJSONColumn(tt.col, tt.expr))
+		})
+	}
 }

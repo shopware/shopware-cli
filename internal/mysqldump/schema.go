@@ -432,6 +432,14 @@ func formatDefault(value string, colType string) string {
 		return sqlNull
 	}
 
+	// MySQL only allows expression defaults on BLOB, TEXT, GEOMETRY and JSON columns, while
+	// MariaDB reports them as plain literals (e.g. '' or json_object()). INFORMATION_SCHEMA
+	// returns them escaped, so the unescaped value is wrapped in parentheses. Both MySQL
+	// 8.0.13+ and MariaDB accept this form.
+	if isLOBType(lower) {
+		return "(" + unescape(value) + ")"
+	}
+
 	if hexLiteralRegex.MatchString(value) {
 		return value
 	}
@@ -443,12 +451,6 @@ func formatDefault(value string, colType string) string {
 	unescaped := unescape(value)
 	if len(unescaped) >= 2 && unescaped[0] == '\'' && unescaped[len(unescaped)-1] == '\'' {
 		return unescaped
-	}
-
-	// JSON columns always use generated default values, which are stored as escaped strings, so we need to use the
-	// unescaped value
-	if colType == "json" {
-		return "(" + unescaped + ")"
 	}
 
 	if isExpression(value) {
@@ -463,6 +465,18 @@ func formatDefault(value string, colType string) string {
 	}
 
 	return "'" + escapeString(value) + "'"
+}
+
+// isLOBType reports whether a column type can only have an expression default in MySQL.
+func isLOBType(colType string) bool {
+	switch colType {
+	case "tinytext", "text", "mediumtext", "longtext",
+		"tinyblob", "blob", "mediumblob", "longblob",
+		"json", "geometry", "point", "linestring", "polygon",
+		"multipoint", "multilinestring", "multipolygon", "geometrycollection":
+		return true
+	}
+	return false
 }
 
 func isExpression(value string) bool {
@@ -868,6 +882,32 @@ func (d *Dumper) fetchAllForeignKeys(ctx context.Context) error {
 	return rows.Err()
 }
 
+var jsonValidCheckRegex = regexp.MustCompile("(?i)^json_valid\\(`([^`]+)`\\)$")
+
+// isMariaDBJSONColumn reports whether col is a MariaDB JSON column, i.e. a LONGTEXT
+// column guarded by a CHECK (json_valid(`col`)) on itself. Columns used in an index are
+// excluded, as MySQL cannot index JSON columns directly.
+func (schema *TableSchema) isMariaDBJSONColumn(col ColumnSchema, checkExpr string) bool {
+	if !strings.EqualFold(col.Type, "longtext") || col.IsGenerated() {
+		return false
+	}
+
+	m := jsonValidCheckRegex.FindStringSubmatch(strings.TrimSpace(checkExpr))
+	if m == nil || m[1] != col.Name {
+		return false
+	}
+
+	for _, idx := range schema.Indexes {
+		for _, idxCol := range idx.Columns {
+			if idxCol.Name.Valid && idxCol.Name.String == col.Name {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 func (d *Dumper) fetchAllCheckConstraints(ctx context.Context) error {
 	var hasTableNameColumn bool
 	if err := d.db.QueryRowContext(ctx, `
@@ -936,7 +976,16 @@ func (d *Dumper) fetchAllCheckConstraints(ctx context.Context) error {
 		isColumnName := false
 		for i, col := range schema.Columns {
 			if col.Name == name {
-				schema.Columns[i].CheckExpr = expr
+				if schema.isMariaDBJSONColumn(col, expr) {
+					// MariaDB has no native JSON type: JSON is an alias for LONGTEXT with an
+					// unnamed CHECK (json_valid(`col`)). Emitting it as an inline CHECK makes
+					// MySQL generate the name <table>_chk_<n>, which exceeds 64 characters for
+					// long table names. Emit the native JSON type instead; MariaDB maps it
+					// back to the same LONGTEXT + CHECK on import.
+					schema.Columns[i].Type = "json"
+				} else {
+					schema.Columns[i].CheckExpr = expr
+				}
 				isColumnName = true
 				break
 			}
