@@ -72,7 +72,7 @@ func writeSSHInitializationNextSteps(source *SSH, targets []*SSH, environment st
 	}
 	fmt.Fprintln(&summary, tui.DimStyle.Render("  Edit custom environment variables here. This file is shared across releases."))
 	fmt.Fprintln(&summary, "\n"+heading("1. Prepare your server"))
-	fmt.Fprintln(&summary, "  Make sure PHP 8.4 or higher is installed and the SSH user is the same user that runs PHP.")
+	fmt.Fprintln(&summary, "  Install PHP 8.4 or higher. For a separate PHP runtime account, set ssh.http_user and install the Linux ACL tools.")
 	fmt.Fprintln(&summary, "  Make sure the database and database user exist and are reachable.")
 	fmt.Fprintln(&summary, "  Point your web server's document root to:")
 	for _, target := range targets {

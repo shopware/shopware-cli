@@ -41,6 +41,18 @@ func TestSSHRemotePHPCommand(t *testing.T) {
 	assert.Equal(t, "exec php -v", lastSSHShell(t, e.RemotePHPCommand(t.Context(), "-v")))
 }
 
+func TestSSHRemotePHPCommandBecomesDeploymentUser(t *testing.T) {
+	cfg := &shop.EnvironmentConfig{Type: TypeSSH, SSH: &shop.EnvironmentSSHConfig{
+		Host: "host", User: "login", Directory: "/srv/shop", Become: "shop",
+		PHPBinary: "/opt/php bin/php", PHPArgs: []string{"-d", "memory_limit=512M"},
+	}}
+	e, err := New("/project", cfg, &shop.Config{})
+	require.NoError(t, err)
+	cmd := e.(*SSHExecutor).RemotePHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Cmd.Args, "login@host")
+	assert.Equal(t, "exec sudo -n -H -u shop -- '/opt/php bin/php' -d memory_limit=512M -v", lastSSHShell(t, cmd))
+}
+
 func TestSSHRemotePHPCommandStreams(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture uses POSIX shell")

@@ -82,7 +82,11 @@ function pruneRecords(string $directory, string $identity, array &$reasons, arra
             $reasons[] = "Missing checksum in metadata: $directory/$filename";
         }
 
-        foreach (['created_at', 'deployed_at'] as $field) {
+        if (array_key_exists('http_uid', $record) && (!is_string($record['http_uid']) || !ctype_digit($record['http_uid']))) {
+            throw new RuntimeException(sprintf('Invalid PHP runtime UID in %s', $filename));
+        }
+
+        foreach (['created_at', 'deployed_at', 'deactivated_at'] as $field) {
             if (array_key_exists($field, $record)) {
                 deploymentParseTimestamp($record[$field]) ?? throw new RuntimeException("Invalid $field in $filename");
             }
@@ -143,9 +147,16 @@ function pruneRemoveTree(string $path): void
     }
 }
 
-function pruneValidateTree(string $path): void
+function pruneValidateTree(string $path, bool $checkAccess = false): void
 {
-    foreach (new FilesystemIterator($path) as $entry) {
+    if ($checkAccess && (!is_readable($path) || !is_executable($path))) {
+        throw new RuntimeException(sprintf('Cannot inspect runtime cache %s. Grant the deployment account read and traverse access, then retry prune.', $path));
+    }
+    $entries = new FilesystemIterator($path);
+    if ($checkAccess && $entries->valid() && !is_writable($path)) {
+        throw new RuntimeException(sprintf('Cannot empty runtime cache %s. Grant the deployment account write and traverse access to this directory, then retry prune.', $path));
+    }
+    foreach ($entries as $entry) {
         if ($entry->isLink() || $entry->isFile()) {
             continue;
         }
@@ -154,14 +165,18 @@ function pruneValidateTree(string $path): void
             throw new RuntimeException("Unexpected release entry: {$entry->getPathname()}");
         }
 
-        pruneValidateTree($entry->getPathname());
+        pruneValidateTree($entry->getPathname(), $checkAccess);
     }
 }
 
-function pruneMarkRelease(string $file, string $name, string $checksum): void
+function pruneMarkRelease(string $file, string $name, string $checksum, ?string $httpUID): void
 {
     deploymentDirectory(dirname($file), 0700);
     $marker = ['release' => $name, 'sha256' => $checksum, 'ready' => false, 'pruning' => true];
+    if ($httpUID !== null) {
+        $marker['http_uid'] = $httpUID;
+    }
+
     deploymentWriteAtomic($file, json_encode($marker, JSON_THROW_ON_ERROR), "pending cleanup for release $name", null, 'prune-tmp');
 }
 
@@ -314,26 +329,38 @@ function prunePlan(array $input, array &$progress): array
         uksort($candidates, static fn ($a, $b) => ($candidates[$b] <=> $candidates[$a]) ?: strcmp((string) $a, (string) $b));
         $remove = array_slice(array_keys($candidates), $input['keep']);
         $remove = array_values(array_filter($remove, static fn ($name) => (string) $name !== $active));
+        // Workers may still resolve the old release through PHP's realpath cache.
+        // For older metadata the last symlink switch is a conservative upper bound.
+        $lastSwitch = $active === null ? 0 : deploymentPermissionStat($current)['mtime'];
+        $cutoff = time() - max(120, (int) ini_get('realpath_cache_ttl'));
+        foreach ($remove as $i => $name) {
+            $deactivated = deploymentParseTimestamp($records[$name]['deactivated_at'] ?? null);
+            // An older CLI can reactivate the release without clearing this field.
+            $lastUse = $deactivated !== null && $deactivated >= $candidates[$name] ? $deactivated->getTimestamp() : $lastSwitch;
+            if ($lastUse >= $cutoff) {
+                $result['recent_deployments'][] = (string) $name;
+                unset($remove[$i]);
+            }
+        }
         $remove = array_values(array_unique(array_merge($remove, $pending)));
         sort($remove, SORT_STRING);
         $files = [];
-        $removeHashes = [];
+        $retainedRecords = $records;
 
         foreach ($remove as $name) {
             // Runtime is owned by the same managed release, not an independent
             // retention candidate. Unknown runtime entries are never inspected.
-            foreach ([path_join($root, 'releases', $name), path_join($root, 'runtime', $name)] as $path) {
-                if (deploymentRealDirectory($path)) {
-                    pruneValidateTree($path);
-                }
+            $release = path_join($root, 'releases', $name);
+            if (deploymentRealDirectory($release)) {
+                pruneValidateTree($release);
+            }
+            $runtime = path_join($root, 'runtime', $name);
+            if (deploymentRealDirectory($runtime)) {
+                pruneValidateTree($runtime, isset($records[$name]['http_uid']));
             }
 
-            $removeHashes[$name] = $records[$name]['sha256'] ?? $historyHashes[$name];
             $files[$name] = [];
-
-            if (isset($records[$name])) {
-                unset($records[$name]);
-            }
+            unset($retainedRecords[$name]);
 
             $logNames = [$name];
 
@@ -361,7 +388,7 @@ function prunePlan(array $input, array &$progress): array
 
         $retainedHashes = [];
 
-        foreach (array_merge(array_values($records), array_values($rollouts)) as $record) {
+        foreach (array_merge(array_values($retainedRecords), array_values($rollouts)) as $record) {
             if (isset($record['sha256'])) {
                 $retainedHashes[$record['sha256']] = true;
             }
@@ -412,12 +439,23 @@ function prunePlan(array $input, array &$progress): array
                 // Persist intent first; ready=false also blocks rollout reuse after
                 // an interruption. Keep the marker until every related file is gone.
                 $marker = path_join($state, 'releases', "$name.json");
-                pruneMarkRelease($marker, (string) $name, $removeHashes[$name]);
+                $httpUID = $records[$name]['http_uid'] ?? null;
+                pruneMarkRelease($marker, (string) $name, $records[$name]['sha256'] ?? $historyHashes[$name], $httpUID);
                 $progress['incomplete_deployments'] = [(string) $name];
 
-                foreach (["$root/releases/$name", "$root/runtime/$name"] as $path) {
-                    if (deploymentRealDirectory($path)) {
-                        pruneRemoveTree($path);
+                $release = path_join($root, 'releases', $name);
+                if (deploymentRealDirectory($release)) {
+                    pruneRemoveTree($release);
+                }
+
+                $runtime = path_join($root, 'runtime', $name);
+                if (deploymentRealDirectory($runtime)) {
+                    if ($httpUID === null) {
+                        pruneRemoveTree($runtime);
+                    } else {
+                        // PHP owns some cache entries. Delete using the inherited
+                        // ACLs without changing permissions on mutable paths.
+                        deploymentRun(['find', '-P', $runtime, '-depth', '-delete'], $root);
                     }
                 }
 

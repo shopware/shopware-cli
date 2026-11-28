@@ -27,6 +27,16 @@ var integrations = Directory{
 			Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/shopware-cli"},
 		},
 		{
+			Name:          "shopware-cli-deployment",
+			DisplayName:   "Shopware CLI (SSH Deployment)",
+			Type:          TypeSkill,
+			Provider:      "shopware",
+			Description:   "Configure SSH deployment accounts, shared permissions, and release pruning.",
+			Status:        StatusActive,
+			Documentation: "https://github.com/shopware/shopware-cli/tree/main/skills/shopware-cli-deployment",
+			Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/shopware-cli"},
+		},
+		{
 			Name:          "deployment-helper",
 			DisplayName:   "Shopware Deployment Helper",
 			Type:          TypeSkill,

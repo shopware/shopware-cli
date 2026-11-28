@@ -9,7 +9,7 @@ function deploymentHostRequiresPHPProcessRestart(string $hostname): bool
 }
 
 // Provider-specific fallback when no CacheTool adapter is enabled.
-function deploymentRestartPHPProcesses(): void
+function deploymentRestartPHPProcesses(string $root): void
 {
     $deadline = hrtime(true) + 30000000000;
     $remaining = static function () use ($deadline): int {
@@ -21,7 +21,7 @@ function deploymentRestartPHPProcesses(): void
 
         return $seconds;
     };
-    $hostname = trim(deploymentRunBoundedCommand(['hostname', '-f'], '.', min(5, $remaining()), true));
+    $hostname = trim(deploymentRunBoundedCommand(['hostname', '-f'], $root, min(5, $remaining()), true));
 
     if ($hostname === '' || !preg_match('/\A[a-zA-Z0-9._-]+\z/', $hostname)) {
         throw new RuntimeException('Cannot determine the remote fully qualified hostname');
@@ -37,7 +37,7 @@ function deploymentRestartPHPProcesses(): void
         throw new RuntimeException('Cannot identify deployment process for PHP restart');
     }
 
-    $uidText = trim(deploymentRunBoundedCommand(['id', '-u'], '.', min(5, $remaining()), true));
+    $uidText = trim(deploymentRunBoundedCommand(['id', '-u'], $root, min(5, $remaining()), true));
     $uid = filter_var($uidText, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
 
     if ($uid === false) {
@@ -48,7 +48,7 @@ function deploymentRestartPHPProcesses(): void
         throw new RuntimeException('Refusing automatic PHP process restart for the root account; configure CacheTool instead');
     }
 
-    $output = deploymentRunBoundedCommand(['pgrep', '-u', (string) $uid, 'php'], '.', min(5, $remaining()), true, [0, 1]);
+    $output = deploymentRunBoundedCommand(['pgrep', '-u', (string) $uid, 'php'], $root, min(5, $remaining()), true, [0, 1]);
     $pids = [];
 
     foreach (preg_split('/\s+/', trim($output), -1, PREG_SPLIT_NO_EMPTY) as $value) {
@@ -70,7 +70,7 @@ function deploymentRestartPHPProcesses(): void
 
     foreach (array_keys($pids) as $pid) {
         try {
-            deploymentRunBoundedCommand(['kill', '-TERM', (string) $pid], '.', min(5, $remaining()));
+            deploymentRunBoundedCommand(['kill', '-TERM', (string) $pid], $root, min(5, $remaining()));
             $count++;
         } catch (Throwable $failure) {
             $error ??= $failure;

@@ -52,6 +52,10 @@ type EnvironmentSSHConfig struct {
 	Host string `yaml:"host,omitempty"`
 	// SSH user. Defaults to the user configured in ~/.ssh/config or the current user
 	User string `yaml:"user,omitempty"`
+	// Account that runs remote deployment commands via non-interactive sudo. Defaults to the SSH login account.
+	Become string `yaml:"become,omitempty"`
+	// PHP-FPM or web server account that needs access to SSH deployment runtime files. Uses POSIX ACLs on the target.
+	HTTPUser string `yaml:"http_user,omitempty"`
 	// SSH port. Defaults to 22
 	Port int `yaml:"port,omitempty"`
 	// Absolute path of the Shopware project root on the remote host. For deployments, this is the active release symlink (any name); its parent holds deployment storage and must be dedicated to this deployment. Required on the single target or inherited/overridden by each named host.

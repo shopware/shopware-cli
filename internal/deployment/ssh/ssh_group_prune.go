@@ -38,10 +38,11 @@ func (g *sshGroup) PruneDeployments(ctx context.Context, options DeploymentPrune
 	err := g.parallel(ctx, func(i int) error {
 		host := g.hosts[i]
 		pruned, err := host.backend.PruneDeployments(ctx, hostOptions[i])
-		if err == nil || len(pruned.Deployments)+len(pruned.Artifacts)+len(pruned.ArtifactSkipReasons)+len(pruned.IncompleteDeployments) > 0 {
+		if err == nil || !pruned.Empty() {
 			rows[i] = &DeploymentPruneHostResult{
 				Host: host.name, Deployments: pruned.Deployments, Artifacts: pruned.Artifacts,
-				ArtifactSkipReasons: pruned.ArtifactSkipReasons, IncompleteDeployments: pruned.IncompleteDeployments,
+				RecentDeployments: pruned.RecentDeployments, ArtifactSkipReasons: pruned.ArtifactSkipReasons,
+				IncompleteDeployments: pruned.IncompleteDeployments,
 			}
 		}
 		if err != nil {

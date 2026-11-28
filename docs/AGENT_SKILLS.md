@@ -15,6 +15,8 @@ shopware-cli/
 └── skills/
     ├── shopware-cli/
     │   └── SKILL.md
+    ├── shopware-cli-deployment/
+    │   └── SKILL.md
     ├── shopware-cli-docker/
     │   └── SKILL.md
     ├── shopware-cli-extension-store/
@@ -67,6 +69,11 @@ shopware-cli project dev status
 shopware-cli project dev stop
 ```
 
+### `shopware-cli-deployment`
+
+Configure SSH deployment accounts, grant the PHP runtime access to shared
+files and caches, and troubleshoot release pruning.
+
 ### `shopware-cli-extension-store`
 
 Read-only Shopware Store readiness assessment for an extension.
@@ -113,7 +120,8 @@ For user-facing Shopware CLI changes:
 
 1. Implement the CLI change.
 2. Check whether `skills/shopware-cli/SKILL.md` is affected.
-3. Check whether `skills/shopware-cli-docker/SKILL.md`,
+3. Check whether `skills/shopware-cli-deployment/SKILL.md`,
+   `skills/shopware-cli-docker/SKILL.md`,
    `skills/shopware-cli-extension-store/SKILL.md`, or
    `skills/shopware-cli-extension-anonymize/SKILL.md` is affected.
 4. Update the skill in the same PR when required.
@@ -132,6 +140,7 @@ Validate each skill against the Agent Skills format:
 
 ```bash
 skills-ref validate ./skills/shopware-cli
+skills-ref validate ./skills/shopware-cli-deployment
 skills-ref validate ./skills/shopware-cli-docker
 skills-ref validate ./skills/shopware-cli-extension-store
 skills-ref validate ./skills/shopware-cli-extension-anonymize

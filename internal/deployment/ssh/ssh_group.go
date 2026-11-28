@@ -286,6 +286,7 @@ func (w *hostWriter) flush() error {
 }
 
 func (s *SSH) openDeploymentSession(ctx context.Context, input sshRolloutInput, output io.Writer) (*sshDeploymentSession, error) {
+	input = s.rolloutInput(input)
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
@@ -494,11 +495,6 @@ func (g *sshGroup) stageSessions(
 		var config *shop.EnvironmentSSHConfig
 		if host.backend.env != nil {
 			config = host.backend.env.SSH
-		}
-		if config != nil {
-			input.Hooks = config.Hooks
-			input.PHP = config.PHPBinary
-			input.PHPArgs = config.PHPArgs
 		}
 		if input.SharedFiles, input.SharedDirectories, err = config.SharedPaths(); err != nil {
 			return err

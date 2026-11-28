@@ -45,7 +45,7 @@ fi
 case "$name" in
     m-failed) echo "injected cleanup failure" >&2; exit 42 ;;
     z-empty) echo '{"deployments":[],"artifacts":[]}' ;;
-    *) echo '{"deployments":[{"reference":"old"}],"artifacts":["old.tar.gz"]}' ;;
+    *) echo '{"deployments":[{"reference":"old"}],"artifacts":["old.tar.gz"],"recent_deployments":["previous"]}' ;;
 esac
 `)
 		require.NoError(t, os.Chmod(worker, 0o755))
@@ -77,7 +77,7 @@ func TestSSHGroupPrunePartialFailureAndOptions(t *testing.T) {
 			assert.ErrorContains(t, err, "cleanup may be partial or unknown")
 			assert.ErrorContains(t, err, "injected cleanup failure")
 			assert.Equal(t, []DeploymentPruneHostResult{
-				{Host: "a-success", Deployments: []Deployment{{Reference: "old"}}, Artifacts: []string{"old.tar.gz"}},
+				{Host: "a-success", Deployments: []Deployment{{Reference: "old"}}, Artifacts: []string{"old.tar.gz"}, RecentDeployments: []string{"previous"}},
 				{Host: "z-empty", Deployments: []Deployment{}, Artifacts: []string{}},
 			}, result.Hosts)
 			assert.Nil(t, result.Deployments)

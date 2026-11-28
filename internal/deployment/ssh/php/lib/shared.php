@@ -1,6 +1,6 @@
 <?php
 
-function deploymentShare(string $root, string $release, string $relative, bool $directory, ?string $previous, bool $coordinated = false): void
+function deploymentShare(string $root, string $release, string $relative, bool $directory, ?string $previous, bool $coordinated = false, ?array $acl = null): void
 {
     $shared = path_join($root, 'shared', $relative);
     $source = path_join($release, $relative);
@@ -10,6 +10,8 @@ function deploymentShare(string $root, string $release, string $relative, bool $
     if (is_link($shared)) {
         throw new RuntimeException("Shared paths must not be symlinks: $shared");
     }
+
+    $moveSource = false;
 
     if (!file_exists($shared)) {
         if ($coordinated && ($directory || file_exists($source) || is_link($source))) {
@@ -23,9 +25,7 @@ function deploymentShare(string $root, string $release, string $relative, bool $
         }
 
         if (file_exists($source) && !is_link($source)) {
-            if (is_dir($source) !== $directory || !rename($source, $shared)) {
-                throw new RuntimeException("Cannot initialize shared path: $shared");
-            }
+            $moveSource = true;
         } elseif ($directory) {
             deploymentDirectory($shared);
         } else {
@@ -33,8 +33,23 @@ function deploymentShare(string $root, string $release, string $relative, bool $
         }
     }
 
-    if (($directory && !is_dir($shared)) || (!$directory && !is_file($shared))) {
-        throw new RuntimeException("Unexpected shared path type: $shared");
+    $path = $moveSource ? $source : $shared;
+    if (($directory && !is_dir($path)) || (!$directory && !is_file($path))) {
+        throw new RuntimeException("Unexpected shared path type: $path");
+    }
+
+    if ($acl !== null && $directory) {
+        // Grant access to seeded descendants before publishing the shared tree.
+        // If the ACL walk fails, a new rollout can retry the initialization.
+        deploymentWritableACL($path, $acl['http'], $acl['deploy'], $moveSource);
+    }
+
+    if ($moveSource && !rename($source, $shared)) {
+        throw new RuntimeException("Cannot initialize shared path: $shared");
+    }
+
+    if ($acl !== null && !$directory) {
+        deploymentRun(['setfacl', '-m', sprintf('u:%s:r', $acl['http']), '--', $shared], $root);
     }
 
     deploymentRemove($source);
